@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, rpc, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import ModalCrearOT from '../components/modules/ModalCrearOT'
 
 const ESTADOS = ['', 'Pendiente', 'Sin inspector', 'Asignado', 'En proceso', 'Acta cargada', 'Informe cargado', 'Cerrada documentalmente']
 const SEDES = ['', 'ANF', 'SCL', 'CCP']
@@ -14,6 +15,7 @@ function badgeEstado(estado) {
     'En proceso': 'badge-blue',
     'Acta cargada': 'badge-blue',
     'Informe cargado': 'badge-green',
+    'Factura cargada': 'badge-green',
     'Cerrada documentalmente': 'badge-green',
   }
   return mapa[estado] || 'badge-gray'
@@ -30,6 +32,8 @@ export default function OTs() {
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [pagina, setPagina] = useState(0)
+  const [mostrarModalCrear, setMostrarModalCrear] = useState(false)
+  const [mensajeExito, setMensajeExito] = useState('')
   const POR_PAGINA = 25
 
   const puedeCrearOT = esAdmin() || esComercial()
@@ -39,7 +43,6 @@ export default function OTs() {
       setCargando(true)
       setError('')
 
-      // Usar función RPC si existe, sino vista directa
       let data
       try {
         data = await rpc('obtener_ots_para_usuario', { p_email: usuario?.email })
@@ -48,7 +51,6 @@ export default function OTs() {
           .from('v_portal_ots_listado')
           .select('*')
           .order('fecha_creacion', { ascending: false })
-
         if (result.error) throw result.error
         data = result.data
       }
@@ -65,6 +67,13 @@ export default function OTs() {
     cargarOTs()
   }, [cargarOTs])
 
+  function handleOTCreada(otNumero) {
+    setMostrarModalCrear(false)
+    setMensajeExito(`✅ OT ${otNumero} creada correctamente`)
+    cargarOTs()
+    setTimeout(() => setMensajeExito(''), 4000)
+  }
+
   // Filtrado local
   const otsFiltradas = ots.filter(o => {
     const q = busqueda.toLowerCase()
@@ -80,6 +89,14 @@ export default function OTs() {
 
   return (
     <div>
+      {/* Modal Crear OT */}
+      {mostrarModalCrear && (
+        <ModalCrearOT
+          onClose={() => setMostrarModalCrear(false)}
+          onCreada={handleOTCreada}
+        />
+      )}
+
       {/* Header */}
       <div className="flex-between" style={{ marginBottom: 20 }}>
         <div>
@@ -93,12 +110,19 @@ export default function OTs() {
             ↻ Actualizar
           </button>
           {puedeCrearOT && (
-            <button className="btn btn-primary btn-sm" onClick={() => navigate('/ots/nueva')}>
+            <button className="btn btn-primary btn-sm" onClick={() => setMostrarModalCrear(true)}>
               + Nueva OT
             </button>
           )}
         </div>
       </div>
+
+      {/* Mensaje éxito */}
+      {mensajeExito && (
+        <div className="alert alert-ok" style={{ marginBottom: 16 }}>
+          {mensajeExito}
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="card" style={{ marginBottom: 16, padding: '14px 18px' }}>
@@ -185,18 +209,10 @@ export default function OTs() {
                     Página {pagina + 1} de {totalPaginas} · {otsFiltradas.length} OTs
                   </span>
                   <div className="flex gap-8">
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setPagina(p => Math.max(0, p - 1))}
-                      disabled={pagina === 0}
-                    >
+                    <button className="btn btn-ghost btn-sm" onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={pagina === 0}>
                       ← Anterior
                     </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))}
-                      disabled={pagina >= totalPaginas - 1}
-                    >
+                    <button className="btn btn-ghost btn-sm" onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={pagina >= totalPaginas - 1}>
                       Siguiente →
                     </button>
                   </div>
