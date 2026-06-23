@@ -117,24 +117,20 @@ export default function ModalCrearOT({ onClose, onCreada }) {
       }
 
       const params = {
-        p_ot_numero:              form.ot_numero.trim().toUpperCase(),
-        p_cliente:                form.cliente.trim(),
-        p_contacto:               form.contacto.trim(),
-        p_email_cliente:          form.email_cliente.trim(),
-        p_telefono_cliente:       form.telefono_cliente.trim(),
-        p_rut_empresa:            form.rut_empresa.trim(),
-        p_sede:                   form.sede,
-        p_mes:                    form.mes,
-        p_anio:                   form.anio,
-        p_referencia_cotizacion:  form.referencia_cotizacion.trim(),
-        p_tipo_servicio:          form.tipo_servicio.trim(),
-        p_servicios_seleccionados: serviciosSeleccionados.join(', '),
-        p_direccion_faena:        form.direccion_faena.trim(),
-        p_descripcion:            form.descripcion.trim(),
-        p_comercial:              usuario?.nombre || '',
-        p_supervisor:             supervisorNombre,
-        p_observaciones:          form.observaciones.trim(),
-        p_email_usuario:          usuario?.email || '',
+        p_email_usuario:                usuario?.email || '',
+        p_ot_numero:                    form.ot_numero.trim().toUpperCase(),
+        p_cliente:                      form.cliente.trim(),
+        p_contacto:                     form.contacto.trim() || null,
+        p_email_cliente:                form.email_cliente.trim() || null,
+        p_telefono_cliente:             form.telefono_cliente.trim() || null,
+        p_rut_empresa:                  form.rut_empresa.trim() || null,
+        p_sede:                         form.sede,
+        p_referencia_cotizacion:        form.referencia_cotizacion.trim() || null,
+        p_producto_servicio_contratado: form.tipo_servicio.trim(),
+        p_servicios_seleccionados:      serviciosSeleccionados.join(', ') || null,
+        p_direccion_faena:              form.direccion_faena.trim() || null,
+        p_descripcion:                  form.descripcion.trim() || null,
+        p_observaciones:                form.observaciones.trim() || null,
       }
 
       await rpc('crear_ot_portal', params)
