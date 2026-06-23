@@ -141,13 +141,20 @@ export default function DetalleOT() {
               {ot.producto_servicio_contratado || ot.tipo_servicio || '—'}
             </p>
           </div>
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+            {ot.carpeta_drive_url && (
+              <a href={ot.carpeta_drive_url} target="_blank" rel="noopener noreferrer">
+                <button className="btn btn-secondary btn-sm">📁 Abrir carpeta Drive</button>
+              </a>
+            )}
+
             {puedeEditar && (
               <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/ots/${numero}/editar`)}>
                 ✏ Editar OT
               </button>
             )}
+         
             <div style={{ textAlign: 'right' }}>
               <div className="progress-track" style={{ width: 160 }}>
                 <div className={`progress-fill ${progreso >= 100 ? 'completa' : ''}`} style={{ width: `${progreso}%` }} />
