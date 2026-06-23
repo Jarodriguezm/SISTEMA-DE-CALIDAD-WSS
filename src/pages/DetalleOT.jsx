@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, rpc, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import ModalEditarOT from '../components/modules/ModalEditarOT'
+import ModalAsignarInspector from '../components/modules/ModalAsignarInspector'
 
 const TABS = [
   { id: 'info',         label: 'Información' },
@@ -46,8 +48,17 @@ export default function DetalleOT() {
   const [tabActivo, setTabActivo] = useState('info')
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [mostrarEditar, setMostrarEditar] = useState(false)
+  const [mostrarAsignar, setMostrarAsignar] = useState(false)
+  const [mensajeExito, setMensajeExito] = useState('')
 
   const puedeEditar = esAdmin() || esComercial() || esSupervisor()
+  const puedeAsignar = esAdmin() || esSupervisor()
+
+  function mostrarExito(msg) {
+    setMensajeExito(msg)
+    setTimeout(() => setMensajeExito(''), 3500)
+  }
 
   useEffect(() => {
     if (numero) cargarTodo()
@@ -117,6 +128,31 @@ export default function DetalleOT() {
 
   return (
     <div>
+      {/* Modales */}
+      {mostrarEditar && (
+        <ModalEditarOT
+          ot={ot}
+          onClose={() => setMostrarEditar(false)}
+          onGuardada={() => {
+            setMostrarEditar(false)
+            mostrarExito('OT actualizada correctamente')
+            cargarTodo()
+          }}
+        />
+      )}
+      {mostrarAsignar && (
+        <ModalAsignarInspector
+          ot={ot}
+          onClose={() => setMostrarAsignar(false)}
+          onAsignada={() => {
+            setMostrarAsignar(false)
+            mostrarExito('Inspector asignado correctamente')
+            cargarTodo()
+            setTabActivo('asignaciones')
+          }}
+        />
+      )}
+
       {/* Breadcrumb */}
       <div className="flex gap-8" style={{ marginBottom: 16, alignItems: 'center' }}>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/ots')}>
@@ -124,6 +160,11 @@ export default function DetalleOT() {
         </button>
         <span style={{ color: 'var(--gris)', fontSize: 13 }}>/ {ot.ot_numero}</span>
       </div>
+
+      {/* Mensaje éxito */}
+      {mensajeExito && (
+        <div className="alert alert-ok" style={{ marginBottom: 16 }}>{mensajeExito}</div>
+      )}
 
       {/* Header OT */}
       <div className="card" style={{ marginBottom: 20, borderLeft: '5px solid var(--azul)' }}>
@@ -141,20 +182,23 @@ export default function DetalleOT() {
               {ot.producto_servicio_contratado || ot.tipo_servicio || '—'}
             </p>
           </div>
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
 
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
             {ot.carpeta_drive_url && (
               <a href={ot.carpeta_drive_url} target="_blank" rel="noopener noreferrer">
-                <button className="btn btn-secondary btn-sm">📁 Abrir carpeta Drive</button>
+                <button className="btn btn-secondary btn-sm">📁 Carpeta Drive</button>
               </a>
             )}
-
+            {puedeAsignar && (
+              <button className="btn btn-warn btn-sm" onClick={() => setMostrarAsignar(true)}>
+                👥 Asignar inspector
+              </button>
+            )}
             {puedeEditar && (
-              <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/ots/${numero}/editar`)}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setMostrarEditar(true)}>
                 ✏ Editar OT
               </button>
             )}
-         
             <div style={{ textAlign: 'right' }}>
               <div className="progress-track" style={{ width: 160 }}>
                 <div className={`progress-fill ${progreso >= 100 ? 'completa' : ''}`} style={{ width: `${progreso}%` }} />
