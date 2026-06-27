@@ -4,6 +4,7 @@ import { supabase, rpc, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import ModalEditarOT from '../components/modules/ModalEditarOT'
 import ModalAsignarInspector from '../components/modules/ModalAsignarInspector'
+import TabAsignaciones from '../components/modules/TabAsignaciones'
 
 const TABS = [
   { id: 'info',         label: 'Información' },
@@ -246,7 +247,7 @@ export default function DetalleOT() {
       <div style={{ marginTop: 16 }}>
         {tabActivo === 'info'         && <TabInfo ot={ot} />}
         {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} />}
-        {tabActivo === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} />}
+       {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
         {tabActivo === 'actas'        && <TabActas actas={actas} />}
         {tabActivo === 'reservas'     && <TabReservas reservas={reservas} />}
       </div>
@@ -362,67 +363,6 @@ function TabDocumentos({ docs }) {
           </tbody>
         </table>
       </div>
-    </div>
-  )
-}
-
-// ─── Tab Asignaciones ─────────────────────────────────────────────────────────
-function TabAsignaciones({ asignaciones }) {
-  if (!asignaciones.length) return <Vacio mensaje="No hay asignaciones para esta OT" />
-
-  return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {asignaciones.map((a, i) => (
-        <div key={i} className="card" style={{ borderLeft: '4px solid var(--ambar)' }}>
-          <div className="flex-between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <div>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>
-                📅 {a.fecha_inspeccion ? new Date(a.fecha_inspeccion).toLocaleDateString('es-CL') : '—'}
-                {a.hora && ` · ${a.hora}`}
-              </span>
-            </div>
-            <span className={`badge ${a.estado === 'Asignado' ? 'badge-amber' : 'badge-green'}`}>
-              {a.estado}
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px 20px' }}>
-            <Campo label="Supervisor"    valor={a.supervisor} />
-            <Campo label="Inspector(es)" valor={a.inspectores_asignados} />
-            <Campo label="Sede"          valor={a.sede} />
-            <Campo label="Vehículo"      valor={a.vehiculo} />
-            <Campo label="Tiempo est."   valor={a.tiempo_estimado} />
-            <Campo label="Norma ejec."   valor={a.norma_ejecucion} />
-            <Campo label="Norma eval."   valor={a.norma_evaluacion} />
-          </div>
-
-          {a.procedimientos && (
-            <div style={{ marginTop: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gris)', textTransform: 'uppercase' }}>
-                Procedimientos
-              </span>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--texto-sub)' }}>{a.procedimientos}</p>
-            </div>
-          )}
-
-          {a.descripcion_actividad && (
-            <div style={{ marginTop: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gris)', textTransform: 'uppercase' }}>
-                Descripción
-              </span>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--texto-sub)' }}>{a.descripcion_actividad}</p>
-            </div>
-          )}
-
-          {a.drive_url && (
-            <div style={{ marginTop: 12 }}>
-              <a href={a.drive_url} target="_blank" rel="noopener noreferrer">
-                <button className="btn btn-secondary btn-sm">📋 Ver PDF asignación</button>
-              </a>
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   )
 }
