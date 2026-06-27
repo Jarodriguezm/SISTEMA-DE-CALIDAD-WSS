@@ -10,8 +10,12 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
   const [error, setError] = useState('')
   const [inspectores, setInspectores] = useState([])
   const [supervisores, setSupervisores] = useState([])
+  const [catalogoProcedimientos, setCatalogoProcedimientos] = useState([])
+  const [catalogoEquipos, setCatalogoEquipos] = useState([])
   const [tiposSeleccionados, setTiposSeleccionados] = useState([])
   const [inspectoresSeleccionados, setInspectoresSeleccionados] = useState([])
+  const [procedimientosSeleccionados, setProcedimientosSeleccionados] = useState([])
+  const [equiposSeleccionados, setEquiposSeleccionados] = useState([])
 
   const [form, setForm] = useState({
     supervisor: '',
@@ -21,25 +25,38 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
     vehiculo: '',
     norma_ejecucion: '',
     norma_evaluacion: '',
-    procedimientos: '',
     descripcion_actividad: '',
   })
 
   useEffect(() => {
-    cargarUsuarios()
+    cargarDatos()
     if (ot?.supervisor) setForm(f => ({ ...f, supervisor: ot.supervisor }))
   }, [ot])
 
-  async function cargarUsuarios() {
+  async function cargarDatos() {
     try {
-      const { data } = await supabase
-        .from('usuarios')
-        .select('id, nombre, apellido, rol, sede')
-        .eq('activo', true)
-        .order('nombre')
-      const todos = data || []
+      const [{ data: usuarios }, { data: procs }, { data: equips }] = await Promise.all([
+        supabase
+          .from('usuarios')
+          .select('id, nombre, apellido, rol, sede')
+          .eq('activo', true)
+          .order('nombre'),
+        supabase
+          .from('catalogo_procedimientos')
+          .select('id, nombre, codigo')
+          .eq('activo', true)
+          .order('codigo'),
+        supabase
+          .from('equipos')
+          .select('id, equipo_instrumento, codigo')
+          .eq('activo', true)
+          .order('equipo_instrumento'),
+      ])
+      const todos = usuarios || []
       setInspectores(todos.filter(u => u.rol === 'INSPECTOR'))
       setSupervisores(todos.filter(u => ['SUPERVISOR', 'ADMIN', 'ADMINISTRADOR'].includes(u.rol)))
+      setCatalogoProcedimientos(procs || [])
+      setCatalogoEquipos(equips || [])
     } catch { /* no bloquea */ }
   }
 
@@ -60,6 +77,18 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
     )
   }
 
+  function toggleProcedimiento(val) {
+    setProcedimientosSeleccionados(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    )
+  }
+
+  function toggleEquipo(val) {
+    setEquiposSeleccionados(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    )
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!inspectoresSeleccionados.length) { setError('Selecciona al menos un inspector'); return }
@@ -68,6 +97,13 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
     try {
       setGuardando(true)
       setError('')
+
+      const procedimientosStr = procedimientosSeleccionados.join(', ')
+      const equiposStr = equiposSeleccionados.join(', ')
+
+      const descripcionFinal = equiposStr
+        ? `${form.descripcion_actividad}\n\nEquipos/instrumentos: ${equiposStr}`
+        : form.descripcion_actividad
 
       await rpc('crear_asignacion_portal', {
         p_email_usuario:          usuario?.email || '',
@@ -80,9 +116,9 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
         p_vehiculo:               form.vehiculo || null,
         p_norma_ejecucion:        form.norma_ejecucion || null,
         p_norma_evaluacion:       form.norma_evaluacion || null,
-        p_procedimientos:         form.procedimientos || null,
+        p_procedimientos:         procedimientosStr || null,
         p_tipos_inspeccion:       tiposSeleccionados.join(', ') || null,
-        p_descripcion_actividad:  form.descripcion_actividad || null,
+        p_descripcion_actividad:  descripcionFinal || null,
       })
 
       onAsignada && onAsignada()
@@ -201,9 +237,77 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                 </div>
               </div>
 
+              {/* Procedimientos — lista desplegable multi-select */}
               <div className="col-12 field">
-                <label>Procedimientos</label>
-                <input className="input" placeholder="Ej: PRO-DII-001, PRO-DII-004" value={form.procedimientos} onChange={e => set('procedimientos', e.target.value)} disabled={guardando} />
+                <label>
+                  Procedimientos WSS
+                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={styles.listaSeleccion}>
+                  {catalogoProcedimientos.length === 0 ? (
+                    <p style={styles.sinDatos}>No hay procedimientos registrados</p>
+                  ) : (
+                    catalogoProcedimientos.map(p => {
+                      const val = `${p.codigo} — ${p.nombre}`
+                      const sel = procedimientosSeleccionados.includes(val)
+                      return (
+                        <label key={p.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
+                          <input
+                            type="checkbox"
+                            checked={sel}
+                            onChange={() => toggleProcedimiento(val)}
+                            disabled={guardando}
+                            style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: 13, flex: 1 }}>
+                            <b style={{ color: '#17395C' }}>{p.codigo}</b> — {p.nombre}
+                          </span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+                {procedimientosSeleccionados.length > 0 && (
+                  <div style={styles.resumenSel}>
+                    ✅ {procedimientosSeleccionados.length} seleccionado(s): {procedimientosSeleccionados.map(v => v.split(' — ')[0]).join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Equipos — lista desplegable multi-select */}
+              <div className="col-12 field">
+                <label>
+                  Equipos / Instrumentos a utilizar
+                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={styles.listaSeleccion}>
+                  {catalogoEquipos.length === 0 ? (
+                    <p style={styles.sinDatos}>No hay equipos registrados</p>
+                  ) : (
+                    catalogoEquipos.map(eq => {
+                      const val = `${eq.codigo} — ${eq.equipo_instrumento}`
+                      const sel = equiposSeleccionados.includes(val)
+                      return (
+                        <label key={eq.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
+                          <input
+                            type="checkbox"
+                            checked={sel}
+                            onChange={() => toggleEquipo(val)}
+                            disabled={guardando}
+                            style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: 13, flex: 1 }}>{eq.equipo_instrumento}</span>
+                          <span style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{eq.codigo}</span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+                {equiposSeleccionados.length > 0 && (
+                  <div style={styles.resumenSel}>
+                    ✅ {equiposSeleccionados.length} equipo(s) seleccionado(s)
+                  </div>
+                )}
               </div>
 
               <div className="col-12 field">
@@ -236,4 +340,8 @@ const styles = {
   footer: { display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTop: '1px solid var(--borde)', marginTop: 8 },
   checkGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, padding: 12, background: '#F9FAFB', borderRadius: 10, border: '1px solid #EAECF0' },
   pillCheck: { display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 12px', border: '1.5px solid', borderRadius: 10, cursor: 'pointer', transition: 'all .15s', userSelect: 'none' },
+  listaSeleccion: { border: '1.5px solid #D0D5DD', borderRadius: 10, padding: 8, maxHeight: 200, overflowY: 'auto', background: '#F9FAFB' },
+  filaCheck: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 7, cursor: 'pointer', userSelect: 'none', transition: 'background .1s' },
+  resumenSel: { marginTop: 6, fontSize: 11, color: '#17395C', fontWeight: 600 },
+  sinDatos: { fontSize: 13, color: '#9CA3AF', padding: '8px 4px', margin: 0 },
 }
