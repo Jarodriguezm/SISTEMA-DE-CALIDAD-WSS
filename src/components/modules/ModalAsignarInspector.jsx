@@ -1,183 +1,347 @@
--- ============================================================
--- SEED: catalogo_procedimientos + equipos
--- Proyecto: WSS Sistema de Calidad
--- Fecha: 2026-06-27
--- ============================================================
+import { useState, useEffect } from 'react'
+import { rpc, supabase, mensajeError } from '../../lib/supabase'
+import { useAuth } from '../../lib/AuthContext'
 
--- ─── PROCEDIMIENTOS ──────────────────────────────────────────
-INSERT INTO catalogo_procedimientos (codigo, nombre, activo) VALUES
-  ('PRO-DII-001', 'Control dimensional', TRUE),
-  ('PRO-DII-002', 'Inspeccion visual', TRUE),
-  ('PRO-DII-003', 'Liquidos penetrantes', TRUE),
-  ('PRO-DII-004', 'Particulas magneticas', TRUE),
-  ('PRO-DII-005', 'Medicion de espesores', TRUE),
-  ('PRO-DII-006', 'Inspeccion ultrasonido detector de falla', TRUE),
-  ('PRO-DII-007', 'Inspección de pinturas sobre sustratos metálicos', TRUE),
-  ('PRO-DII-008', 'Control de asentamiento y verticalidad', TRUE),
-  ('PRO-DII-009', 'Calificacion de personal', TRUE),
-  ('PRO-DII-011', 'Control Documental', TRUE),
-  ('PRO-DII-012', 'Pruebas de Hermeticidad', TRUE),
-  ('PRO-DII-013', 'Pruebas de Hermeticidad - QUIMETAL', TRUE),
-  ('PRO-DII-014', 'Inspección medición de espesores en techo TK', TRUE),
-  ('PRO-DII-015', 'Ondas guiadas de largo alcance', TRUE),
-  ('PRO-DII-016', 'Ultrasonido Phased Array', TRUE),
-  ('PRO-DII-017', 'Termografías', TRUE),
-  ('PRO-DII-019', 'Medicion de tensión de pernos', TRUE),
-  ('PRO-DII-020', 'Inspección visual AWS D1.1', TRUE),
-  ('PRO-DII-021', 'Evaluación integridad de tanques', TRUE),
-  ('PRO-DII-022', 'Inspección de gancho', TRUE),
-  ('PRO-DII-023', 'Prueba de carga', TRUE),
-  ('PRO-DII-024', 'Inspección de equipos de Izaje y Levante', TRUE),
-  ('PRO-DII-025', 'Uso, acceso y almacenamiento de los equipos e instrumentos', TRUE),
-  ('PRO-DII-026', 'Procedimiento específico - Inspección de estanque TK 201', TRUE),
-  ('PRO-DII-027', 'Inspección integral de calderas', TRUE),
-  ('PRO-DII-028', 'Inspección de equipos de levante', TRUE),
-  ('PRO-DII-029', 'Procedimiento específico - Inspección de elementos de izajes', TRUE),
-  ('PRO-DII-030', 'Procedimiento específico - Pruebas de cámara de vacío a tubos de Evaporador', TRUE),
-  ('PRO-DII-031', 'Procedimiento específico - Uso de esmeril angular inalambrico', TRUE),
-  ('PRO-DII-032', 'Prueba de Carga a Vigas y Yugos de Izaje', TRUE),
-  ('INS-DII-001', 'Uso y acceso a las instalaciones', FALSE),
-  ('INS-DII-002', 'Verificación de instrumentos de medición', FALSE)
-ON CONFLICT (codigo) DO UPDATE
-  SET nombre = EXCLUDED.nombre,
-      activo  = EXCLUDED.activo;
+const TIPOS_INSPECCION = ['VT', 'PT', 'MT', 'UT', 'UTT', 'PAUT', 'T', 'CG', 'CTK', 'PH', 'PN', 'CV', 'END']
 
--- ─── EQUIPOS ─────────────────────────────────────────────────
-INSERT INTO equipos (equipo_instrumento, codigo, activo) VALUES
-  ('Detector de Fallas Ultrasonido (Phased Array)', 'WSS-SCL-DII-001', TRUE),
-  ('Yugo Electromagnético', 'WSS-SCL-DII-002', TRUE),
-  ('Medidor de Espesor, Ultrasonido', 'WSS-SCL-DII-003', TRUE),
-  ('Cinta Métrica', 'WSS-SCL-DII-004', TRUE),
-  ('Medidor de Rugosidad', 'WSS-SCL-DII-005', TRUE),
-  ('Pie de Metro Digital 0-300 mm', 'WSS-ANF-DII-006', TRUE),
-  ('Reloj Comparador', 'WSS-SCL-DII-007', TRUE),
-  ('Pirómetro Láser', 'WSS-SCL-DII-008', TRUE),
-  ('Cámara Térmica', 'WSS-SCL-DII-009', TRUE),
-  ('ULS - Rotix', 'WSS-SCL-DII-010', TRUE),
-  ('Medidor de recubrimiento', 'WSS-SCL-DII-011', TRUE),
-  ('Flexometro', 'WSS-SCL-DII-012', TRUE),
-  ('Pie de Metro', 'WSS-SCL-DII-013', TRUE),
-  ('Cámara Térmica', 'WSS-SCL-DII-014', TRUE),
-  ('Medidor de Gases', 'WSS-SCL-DII-015', TRUE),
-  ('Flexómetro 30m', 'WSS-SCL-DII-016', TRUE),
-  ('Juego llave Corona', 'WSS-SCL-DII-017', TRUE),
-  ('Manómetro 01', 'WSS-SCL-DII-018', TRUE),
-  ('Manómetro 02', 'WSS-SCL-DII-019', TRUE),
-  ('Manómetro 03', 'WSS-SCL-DII-020', TRUE),
-  ('Durómetro', 'WSS-SCL-DII-021', TRUE),
-  ('Luz Negra', 'WSS-SCL-DII-022', TRUE),
-  ('Patrón Levante Yugo Electromagnético (4558,1 g)', 'WSS-SCL-DII-023', TRUE),
-  ('Pirómetro Láser', 'WSS-SCL-DII-024', TRUE),
-  ('Medidor de Dureza', 'WSS-SCL-DII-025', TRUE),
-  ('Nivel Óptico', 'WSS-SCL-DII-026', TRUE),
-  ('Medidor de Espesor, Ultrasonido', 'WSS-SCL-DII-027', TRUE),
-  ('Bloque de calibración 7A', 'WSS-SCL-DII-028', TRUE),
-  ('Bloque de calibración V1', 'WSS-SCL-DII-029', TRUE),
-  ('Block Test comparación - Tintas penetrantes', 'WSS-SCL-DII-030', TRUE),
-  ('Láminas indicadoras de flujo magnético tipo G', 'WSS-SCL-DII-031', TRUE),
-  ('Medidor de Espesor ultrasónico digital', 'WSS-SCL-DII-032', TRUE),
-  ('Medidor de Espesor ultrasónico digital', 'WSS-SCL-DII-033', TRUE),
-  ('Yugo Electromagnético', 'WSS-ANF-DII-034', TRUE),
-  ('Cinta Métrica de 60 m', 'WSS-ANF-DII-035', TRUE),
-  ('Pie de metro 0-150 mm', 'WSS-ANF-DII-036', TRUE),
-  ('Yugo Electromagnético', 'WSS-ANF-DII-037', TRUE),
-  ('Nivel Topográfico', 'WSS-ANF-DII-038', TRUE),
-  ('Llave de torque 50-250 Ft-lb', 'WSS-ANF-DII-039', TRUE),
-  ('Set Números de Golpe', 'WSS-ANF-DII-040', TRUE),
-  ('Set Letras de golpe', 'WSS-ANF-DII-041', TRUE),
-  ('Hidrolavadora', 'WSS-ANF-DII-042', TRUE),
-  ('Eslinga 3m', 'WSS-ANF-DII-043', TRUE),
-  ('Eslinga 1m', 'WSS-ANF-DII-044', TRUE),
-  ('Flexómetro 10 m/33', 'WSS-SCL-DII-045', TRUE),
-  ('Flexómetro 05 m/16', 'WSS-SCL-DII-046', TRUE),
-  ('Flexómetro 10 m/33', 'WSS-SCL-DII-047', TRUE),
-  ('Flexómetro 05 m/16', 'WSS-SCL-DII-048', TRUE),
-  ('Detector de poros (Holiday Detector)', 'WSS-SCL-DII-049', TRUE),
-  ('Llave de Impacto 1/2"', 'WSS-SCL-DII-050', TRUE),
-  ('Indicador de campo Magnético', 'WSS-SCL-DII-051', TRUE),
-  ('Luxómetro', 'WSS-SCL-DII-052', TRUE),
-  ('Luxómetro', 'WSS-ANF-DII-053', TRUE),
-  ('Equipo detector de Falla Phased Array', 'WSS-ANF-DII-054', TRUE),
-  ('Patrones grandes yugo', 'WSS-SCL-DII-055', TRUE),
-  ('Gausímetro', 'WSS-SCL-DII-056', TRUE),
-  ('UT Aerotransportado', 'WSS-ANF-DII-057', TRUE),
-  ('Luxómetro', 'WSS-ANF-DII-058', TRUE),
-  ('Escáner de Piso', 'WSS-SCL-DII-059', TRUE),
-  ('Caja auxiliar Escáner de piso', 'WSS-SCL-DII-059-A', TRUE),
-  ('Cargador de batería Escáner de piso', 'WSS-SCL-DII-059-B', TRUE),
-  ('Crawler Magnético', 'WSS-SCL-DII-060', TRUE),
-  ('Bomba Crawler Magnético', 'WSS-SCL-DII-060-A', TRUE),
-  ('Placa Calibración Escáner de piso', 'WSS-SCL-DII-061', TRUE),
-  ('Tira línea de tiza', 'WSS-SCL-DII-062', TRUE),
-  ('Proyecta Línea', 'WSS-SCL-DII-063', TRUE),
-  ('Kit de Inspección (10 galgas, regla, micrómetro, espejo telescópico, maleta aluminio)', 'WSS-SCL-DII-064', TRUE),
-  ('Código disponible', 'WSS-SCL-DII-065', TRUE),
-  ('Flexometro 5m/16"', 'WSS-ANF-DII-066', TRUE),
-  ('Flexometro 5m/16"', 'WSS-ANF-DII-067', TRUE),
-  ('Pie de metro 300mm', 'WSS-ANF-DII-068', TRUE),
-  ('Pie de metro 150 mm', 'WSS-ANF-DII-069', TRUE),
-  ('Boroscopio', 'WSS-SCL-DII-070', TRUE),
-  ('Sensor para visor Flexible', 'WSS-SCL-DII-071', TRUE),
-  ('Pirómetro Láser', 'WSS-ANF-DII-072', TRUE),
-  ('Pirómetro Láser', 'WSS-ANF-DII-073', TRUE),
-  ('Compresor + Manguera de Aire 9mm/15m', 'WSS-ANF-DII-074', TRUE),
-  ('Bloque de calibración V1', 'WSS-SCL-DII-075', TRUE),
-  ('Patrón IIW (Block Steel)', 'WSS-ANF-DII-076', TRUE),
-  ('Equipo Ultrasónico TUD310', 'WSS-SCL-DII-077', TRUE),
-  ('Equipo de Vibraciones', 'WSS-SCL-DII-078', TRUE),
-  ('Patrón Escalonado', 'WSS-SCL-DII-079', TRUE),
-  ('Patrón para verificación de linealidad', 'WSS-SCL-DII-080', TRUE),
-  ('Amperímetro', 'WSS-ANF-DII-081', TRUE),
-  ('Manómetro 0 a 1000 psi / 0 a 70 bar', 'WSS-SCL-DII-082', TRUE),
-  ('Manómetro 0 a 900 psi / 0 a 60 bar', 'WSS-SCL-DII-083', TRUE),
-  ('Manómetro 0 a 900 psi / 0 a 60 bar', 'WSS-SCL-DII-084', TRUE),
-  ('Flexometro 5m/16"', 'WSS-ANF-DII-085', TRUE),
-  ('Flexometro 5m/16"', 'WSS-ANF-DII-086', TRUE),
-  ('Pie de metro 0-150 mm', 'WSS-ANF-DII-087', TRUE),
-  ('Pie de metro 0-150 mm', 'WSS-ANF-DII-088', TRUE),
-  ('Pie de metro 0-150 mm', 'WSS-ANF-DII-089', TRUE),
-  ('Manovacuómetro -30inHg a 15 Psi', 'WSS-ANF-DII-090', TRUE),
-  ('Manovacuómetro -30inHg a 15 Psi', 'WSS-ANF-DII-091', TRUE),
-  ('Manómetro 0-60 Psi', 'WSS-ANF-DII-092', TRUE),
-  ('Manómetro 0-60 Psi', 'WSS-ANF-DII-093', TRUE),
-  ('Manómetro 0-160 Psi', 'WSS-ANF-DII-094', TRUE),
-  ('Manómetro 0-160 Psi', 'WSS-ANF-DII-095', TRUE),
-  ('Manómetro 0-200 Psi', 'WSS-ANF-DII-096', TRUE),
-  ('Manómetro 0-200 Psi', 'WSS-ANF-DII-097', TRUE),
-  ('Manómetro 0-9000 Psi', 'WSS-ANF-DII-098', TRUE),
-  ('Manómetro 0-9000 Psi', 'WSS-ANF-DII-099', TRUE),
-  ('Manómetro 0-140 Psi', 'WSS-ANF-DII-100', TRUE),
-  ('Manómetro 0-200 Psi', 'WSS-ANF-DII-101', TRUE),
-  ('Manómetro 0-9000 Psi', 'WSS-ANF-DII-102', TRUE),
-  ('Yugo Electromagnético', 'WSS-ANF-DII-103', TRUE),
-  ('Yugo Electromagnético', 'WSS-ANF-DII-104', TRUE),
-  ('Yugo Electromagnético', 'WSS-ANF-DII-105', TRUE),
-  ('Medidor de Espesor, Ultrasonido', 'WSS-ANF-DII-106', TRUE),
-  ('Pie de metro 150 mm', 'WSS-SCL-DII-107', TRUE),
-  ('Bloque de calibración SIUI-7A', 'WSS-SCL-DII-108', TRUE),
-  ('Taladro inalámbrico', 'WSS-ANF-DII-109', TRUE),
-  ('Hidrolavadora', 'WSS-ANF-DII-110', TRUE),
-  ('Medidor Láser', 'WSS-SCL-DII-111', TRUE),
-  ('Medidor Láser', 'WSS-SCL-DII-112', TRUE),
-  ('Anemómetro', 'WSS-ANF-DII-113', TRUE),
-  ('Yugo Electromagnético', 'WSS-ANF-DII-114', TRUE),
-  ('Traccionador', 'WSS-ANF-DII-115', TRUE),
-  ('Medidor de Espesor Magnético', 'WSS-SCL-DII-116', TRUE),
-  ('Comprobador de adherencia', 'WSS-SCL-DII-117', TRUE),
-  ('Medidor de Espesor Recubrimiento', 'WSS-SCL-DII-118', TRUE),
-  ('Micrómetro Interior 100 – 1300mm', 'WSS-SCL-DII-119', TRUE),
-  ('Set de Galgas Inspección de Soldadura', 'WSS-SCL-DII-120', TRUE),
-  ('Medidor de Dureza Digital Multipunto LEEB', 'WSS-SCL-DII-121', TRUE),
-  ('Medidor Digital De Espesores Por Ultrasonido 0,65 A 600 Mm', 'WSS-SCL-DII-122', TRUE),
-  ('Medidor Digital De Espesores Por Ultrasonido 0,65 A 600 Mm', 'WSS-SCL-DII-123', TRUE),
-  ('Palpador medición de solo sustrato con recubrimiento', 'WSS-SCL-DII-124', TRUE),
-  ('Seis Patrones de Masa de 20 kg', 'SCL-DMM-016', TRUE),
-  ('Seis Patrones de Masa de 500 kg', 'SCL-DMM-017', TRUE),
-  ('Patrón de Masa 2000 kg Clase M2-3', 'SCL-DMM-026', TRUE),
-  ('Patrón de Masa 25x5000 kg Clase M3', 'SCL-DMM-027', TRUE),
-  ('Masas Patrones de 5 kg y 10 kg', 'SCL-DMM-075', TRUE),
-  ('Flexómetro 7.5m/25ft', 'S/I-001', TRUE),
-  ('Cinta métrica perimetral 30m/100ft', 'S/I-002', TRUE)
-ON CONFLICT (codigo) DO UPDATE
-  SET equipo_instrumento = EXCLUDED.equipo_instrumento,
-      activo             = EXCLUDED.activo;
+export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
+  const { usuario } = useAuth()
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const [inspectores, setInspectores] = useState([])
+  const [supervisores, setSupervisores] = useState([])
+  const [catalogoProcedimientos, setCatalogoProcedimientos] = useState([])
+  const [catalogoEquipos, setCatalogoEquipos] = useState([])
+  const [tiposSeleccionados, setTiposSeleccionados] = useState([])
+  const [inspectoresSeleccionados, setInspectoresSeleccionados] = useState([])
+  const [procedimientosSeleccionados, setProcedimientosSeleccionados] = useState([])
+  const [equiposSeleccionados, setEquiposSeleccionados] = useState([])
+
+  const [form, setForm] = useState({
+    supervisor: '',
+    fecha_inspeccion: '',
+    hora: '',
+    tiempo_estimado: '',
+    vehiculo: '',
+    norma_ejecucion: '',
+    norma_evaluacion: '',
+    descripcion_actividad: '',
+  })
+
+  useEffect(() => {
+    cargarDatos()
+    if (ot?.supervisor) setForm(f => ({ ...f, supervisor: ot.supervisor }))
+  }, [ot])
+
+  async function cargarDatos() {
+    try {
+      const [{ data: usuarios }, { data: procs }, { data: equips }] = await Promise.all([
+        supabase
+          .from('usuarios')
+          .select('id, nombre, apellido, rol, sede')
+          .eq('activo', true)
+          .order('nombre'),
+        supabase
+          .from('catalogo_procedimientos')
+          .select('id, nombre, codigo')
+          .eq('activo', true)
+          .order('codigo'),
+        supabase
+          .from('equipos')
+          .select('id, equipo_instrumento, codigo')
+          .eq('activo', true)
+          .order('equipo_instrumento'),
+      ])
+      const todos = usuarios || []
+      setInspectores(todos.filter(u => u.rol === 'INSPECTOR'))
+      setSupervisores(todos.filter(u => ['SUPERVISOR', 'ADMIN', 'ADMINISTRADOR'].includes(u.rol)))
+      setCatalogoProcedimientos(procs || [])
+      setCatalogoEquipos(equips || [])
+    } catch { /* no bloquea */ }
+  }
+
+  function set(campo, valor) {
+    setForm(f => ({ ...f, [campo]: valor }))
+    if (error) setError('')
+  }
+
+  function toggleInspector(nombre) {
+    setInspectoresSeleccionados(prev =>
+      prev.includes(nombre) ? prev.filter(n => n !== nombre) : [...prev, nombre]
+    )
+  }
+
+  function toggleTipo(cod) {
+    setTiposSeleccionados(prev =>
+      prev.includes(cod) ? prev.filter(c => c !== cod) : [...prev, cod]
+    )
+  }
+
+  function toggleProcedimiento(val) {
+    setProcedimientosSeleccionados(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    )
+  }
+
+  function toggleEquipo(val) {
+    setEquiposSeleccionados(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    )
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!inspectoresSeleccionados.length) { setError('Selecciona al menos un inspector'); return }
+    if (!form.fecha_inspeccion) { setError('La fecha de inspección es obligatoria'); return }
+
+    try {
+      setGuardando(true)
+      setError('')
+
+      const procedimientosStr = procedimientosSeleccionados.join(', ')
+      const equiposStr = equiposSeleccionados.join(', ')
+
+      const descripcionFinal = equiposStr
+        ? `${form.descripcion_actividad}\n\nEquipos/instrumentos: ${equiposStr}`
+        : form.descripcion_actividad
+
+      await rpc('crear_asignacion_portal', {
+        p_email_usuario:          usuario?.email || '',
+        p_ot_numero:              ot.ot_numero,
+        p_supervisor:             form.supervisor || usuario?.nombre || '',
+        p_inspectores_asignados:  inspectoresSeleccionados.join(', '),
+        p_fecha_inspeccion:       form.fecha_inspeccion || null,
+        p_hora:                   form.hora || null,
+        p_tiempo_estimado:        form.tiempo_estimado || null,
+        p_vehiculo:               form.vehiculo || null,
+        p_norma_ejecucion:        form.norma_ejecucion || null,
+        p_norma_evaluacion:       form.norma_evaluacion || null,
+        p_procedimientos:         procedimientosStr || null,
+        p_tipos_inspeccion:       tiposSeleccionados.join(', ') || null,
+        p_descripcion_actividad:  descripcionFinal || null,
+      })
+
+      onAsignada && onAsignada()
+    } catch (err) {
+      setError(mensajeError(err))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (!ot) return null
+
+  return (
+    <div style={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={styles.box}>
+        <div style={styles.header}>
+          <div>
+            <h2 style={{ margin: 0, color: '#fff', fontSize: 18 }}>Asignar Inspector — {ot.ot_numero}</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(255,255,255,.7)' }}>{ot.cliente}</p>
+          </div>
+          <button onClick={onClose} style={styles.btnCerrar} disabled={guardando}>✕</button>
+        </div>
+
+        <div style={styles.body}>
+          {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>⚠ {error}</div>}
+
+          <form onSubmit={handleSubmit}>
+            <div className="grid">
+
+              {/* Inspector(es) */}
+              <div className="col-12 field">
+                <label>Inspector(es) asignado(s) *</label>
+                <div style={styles.checkGrid}>
+                  {inspectores.length === 0 && (
+                    <p className="text-sm">No hay inspectores activos registrados</p>
+                  )}
+                  {inspectores.map(u => {
+                    const nombre = `${u.nombre} ${u.apellido}`.trim()
+                    const sel = inspectoresSeleccionados.includes(nombre)
+                    return (
+                      <label key={u.id} style={{
+                        ...styles.pillCheck,
+                        background: sel ? '#17395C' : '#fff',
+                        color: sel ? '#fff' : '#344054',
+                        borderColor: sel ? '#17395C' : '#D0D5DD',
+                      }}>
+                        <input type="checkbox" style={{ display: 'none' }}
+                          checked={sel} onChange={() => toggleInspector(nombre)} disabled={guardando} />
+                        <span style={{ fontWeight: 700 }}>{nombre}</span>
+                        <span style={{ fontSize: 11, opacity: .8 }}>{u.sede}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Supervisor */}
+              <div className="col-6 field">
+                <label>Supervisor</label>
+                <select className="select" value={form.supervisor} onChange={e => set('supervisor', e.target.value)} disabled={guardando}>
+                  <option value="">— Seleccionar —</option>
+                  {supervisores.map(u => {
+                    const nombre = `${u.nombre} ${u.apellido}`.trim()
+                    return <option key={u.id} value={nombre}>{nombre} · {u.sede}</option>
+                  })}
+                </select>
+              </div>
+
+              {/* Fecha y hora */}
+              <div className="col-3 field">
+                <label>Fecha inspección *</label>
+                <input className="input" type="date" value={form.fecha_inspeccion} onChange={e => set('fecha_inspeccion', e.target.value)} disabled={guardando} />
+              </div>
+              <div className="col-3 field">
+                <label>Hora</label>
+                <input className="input" type="time" value={form.hora} onChange={e => set('hora', e.target.value)} disabled={guardando} />
+              </div>
+
+              <div className="col-4 field">
+                <label>Tiempo estimado</label>
+                <input className="input" placeholder="Ej: 6 HRS" value={form.tiempo_estimado} onChange={e => set('tiempo_estimado', e.target.value)} disabled={guardando} />
+              </div>
+              <div className="col-4 field">
+                <label>Vehículo</label>
+                <input className="input" placeholder="Patente" value={form.vehiculo} onChange={e => set('vehiculo', e.target.value)} disabled={guardando} />
+              </div>
+              <div className="col-4 field">
+                <label>Norma ejecución</label>
+                <input className="input" placeholder="Ej: AWS D1.1" value={form.norma_ejecucion} onChange={e => set('norma_ejecucion', e.target.value)} disabled={guardando} />
+              </div>
+              <div className="col-4 field">
+                <label>Norma evaluación</label>
+                <input className="input" placeholder="Ej: ASME V" value={form.norma_evaluacion} onChange={e => set('norma_evaluacion', e.target.value)} disabled={guardando} />
+              </div>
+
+              {/* Tipos inspección */}
+              <div className="col-12 field">
+                <label>Tipos de inspección</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {TIPOS_INSPECCION.map(cod => {
+                    const sel = tiposSeleccionados.includes(cod)
+                    return (
+                      <button key={cod} type="button"
+                        onClick={() => toggleTipo(cod)}
+                        style={{
+                          padding: '6px 14px', borderRadius: 999, border: '1.5px solid',
+                          fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                          background: sel ? '#17395C' : '#fff',
+                          color: sel ? '#fff' : '#344054',
+                          borderColor: sel ? '#17395C' : '#D0D5DD',
+                        }}>
+                        {cod}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Procedimientos — lista desplegable multi-select */}
+              <div className="col-12 field">
+                <label>
+                  Procedimientos WSS
+                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={styles.listaSeleccion}>
+                  {catalogoProcedimientos.length === 0 ? (
+                    <p style={styles.sinDatos}>No hay procedimientos registrados</p>
+                  ) : (
+                    catalogoProcedimientos.map(p => {
+                      const val = `${p.codigo} — ${p.nombre}`
+                      const sel = procedimientosSeleccionados.includes(val)
+                      return (
+                        <label key={p.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
+                          <input
+                            type="checkbox"
+                            checked={sel}
+                            onChange={() => toggleProcedimiento(val)}
+                            disabled={guardando}
+                            style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: 13, flex: 1 }}>
+                            <b style={{ color: '#17395C' }}>{p.codigo}</b> — {p.nombre}
+                          </span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+                {procedimientosSeleccionados.length > 0 && (
+                  <div style={styles.resumenSel}>
+                    ✅ {procedimientosSeleccionados.length} seleccionado(s): {procedimientosSeleccionados.map(v => v.split(' — ')[0]).join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Equipos — lista desplegable multi-select */}
+              <div className="col-12 field">
+                <label>
+                  Equipos / Instrumentos a utilizar
+                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={styles.listaSeleccion}>
+                  {catalogoEquipos.length === 0 ? (
+                    <p style={styles.sinDatos}>No hay equipos registrados</p>
+                  ) : (
+                    catalogoEquipos.map(eq => {
+                      const val = `${eq.codigo} — ${eq.equipo_instrumento}`
+                      const sel = equiposSeleccionados.includes(val)
+                      return (
+                        <label key={eq.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
+                          <input
+                            type="checkbox"
+                            checked={sel}
+                            onChange={() => toggleEquipo(val)}
+                            disabled={guardando}
+                            style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: 13, flex: 1 }}>{eq.equipo_instrumento}</span>
+                          <span style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{eq.codigo}</span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+                {equiposSeleccionados.length > 0 && (
+                  <div style={styles.resumenSel}>
+                    ✅ {equiposSeleccionados.length} equipo(s) seleccionado(s)
+                  </div>
+                )}
+              </div>
+
+              <div className="col-12 field">
+                <label>Descripción actividades / alcance</label>
+                <textarea className="input" rows={4} style={{ resize: 'vertical' }}
+                  placeholder="Describir el alcance, elementos a inspeccionar, condiciones especiales..."
+                  value={form.descripcion_actividad} onChange={e => set('descripcion_actividad', e.target.value)} disabled={guardando} />
+              </div>
+            </div>
+
+            <div style={styles.footer}>
+              <button type="button" className="btn btn-ghost" onClick={onClose} disabled={guardando}>Cancelar</button>
+              <button type="submit" className="btn btn-warn btn-lg" disabled={guardando}>
+                {guardando ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Asignando...</> : '👥 Asignar inspector'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const styles = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' },
+  box: { width: '100%', maxWidth: 860, background: '#fff', borderRadius: 18, boxShadow: '0 24px 80px rgba(0,0,0,.3)', overflow: 'hidden', marginBottom: 24 },
+  header: { background: 'linear-gradient(135deg, #B45309, #92400E)', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  btnCerrar: { background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 8, fontSize: 14, cursor: 'pointer' },
+  body: { padding: '24px', maxHeight: '80vh', overflowY: 'auto' },
+  footer: { display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTop: '1px solid var(--borde)', marginTop: 8 },
+  checkGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8, padding: 12, background: '#F9FAFB', borderRadius: 10, border: '1px solid #EAECF0' },
+  pillCheck: { display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 12px', border: '1.5px solid', borderRadius: 10, cursor: 'pointer', transition: 'all .15s', userSelect: 'none' },
+  listaSeleccion: { border: '1.5px solid #D0D5DD', borderRadius: 10, padding: 8, maxHeight: 200, overflowY: 'auto', background: '#F9FAFB' },
+  filaCheck: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 7, cursor: 'pointer', userSelect: 'none', transition: 'background .1s' },
+  resumenSel: { marginTop: 6, fontSize: 11, color: '#17395C', fontWeight: 600 },
+  sinDatos: { fontSize: 13, color: '#9CA3AF', padding: '8px 4px', margin: 0 },
+}
