@@ -36,21 +36,9 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
   async function cargarDatos() {
     try {
       const [{ data: usuarios }, { data: procs }, { data: equips }] = await Promise.all([
-        supabase
-          .from('usuarios')
-          .select('id, nombre, apellido, rol, sede')
-          .eq('activo', true)
-          .order('nombre'),
-        supabase
-          .from('catalogo_procedimientos')
-          .select('id, nombre, codigo')
-          .eq('activo', true)
-          .order('codigo'),
-        supabase
-          .from('equipos')
-          .select('id, equipo_instrumento, codigo')
-          .eq('activo', true)
-          .order('equipo_instrumento'),
+        supabase.from('usuarios').select('id, nombre, apellido, rol, sede').eq('activo', true).order('nombre'),
+        supabase.from('catalogo_procedimientos').select('id, nombre, codigo').eq('activo', true).order('codigo'),
+        supabase.from('equipos').select('id, equipo_instrumento, codigo').eq('activo', true).order('equipo_instrumento'),
       ])
       const todos = usuarios || []
       setInspectores(todos.filter(u => u.rol === 'INSPECTOR'))
@@ -100,7 +88,6 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
 
       const procedimientosStr = procedimientosSeleccionados.join(', ')
       const equiposStr = equiposSeleccionados.join(', ')
-
       const descripcionFinal = equiposStr
         ? `${form.descripcion_actividad}\n\nEquipos/instrumentos: ${equiposStr}`
         : form.descripcion_actividad
@@ -148,25 +135,16 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
           <form onSubmit={handleSubmit}>
             <div className="grid">
 
-              {/* Inspector(es) */}
               <div className="col-12 field">
                 <label>Inspector(es) asignado(s) *</label>
                 <div style={styles.checkGrid}>
-                  {inspectores.length === 0 && (
-                    <p className="text-sm">No hay inspectores activos registrados</p>
-                  )}
+                  {inspectores.length === 0 && <p className="text-sm">No hay inspectores activos registrados</p>}
                   {inspectores.map(u => {
                     const nombre = `${u.nombre} ${u.apellido}`.trim()
                     const sel = inspectoresSeleccionados.includes(nombre)
                     return (
-                      <label key={u.id} style={{
-                        ...styles.pillCheck,
-                        background: sel ? '#17395C' : '#fff',
-                        color: sel ? '#fff' : '#344054',
-                        borderColor: sel ? '#17395C' : '#D0D5DD',
-                      }}>
-                        <input type="checkbox" style={{ display: 'none' }}
-                          checked={sel} onChange={() => toggleInspector(nombre)} disabled={guardando} />
+                      <label key={u.id} style={{ ...styles.pillCheck, background: sel ? '#17395C' : '#fff', color: sel ? '#fff' : '#344054', borderColor: sel ? '#17395C' : '#D0D5DD' }}>
+                        <input type="checkbox" style={{ display: 'none' }} checked={sel} onChange={() => toggleInspector(nombre)} disabled={guardando} />
                         <span style={{ fontWeight: 700 }}>{nombre}</span>
                         <span style={{ fontSize: 11, opacity: .8 }}>{u.sede}</span>
                       </label>
@@ -175,7 +153,6 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                 </div>
               </div>
 
-              {/* Supervisor */}
               <div className="col-6 field">
                 <label>Supervisor</label>
                 <select className="select" value={form.supervisor} onChange={e => set('supervisor', e.target.value)} disabled={guardando}>
@@ -187,7 +164,6 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                 </select>
               </div>
 
-              {/* Fecha y hora */}
               <div className="col-3 field">
                 <label>Fecha inspección *</label>
                 <input className="input" type="date" value={form.fecha_inspeccion} onChange={e => set('fecha_inspeccion', e.target.value)} disabled={guardando} />
@@ -214,22 +190,13 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                 <input className="input" placeholder="Ej: ASME V" value={form.norma_evaluacion} onChange={e => set('norma_evaluacion', e.target.value)} disabled={guardando} />
               </div>
 
-              {/* Tipos inspección */}
               <div className="col-12 field">
                 <label>Tipos de inspección</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {TIPOS_INSPECCION.map(cod => {
                     const sel = tiposSeleccionados.includes(cod)
                     return (
-                      <button key={cod} type="button"
-                        onClick={() => toggleTipo(cod)}
-                        style={{
-                          padding: '6px 14px', borderRadius: 999, border: '1.5px solid',
-                          fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                          background: sel ? '#17395C' : '#fff',
-                          color: sel ? '#fff' : '#344054',
-                          borderColor: sel ? '#17395C' : '#D0D5DD',
-                        }}>
+                      <button key={cod} type="button" onClick={() => toggleTipo(cod)} style={{ padding: '6px 14px', borderRadius: 999, border: '1.5px solid', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: sel ? '#17395C' : '#fff', color: sel ? '#fff' : '#344054', borderColor: sel ? '#17395C' : '#D0D5DD' }}>
                         {cod}
                       </button>
                     )
@@ -237,76 +204,48 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                 </div>
               </div>
 
-              {/* Procedimientos — lista desplegable multi-select */}
               <div className="col-12 field">
-                <label>
-                  Procedimientos WSS
-                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span>
-                </label>
+                <label>Procedimientos WSS <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span></label>
                 <div style={styles.listaSeleccion}>
-                  {catalogoProcedimientos.length === 0 ? (
-                    <p style={styles.sinDatos}>No hay procedimientos registrados</p>
-                  ) : (
-                    catalogoProcedimientos.map(p => {
-                      const val = `${p.codigo} — ${p.nombre}`
-                      const sel = procedimientosSeleccionados.includes(val)
-                      return (
-                        <label key={p.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
-                          <input
-                            type="checkbox"
-                            checked={sel}
-                            onChange={() => toggleProcedimiento(val)}
-                            disabled={guardando}
-                            style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }}
-                          />
-                          <span style={{ fontSize: 13, flex: 1 }}>
-                            <b style={{ color: '#17395C' }}>{p.codigo}</b> — {p.nombre}
-                          </span>
-                        </label>
-                      )
-                    })
-                  )}
+                  {catalogoProcedimientos.length === 0
+                    ? <p style={styles.sinDatos}>No hay procedimientos registrados</p>
+                    : catalogoProcedimientos.map(p => {
+                        const val = `${p.codigo} — ${p.nombre}`
+                        const sel = procedimientosSeleccionados.includes(val)
+                        return (
+                          <label key={p.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
+                            <input type="checkbox" checked={sel} onChange={() => toggleProcedimiento(val)} disabled={guardando} style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }} />
+                            <span style={{ fontSize: 13, flex: 1 }}><b style={{ color: '#17395C' }}>{p.codigo}</b> — {p.nombre}</span>
+                          </label>
+                        )
+                      })
+                  }
                 </div>
                 {procedimientosSeleccionados.length > 0 && (
-                  <div style={styles.resumenSel}>
-                    ✅ {procedimientosSeleccionados.length} seleccionado(s): {procedimientosSeleccionados.map(v => v.split(' — ')[0]).join(', ')}
-                  </div>
+                  <div style={styles.resumenSel}>✅ {procedimientosSeleccionados.length} seleccionado(s): {procedimientosSeleccionados.map(v => v.split(' — ')[0]).join(', ')}</div>
                 )}
               </div>
 
-              {/* Equipos — lista desplegable multi-select */}
               <div className="col-12 field">
-                <label>
-                  Equipos / Instrumentos a utilizar
-                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span>
-                </label>
+                <label>Equipos / Instrumentos <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginLeft: 6 }}>selección múltiple</span></label>
                 <div style={styles.listaSeleccion}>
-                  {catalogoEquipos.length === 0 ? (
-                    <p style={styles.sinDatos}>No hay equipos registrados</p>
-                  ) : (
-                    catalogoEquipos.map(eq => {
-                      const val = `${eq.codigo} — ${eq.equipo_instrumento}`
-                      const sel = equiposSeleccionados.includes(val)
-                      return (
-                        <label key={eq.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
-                          <input
-                            type="checkbox"
-                            checked={sel}
-                            onChange={() => toggleEquipo(val)}
-                            disabled={guardando}
-                            style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }}
-                          />
-                          <span style={{ fontSize: 13, flex: 1 }}>{eq.equipo_instrumento}</span>
-                          <span style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{eq.codigo}</span>
-                        </label>
-                      )
-                    })
-                  )}
+                  {catalogoEquipos.length === 0
+                    ? <p style={styles.sinDatos}>No hay equipos registrados</p>
+                    : catalogoEquipos.map(eq => {
+                        const val = `${eq.codigo} — ${eq.equipo_instrumento}`
+                        const sel = equiposSeleccionados.includes(val)
+                        return (
+                          <label key={eq.id} style={{ ...styles.filaCheck, background: sel ? '#EEF2FF' : 'transparent' }}>
+                            <input type="checkbox" checked={sel} onChange={() => toggleEquipo(val)} disabled={guardando} style={{ accentColor: '#17395C', width: 15, height: 15, cursor: 'pointer' }} />
+                            <span style={{ fontSize: 13, flex: 1 }}>{eq.equipo_instrumento}</span>
+                            <span style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{eq.codigo}</span>
+                          </label>
+                        )
+                      })
+                  }
                 </div>
                 {equiposSeleccionados.length > 0 && (
-                  <div style={styles.resumenSel}>
-                    ✅ {equiposSeleccionados.length} equipo(s) seleccionado(s)
-                  </div>
+                  <div style={styles.resumenSel}>✅ {equiposSeleccionados.length} equipo(s) seleccionado(s)</div>
                 )}
               </div>
 
