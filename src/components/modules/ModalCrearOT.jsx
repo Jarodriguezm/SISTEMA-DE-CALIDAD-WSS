@@ -31,17 +31,13 @@ const SERVICIOS = [
   { cod: 'O',   nombre: 'Otros' },
 ]
 
-function mesActual() {
-  return String(new Date().getMonth() + 1).padStart(2, '0')
-}
-
-function anioActual() {
-  return String(new Date().getFullYear())
-}
+function mesActual()  { return String(new Date().getMonth() + 1).padStart(2, '0') }
+function anioActual() { return String(new Date().getFullYear()) }
 
 export default function ModalCrearOT({ onClose, onCreada }) {
   const { usuario } = useAuth()
   const [guardando, setGuardando] = useState(false)
+  const [mensajePaso, setMensajePaso] = useState('')   // texto durante carga
   const [error, setError] = useState('')
   const [supervisores, setSupervisores] = useState([])
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
@@ -64,9 +60,7 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     observaciones: '',
   })
 
-  useEffect(() => {
-    cargarSupervisores()
-  }, [])
+  useEffect(() => { cargarSupervisores() }, [])
 
   async function cargarSupervisores() {
     try {
@@ -108,17 +102,21 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     try {
       setGuardando(true)
       setError('')
+      setMensajePaso('Creando Orden de Trabajo...')
 
-      // Buscar nombre del supervisor si se seleccionó
+      // Nombre del supervisor si se seleccionó
       let supervisorNombre = ''
       if (form.supervisor_id) {
         const sup = supervisores.find(s => s.id === form.supervisor_id)
         if (sup) supervisorNombre = `${sup.nombre} ${sup.apellido}`.trim()
       }
 
-      const params = {
+      const otNumero = form.ot_numero.trim().toUpperCase()
+
+      // ── Paso 1: Crear OT en Supabase ──────────────────────────────────────
+      await rpc('crear_ot_portal', {
         p_email_usuario:                usuario?.email || '',
-        p_ot_numero:                    form.ot_numero.trim().toUpperCase(),
+        p_ot_numero:                    otNumero,
         p_cliente:                      form.cliente.trim(),
         p_contacto:                     form.contacto.trim() || null,
         p_email_cliente:                form.email_cliente.trim() || null,
@@ -131,16 +129,55 @@ export default function ModalCrearOT({ onClose, onCreada }) {
         p_direccion_faena:              form.direccion_faena.trim() || null,
         p_descripcion:                  form.descripcion.trim() || null,
         p_observaciones:                form.observaciones.trim() || null,
+      })
+
+      // ── Paso 2: Crear carpetas en Google Drive ────────────────────────────
+      setMensajePaso('Creando carpetas en Google Drive... 📁')
+
+      try {
+        const driveRes = await fetch('/api/drive/crear-carpetas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ot_numero: otNumero,
+            cliente:   form.cliente.trim(),
+            sede:      form.sede,
+            anio:      Number(form.anio),
+            mes:       Number(form.mes),
+          }),
+        })
+
+        const driveData = await driveRes.json()
+
+        if (driveData.ok && driveData.carpeta_ot_url) {
+          // Guardar URL y subcarpetas en la OT
+          await supabase
+            .from('ots')
+            .update({
+              carpeta_drive_url: driveData.carpeta_ot_url,
+              carpetas_drive:    driveData.subcarpetas,
+            })
+            .eq('ot_numero', otNumero)
+
+          setMensajePaso('✅ OT creada con carpetas Drive')
+        } else {
+          // Drive falló pero OT fue creada — no es fatal
+          console.warn('[ModalCrearOT] Drive error (no fatal):', driveData.error)
+          setMensajePaso('OT creada — carpetas Drive pendientes')
+        }
+      } catch (driveErr) {
+        // Error de red al llamar Drive — no bloquea
+        console.warn('[ModalCrearOT] Drive network error:', driveErr.message)
       }
 
-      await rpc('crear_ot_portal', params)
-
-      onCreada && onCreada(form.ot_numero.trim().toUpperCase())
+      // ── Éxito ──────────────────────────────────────────────────────────────
+      onCreada && onCreada(otNumero)
 
     } catch (err) {
       setError(mensajeError(err))
     } finally {
       setGuardando(false)
+      setMensajePaso('')
     }
   }
 
@@ -307,15 +344,27 @@ export default function ModalCrearOT({ onClose, onCreada }) {
               </div>
             </Seccion>
 
+            {/* Info Drive */}
+            <div style={{
+              background: '#E6F1FB', border: '1px solid #85B7EB',
+              borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#185FA5', marginBottom: 16,
+            }}>
+              📁 Al guardar se crearán automáticamente <b>13 carpetas en Google Drive</b>:
+              la carpeta de la OT + las 12 etapas del proceso WSS.
+            </div>
+
             {/* Footer */}
             <div style={styles.footer}>
               <button type="button" className="btn btn-ghost" onClick={onClose} disabled={guardando}>
                 Cancelar
               </button>
               <button type="submit" className="btn btn-primary btn-lg" disabled={guardando}>
-                {guardando
-                  ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Creando OT...</>
-                  : '✓ Crear OT'}
+                {guardando ? (
+                  <>
+                    <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                    {mensajePaso || 'Procesando...'}
+                  </>
+                ) : '✓ Crear OT'}
               </button>
             </div>
 
