@@ -43,6 +43,11 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
   const { usuario } = useAuth()
   const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
 
+  const SUPABASE_URL = 'https://labxvesmcfbrdtftkwtg.supabase.co'
+  const SUPABASE_ANON_KEY = typeof import.meta !== 'undefined'
+    ? (import.meta.env?.VITE_SUPABASE_ANON_KEY || '')
+    : ''
+
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [exito, setExito] = useState(null)
@@ -182,8 +187,49 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
 
       if (err) throw err
 
+      // ── Enviar email a cada inspector vía Edge Function ──────────────────
+      let emailsEnviados = 0
+      let emailError = null
+      try {
+        const supabaseUrl = 'https://labxvesmcfbrdtftkwtg.supabase.co'
+        const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || ''
+        const edgeRes = await fetch(
+          `${supabaseUrl}/functions/v1/send-assignment-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${anonKey}`,
+              'apikey': anonKey,
+            },
+            body: JSON.stringify({
+              inspectores: form.inspectoresSeleccionados.map(i => ({
+                nombre_completo: i.nombre_completo,
+                email: i.email,
+              })),
+              ot_numero: ot.ot_numero,
+              cliente: ot.cliente,
+              fecha_inspeccion: form.fechaInspeccion,
+              hora: form.hora,
+              supervisor: form.supervisor || nombreCompleto,
+              descripcion_actividad: form.descripcionActividad,
+              tipos_inspeccion: tiposStr || null,
+              procedimientos: procedimientosStr || null,
+              vehiculo: form.vehiculo || null,
+            }),
+          }
+        )
+        const edgeData = await edgeRes.json()
+        emailsEnviados = edgeData.enviados || 0
+        if (!edgeData.ok) emailError = edgeData.error
+      } catch (e) {
+        emailError = e.message
+      }
+
       setExito({
         inspectores: form.inspectoresSeleccionados,
+        emailsEnviados,
+        emailError,
         waLinks: form.inspectoresSeleccionados
           .filter(i => i.telefono_whatsapp)
           .map(i => ({ nombre: i.nombre_completo, url: waLink(i.telefono_whatsapp, mensajeWA) })),
@@ -224,9 +270,21 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
               <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1A3A5C', marginBottom: 8 }}>
                 Asignación guardada correctamente
               </div>
-              <div style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
                 Inspector(es): <b>{exito.inspectores.map(i => i.nombre_completo).join(', ')}</b>
               </div>
+              {/* Estado emails */}
+              {exito.emailsEnviados > 0 && (
+                <div style={{ background: '#E6F9EF', border: '1px solid #6EBF8B', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#1A6B3A', marginBottom: 12 }}>
+                  ✉️ Correo enviado a {exito.emailsEnviados} inspector(es) correctamente.
+                </div>
+              )}
+              {exito.emailError && (
+                <div style={{ background: '#FFF8E6', border: '1px solid #F0C040', borderRadius: 8, padding: '8px 14px', fontSize: 12, color: '#7A5A00', marginBottom: 12 }}>
+                  ⚠️ No se pudo enviar el email automático: {exito.emailError}.<br />
+                  Usa WhatsApp para notificar manualmente.
+                </div>
+              )}
               {exito.waLinks.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
@@ -416,9 +474,9 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                 />
               </div>
 
-              {/* Info WA */}
+              {/* Info notificaciones */}
               <div style={{ background: '#E6F1FB', border: '1px solid #85B7EB', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#185FA5', marginBottom: 16 }}>
-                💬 Al guardar se generarán los <b>links de WhatsApp</b> para notificar a cada inspector.
+                ✉️ Al guardar se enviará un <b>correo automático</b> a cada inspector y se generarán los <b>links de WhatsApp</b>.
               </div>
 
               {/* Footer */}
