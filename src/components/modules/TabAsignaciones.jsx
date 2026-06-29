@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 function waLink(tel, mensaje) {
   const num = (tel || '').replace(/[^0-9]/g, '')
