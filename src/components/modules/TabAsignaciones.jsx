@@ -109,7 +109,8 @@ function TarjetaAsignacion({ asig }) {
 
 // ─── componente principal ────────────────────────────────────────────────────
 export default function TabAsignaciones({ ot }) {
-  const { user } = useAuth()
+  const { usuario } = useAuth()
+  const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
 
   const [asignaciones, setAsignaciones] = useState([])
   const [loading, setLoading]           = useState(true)
@@ -276,7 +277,7 @@ export default function TabAsignaciones({ ot }) {
         fechaInspeccion: form.fechaInspeccion,
         hora: form.hora,
         descripcion: form.descripcionActividad,
-        supervisorNombre: form.supervisor || user.nombre_completo,
+        supervisorNombre: form.supervisor || nombreCompleto,
       })
 
       // Primer inspector con teléfono para el link (link único al primero con tel)
@@ -289,9 +290,9 @@ export default function TabAsignaciones({ ot }) {
         : form.descripcionActividad
 
       const { data, error: err } = await supabase.rpc('crear_asignacion_portal', {
-        p_email_usuario:          user.email,
+        p_email_usuario:          usuario?.email || '',
         p_ot_numero:              ot.ot_numero,
-        p_supervisor:             form.supervisor || user.nombre_completo,
+        p_supervisor:             form.supervisor || nombreCompleto,
         p_inspectores_asignados:  inspectoresStr,
         p_fecha_inspeccion:       form.fechaInspeccion || null,
         p_hora:                   form.hora || null,
@@ -454,7 +455,7 @@ export default function TabAsignaciones({ ot }) {
               <input
                 value={form.supervisor}
                 onChange={e => setForm(f => ({ ...f, supervisor: e.target.value }))}
-                placeholder={user.nombre_completo}
+                placeholder={nombreCompleto}
                 style={inputStyle}
               />
             </div>

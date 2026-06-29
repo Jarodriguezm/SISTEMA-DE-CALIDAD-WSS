@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../lib/AuthContext'
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────────
 function waLink(tel, mensaje) {
   const num = (tel || '').replace(/[^0-9]/g, '')
   if (!num) return null
@@ -22,114 +22,41 @@ function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion,
   )
 }
 
-// ─── subcomponente: tarjeta de asignación existente ─────────────────────────
-function TarjetaAsignacion({ asig }) {
-  return (
-    <div style={{
-      background: '#fff',
-      border: '1px solid #e8e8e8',
-      borderLeft: '4px solid #1A3A5C',
-      borderRadius: 10,
-      padding: '14px 16px',
-      marginBottom: 10,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 11, color: '#999', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            REG-DII-036
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 'bold', color: '#1A3A5C', marginTop: 2 }}>
-            {asig.inspectores_asignados}
-          </div>
-          <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-            Supervisor: {asig.supervisor}
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <span style={{
-            display: 'inline-block',
-            fontSize: 10,
-            fontWeight: 'bold',
-            padding: '3px 10px',
-            borderRadius: 20,
-            background: '#EAF3DE',
-            color: '#3B6D11',
-          }}>
-            ✅ {asig.estado}
-          </span>
-          {asig.fecha_inspeccion && (
-            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              📅 {asig.fecha_inspeccion} {asig.hora ? `· ${asig.hora}` : ''}
-            </div>
-          )}
-        </div>
-      </div>
+const TIPOS = [
+  { cod: 'VT', desc: 'Insp. visual' },
+  { cod: 'CD', desc: 'Control dim.' },
+  { cod: 'PT', desc: 'Líq. penetrantes' },
+  { cod: 'MT', desc: 'Part. magnéticas' },
+  { cod: 'UT', desc: 'Ultrasonido' },
+  { cod: 'UTT', desc: 'Med. espesores' },
+  { cod: 'T', desc: 'Termografía' },
+  { cod: 'CG', desc: 'Cert. grúas' },
+  { cod: 'CTK', desc: 'Cert. tanques' },
+  { cod: 'CS', desc: 'Calif. soldador' },
+  { cod: 'PH', desc: 'Prueba hidrost.' },
+  { cod: 'PN', desc: 'Prueba neumática' },
+  { cod: 'CV', desc: 'Cámara vacío' },
+  { cod: 'O', desc: 'Otros' },
+]
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 12, color: '#555', marginBottom: 10 }}>
-        {asig.vehiculo && <div>🚗 Vehículo: <b>{asig.vehiculo}</b></div>}
-        {asig.tiempo_estimado && <div>⏱ Tiempo: <b>{asig.tiempo_estimado}</b></div>}
-        {asig.norma_ejecucion && <div>📐 Ejec.: <b>{asig.norma_ejecucion}</b></div>}
-        {asig.norma_evaluacion && <div>📋 Eval.: <b>{asig.norma_evaluacion}</b></div>}
-      </div>
+export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
+  const { usuario } = useAuth()
+  const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
 
-      {asig.procedimientos && (
-        <div style={{ fontSize: 11, background: '#F7F8FA', borderRadius: 6, padding: '6px 10px', marginBottom: 6 }}>
-          <span style={{ color: '#888', fontWeight: 'bold' }}>Procedimientos: </span>
-          {asig.procedimientos}
-        </div>
-      )}
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const [exito, setExito] = useState(null)
 
-      {asig.tipos_inspeccion && (
-        <div style={{ fontSize: 11, background: '#F7F8FA', borderRadius: 6, padding: '6px 10px', marginBottom: 6 }}>
-          <span style={{ color: '#888', fontWeight: 'bold' }}>Tipos: </span>
-          {asig.tipos_inspeccion}
-        </div>
-      )}
-
-      {asig.descripcion_actividad && (
-        <div style={{ fontSize: 12, color: '#444', background: '#f9f9f9', borderRadius: 6, padding: '8px 10px', marginBottom: 8 }}>
-          {asig.descripcion_actividad}
-        </div>
-      )}
-
-      {asig.whatsapp_inspectores_url && (
-        <a href={asig.whatsapp_inspectores_url} target="_blank" rel="noreferrer"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 12, padding: '5px 12px', borderRadius: 20,
-            background: '#25D366', color: '#fff', fontWeight: 'bold',
-            textDecoration: 'none',
-          }}>
-          💬 Reenviar WhatsApp
-        </a>
-      )}
-    </div>
-  )
-}
-
-// ─── componente principal ────────────────────────────────────────────────────
-export default function TabAsignaciones({ ot }) {
-  const { user } = useAuth()
-
-  const [asignaciones, setAsignaciones] = useState([])
-  const [loading, setLoading]           = useState(true)
-  const [error, setError]               = useState(null)
-  const [mostrarForm, setMostrarForm]   = useState(false)
-  const [guardando, setGuardando]       = useState(false)
-  const [exito, setExito]               = useState(null)
-
-  // catálogos
-  const [equipos, setEquipos]           = useState([])
+  const [inspectores, setInspectores] = useState([])
   const [procedimientos, setProcedimientos] = useState([])
-  const [inspectores, setInspectores]   = useState([])
+  const [equipos, setEquipos] = useState([])
 
-  // form state
   const [form, setForm] = useState({
     supervisor: '',
-    inspectoresSeleccionados: [],   // array de objetos {nombre_completo, email, telefono_whatsapp}
-    equiposSeleccionados: [],       // array de strings "codigo — nombre"
-    procedimientosSeleccionados: [],// array de strings "codigo — nombre"
-    tiposInspeccion: [],            // array de strings
+    inspectoresSeleccionados: [],
+    procedimientosSeleccionados: [],
+    equiposSeleccionados: [],
+    tiposInspeccion: [],
     fechaInspeccion: '',
     hora: '',
     tiempoEstimado: '',
@@ -139,59 +66,12 @@ export default function TabAsignaciones({ ot }) {
     descripcionActividad: '',
   })
 
-  const TIPOS = [
-    { cod: 'VT',  desc: 'Insp. visual' },
-    { cod: 'CD',  desc: 'Control dim.' },
-    { cod: 'PT',  desc: 'Líq. penetrantes' },
-    { cod: 'MT',  desc: 'Part. magnéticas' },
-    { cod: 'UT',  desc: 'Ultrasonido' },
-    { cod: 'UTT', desc: 'Med. espesores' },
-    { cod: 'T',   desc: 'Termografía' },
-    { cod: 'CG',  desc: 'Cert. grúas' },
-    { cod: 'CTK', desc: 'Cert. tanques' },
-    { cod: 'CS',  desc: 'Calif. soldador' },
-    { cod: 'PH',  desc: 'Prueba hidrost.' },
-    { cod: 'PN',  desc: 'Prueba neumática' },
-    { cod: 'CV',  desc: 'Cámara vacío' },
-    { cod: 'O',   desc: 'Otros' },
-  ]
-
-  // ── cargar asignaciones existentes ──────────────────────────────────────
-  const cargarAsignaciones = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const { data, error: err } = await supabase.rpc('obtener_asignaciones_por_ot', {
-        p_ot_numero: ot.ot_numero,
-      })
-      if (err) throw err
-      setAsignaciones(data || [])
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [ot.ot_numero])
-
-  // ── cargar catálogos ─────────────────────────────────────────────────────
   const cargarCatalogos = useCallback(async () => {
     try {
       const [{ data: eq }, { data: proc }, { data: insp }] = await Promise.all([
-        supabase
-          .from('equipos')
-          .select('id, equipo_instrumento, codigo')
-          .eq('activo', true)
-          .order('equipo_instrumento'),
-        supabase
-          .from('catalogo_procedimientos')
-          .select('id, nombre, codigo')
-          .eq('activo', true)
-          .order('codigo'),
-        supabase
-          .from('v_usuarios_portal')
-          .select('nombre_completo, email, telefono_whatsapp, rol')
-          .in('rol', ['INSPECTOR', 'SUPERVISOR', 'ADMIN'])
-          .order('nombre_completo'),
+        supabase.from('equipos').select('id, equipo_instrumento, codigo').eq('activo', true).order('equipo_instrumento'),
+        supabase.from('catalogo_procedimientos').select('id, nombre, codigo').eq('activo', true).order('codigo'),
+        supabase.from('v_usuarios_portal').select('nombre_completo, email, telefono_whatsapp, rol').in('rol', ['INSPECTOR', 'SUPERVISOR', 'ADMIN']).order('nombre_completo'),
       ])
       setEquipos(eq || [])
       setProcedimientos(proc || [])
@@ -202,11 +82,10 @@ export default function TabAsignaciones({ ot }) {
   }, [])
 
   useEffect(() => {
-    cargarAsignaciones()
     cargarCatalogos()
-  }, [cargarAsignaciones, cargarCatalogos])
+    if (ot?.supervisor) setForm(f => ({ ...f, supervisor: ot.supervisor }))
+  }, [ot, cargarCatalogos])
 
-  // ── toggle helpers ───────────────────────────────────────────────────────
   function toggleInspector(inspector) {
     setForm(f => {
       const existe = f.inspectoresSeleccionados.find(i => i.email === inspector.email)
@@ -248,20 +127,18 @@ export default function TabAsignaciones({ ot }) {
     }))
   }
 
-  // ── guardar ──────────────────────────────────────────────────────────────
-  async function guardarAsignacion() {
+  async function guardar() {
     if (form.inspectoresSeleccionados.length === 0) {
-      alert('Selecciona al menos un inspector.')
+      setError('Selecciona al menos un inspector.')
       return
     }
     if (!form.descripcionActividad.trim()) {
-      alert('La descripción de actividades es obligatoria.')
+      setError('La descripción de actividades es obligatoria.')
       return
     }
 
     setGuardando(true)
-    setExito(null)
-    setError(null)
+    setError('')
 
     try {
       const inspectoresStr = form.inspectoresSeleccionados.map(i => i.nombre_completo).join(', ')
@@ -269,40 +146,37 @@ export default function TabAsignaciones({ ot }) {
       const tiposStr = form.tiposInspeccion.join(', ')
       const equiposStr = form.equiposSeleccionados.join(', ')
 
-      // Construir link WA (todos los inspectores)
       const mensajeWA = buildWAMensaje({
         otNumero: ot.ot_numero,
         cliente: ot.cliente,
         fechaInspeccion: form.fechaInspeccion,
         hora: form.hora,
         descripcion: form.descripcionActividad,
-        supervisorNombre: form.supervisor || user.nombre_completo,
+        supervisorNombre: form.supervisor || nombreCompleto,
       })
 
-      // Primer inspector con teléfono para el link (link único al primero con tel)
       const primerConTel = form.inspectoresSeleccionados.find(i => i.telefono_whatsapp)
       const waUrl = primerConTel ? waLink(primerConTel.telefono_whatsapp, mensajeWA) : null
 
-      // Descripción enriquecida con equipos si hay seleccionados
       const descripcionFinal = equiposStr
         ? `${form.descripcionActividad}\n\nEquipos/instrumentos: ${equiposStr}`
         : form.descripcionActividad
 
-      const { data, error: err } = await supabase.rpc('crear_asignacion_portal', {
-        p_email_usuario:          user.email,
-        p_ot_numero:              ot.ot_numero,
-        p_supervisor:             form.supervisor || user.nombre_completo,
-        p_inspectores_asignados:  inspectoresStr,
-        p_fecha_inspeccion:       form.fechaInspeccion || null,
-        p_hora:                   form.hora || null,
-        p_tiempo_estimado:        form.tiempoEstimado || null,
-        p_vehiculo:               form.vehiculo || null,
-        p_norma_ejecucion:        form.normaEjecucion || null,
-        p_norma_evaluacion:       form.normaEvaluacion || null,
-        p_procedimientos:         procedimientosStr || null,
-        p_tipos_inspeccion:       tiposStr || null,
-        p_descripcion_actividad:  descripcionFinal,
-        p_drive_url:              null,
+      const { error: err } = await supabase.rpc('crear_asignacion_portal', {
+        p_email_usuario: usuario?.email || '',
+        p_ot_numero: ot.ot_numero,
+        p_supervisor: form.supervisor || nombreCompleto,
+        p_inspectores_asignados: inspectoresStr,
+        p_fecha_inspeccion: form.fechaInspeccion || null,
+        p_hora: form.hora || null,
+        p_tiempo_estimado: form.tiempoEstimado || null,
+        p_vehiculo: form.vehiculo || null,
+        p_norma_ejecucion: form.normaEjecucion || null,
+        p_norma_evaluacion: form.normaEvaluacion || null,
+        p_procedimientos: procedimientosStr || null,
+        p_tipos_inspeccion: tiposStr || null,
+        p_descripcion_actividad: descripcionFinal,
+        p_drive_url: null,
         p_whatsapp_inspectores_url: waUrl,
       })
 
@@ -310,28 +184,13 @@ export default function TabAsignaciones({ ot }) {
 
       setExito({
         inspectores: form.inspectoresSeleccionados,
-        mensajeWA,
         waLinks: form.inspectoresSeleccionados
           .filter(i => i.telefono_whatsapp)
           .map(i => ({ nombre: i.nombre_completo, url: waLink(i.telefono_whatsapp, mensajeWA) })),
       })
 
-      setMostrarForm(false)
-      setForm({
-        supervisor: '',
-        inspectoresSeleccionados: [],
-        equiposSeleccionados: [],
-        procedimientosSeleccionados: [],
-        tiposInspeccion: [],
-        fechaInspeccion: '',
-        hora: '',
-        tiempoEstimado: '',
-        vehiculo: '',
-        normaEjecucion: '',
-        normaEvaluacion: '',
-        descripcionActividad: '',
-      })
-      await cargarAsignaciones()
+      onAsignada && onAsignada()
+
     } catch (e) {
       setError(e.message)
     } finally {
@@ -339,380 +198,299 @@ export default function TabAsignaciones({ ot }) {
     }
   }
 
-  // ── render ───────────────────────────────────────────────────────────────
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: 32, color: '#aaa' }}>
-      Cargando asignaciones...
-    </div>
-  )
+  if (!ot) return null
 
   return (
-    <div>
-      {/* ── encabezado ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 'bold', color: '#1A3A5C' }}>
-            Asignaciones de Actividades
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={S.box}>
+        {/* ── Header ── */}
+        <div style={S.header}>
+          <div>
+            <h2 style={{ margin: 0, color: '#fff', fontSize: 18 }}>
+              Asignar Inspector — {ot.ot_numero}
+            </h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(255,255,255,.7)' }}>
+              {ot.cliente}
+            </p>
           </div>
-          <div style={{ fontSize: 11, color: '#999' }}>REG-DII-036 Rev.04</div>
+          <button onClick={onClose} style={S.btnCerrar} disabled={guardando}>✕</button>
         </div>
-        {!mostrarForm && (
-          <button
-            onClick={() => { setMostrarForm(true); setExito(null) }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '8px 16px', borderRadius: 8,
-              background: '#1A3A5C', color: '#fff',
-              border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 'bold',
-            }}
-          >
-            + Nueva asignación
-          </button>
-        )}
+
+        {/* ── Body ── */}
+        <div style={S.body}>
+          {exito ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+              <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1A3A5C', marginBottom: 8 }}>
+                Asignación guardada correctamente
+              </div>
+              <div style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
+                Inspector(es): <b>{exito.inspectores.map(i => i.nombre_completo).join(', ')}</b>
+              </div>
+              {exito.waLinks.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+                    📱 Enviar notificación por WhatsApp:
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {exito.waLinks.map(l => (
+                      <a key={l.url} href={l.url} target="_blank" rel="noreferrer"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          fontSize: 13, padding: '8px 16px', borderRadius: 20,
+                          background: '#25D366', color: '#fff', fontWeight: 'bold',
+                          textDecoration: 'none',
+                        }}>
+                        💬 Notificar a {l.nombre}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={onClose} style={{ ...S.btnPrimary, background: '#1A3A5C' }}>
+                Cerrar
+              </button>
+            </div>
+          ) : (
+            <div>
+              {error && (
+                <div style={{ background: '#FCEBEB', border: '1px solid #E57373', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#A32D2D', marginBottom: 16 }}>
+                  ⚠️ {error}
+                </div>
+              )}
+
+              {/* Inspectores */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={S.label}>
+                  Inspector(es) asignado(s) *
+                  <span style={{ fontSize: 10, color: '#185FA5', fontWeight: 'normal', marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={S.checkList}>
+                  {inspectores.filter(i => i.rol === 'INSPECTOR').length === 0 && (
+                    <p style={{ margin: 8, fontSize: 13, color: '#aaa' }}>No hay inspectores activos</p>
+                  )}
+                  {inspectores.filter(i => i.rol === 'INSPECTOR').map(insp => {
+                    const sel = !!form.inspectoresSeleccionados.find(i => i.email === insp.email)
+                    return (
+                      <label key={insp.email} style={S.checkRow(sel)}>
+                        <input type="checkbox" checked={sel} onChange={() => toggleInspector(insp)} style={{ width: 'auto', cursor: 'pointer' }} />
+                        <span style={{ flex: 1, fontSize: 13 }}>{insp.nombre_completo}</span>
+                        <span style={{ fontSize: 10, color: '#aaa' }}>{insp.telefono_whatsapp || ''}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {form.inspectoresSeleccionados.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#185FA5', marginTop: 5 }}>
+                    ✅ {form.inspectoresSeleccionados.map(i => i.nombre_completo).join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Supervisor + Fecha + Hora */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                <div>
+                  <label style={S.label}>Supervisor</label>
+                  <input value={form.supervisor} onChange={e => setForm(f => ({ ...f, supervisor: e.target.value }))} placeholder={nombreCompleto} style={S.input} />
+                </div>
+                <div>
+                  <label style={S.label}>Fecha inspección</label>
+                  <input type="date" value={form.fechaInspeccion} onChange={e => setForm(f => ({ ...f, fechaInspeccion: e.target.value }))} style={S.input} />
+                </div>
+                <div>
+                  <label style={S.label}>Hora</label>
+                  <input type="time" value={form.hora} onChange={e => setForm(f => ({ ...f, hora: e.target.value }))} style={S.input} />
+                </div>
+              </div>
+
+              {/* Tiempo / Vehículo / Normas */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                <div>
+                  <label style={S.label}>Tiempo estimado</label>
+                  <input value={form.tiempoEstimado} onChange={e => setForm(f => ({ ...f, tiempoEstimado: e.target.value }))} placeholder="Ej: 6 horas" style={S.input} />
+                </div>
+                <div>
+                  <label style={S.label}>Vehículo</label>
+                  <input value={form.vehiculo} onChange={e => setForm(f => ({ ...f, vehiculo: e.target.value }))} placeholder="Ej: SKHP-59" style={S.input} />
+                </div>
+                <div>
+                  <label style={S.label}>Norma ejecución</label>
+                  <input value={form.normaEjecucion} onChange={e => setForm(f => ({ ...f, normaEjecucion: e.target.value }))} placeholder="Ej: ASME V" style={S.input} />
+                </div>
+                <div>
+                  <label style={S.label}>Norma evaluación</label>
+                  <input value={form.normaEvaluacion} onChange={e => setForm(f => ({ ...f, normaEvaluacion: e.target.value }))} placeholder="Ej: AWS D1.1" style={S.input} />
+                </div>
+              </div>
+
+              {/* Procedimientos */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={S.label}>
+                  Procedimientos WSS
+                  <span style={{ fontSize: 10, color: '#185FA5', fontWeight: 'normal', marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={S.checkList}>
+                  {procedimientos.length === 0 && (
+                    <p style={{ margin: 8, fontSize: 13, color: '#aaa' }}>No hay procedimientos registrados</p>
+                  )}
+                  {procedimientos.map(proc => {
+                    const val = `${proc.codigo} — ${proc.nombre}`
+                    const sel = form.procedimientosSeleccionados.includes(val)
+                    return (
+                      <label key={proc.id} style={S.checkRow(sel)}>
+                        <input type="checkbox" checked={sel} onChange={() => toggleProcedimiento(proc)} style={{ width: 'auto', cursor: 'pointer' }} />
+                        <span style={{ fontSize: 12, flex: 1 }}><b>{proc.codigo}</b> — {proc.nombre}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {form.procedimientosSeleccionados.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#185FA5', marginTop: 5 }}>
+                    ✅ {form.procedimientosSeleccionados.join(' · ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Equipos */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={S.label}>
+                  Equipos / instrumentos a utilizar
+                  <span style={{ fontSize: 10, color: '#185FA5', fontWeight: 'normal', marginLeft: 6 }}>selección múltiple</span>
+                </label>
+                <div style={{ ...S.checkList, maxHeight: 160 }}>
+                  {equipos.length === 0 && (
+                    <p style={{ margin: 8, fontSize: 13, color: '#aaa' }}>No hay equipos registrados</p>
+                  )}
+                  {equipos.map(eq => {
+                    const val = `${eq.codigo} — ${eq.equipo_instrumento}`
+                    const sel = form.equiposSeleccionados.includes(val)
+                    return (
+                      <label key={eq.id} style={S.checkRow(sel)}>
+                        <input type="checkbox" checked={sel} onChange={() => toggleEquipo(eq)} style={{ width: 'auto', cursor: 'pointer' }} />
+                        <span style={{ flex: 1, fontSize: 12 }}>{eq.equipo_instrumento}</span>
+                        <span style={{ fontSize: 10, color: '#aaa', fontFamily: 'monospace' }}>{eq.codigo}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {form.equiposSeleccionados.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#185FA5', marginTop: 5 }}>
+                    ✅ {form.equiposSeleccionados.length} equipo(s) seleccionado(s)
+                  </div>
+                )}
+              </div>
+
+              {/* Tipos de inspección */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={S.label}>Tipos de inspección</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {TIPOS.map(t => {
+                    const sel = form.tiposInspeccion.includes(t.cod)
+                    return (
+                      <button key={t.cod} onClick={() => toggleTipo(t.cod)}
+                        style={{
+                          padding: '6px 10px', borderRadius: 8,
+                          border: `1.5px solid ${sel ? '#185FA5' : '#ddd'}`,
+                          background: sel ? '#E6F1FB' : '#fff',
+                          cursor: 'pointer', fontSize: 11,
+                          fontWeight: sel ? 'bold' : 'normal',
+                          color: sel ? '#185FA5' : '#555',
+                        }}>
+                        <span style={{ display: 'block', fontWeight: 900, fontSize: 13 }}>{t.cod}</span>
+                        <span style={{ display: 'block', fontSize: 9, color: sel ? '#185FA5' : '#aaa' }}>{t.desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Descripción */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={S.label}>Descripción de actividades / Alcance *</label>
+                <textarea
+                  value={form.descripcionActividad}
+                  onChange={e => setForm(f => ({ ...f, descripcionActividad: e.target.value }))}
+                  placeholder="Detallar las actividades a realizar, alcance, elementos a inspeccionar..."
+                  rows={4}
+                  style={{ ...S.input, resize: 'vertical', minHeight: 90 }}
+                />
+              </div>
+
+              {/* Info WA */}
+              <div style={{ background: '#E6F1FB', border: '1px solid #85B7EB', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#185FA5', marginBottom: 16 }}>
+                💬 Al guardar se generarán los <b>links de WhatsApp</b> para notificar a cada inspector.
+              </div>
+
+              {/* Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: '1px solid #eee' }}>
+                <button onClick={onClose} disabled={guardando} style={S.btnOutline}>Cancelar</button>
+                <button onClick={guardar} disabled={guardando}
+                  style={{ ...S.btnPrimary, opacity: guardando ? 0.7 : 1, cursor: guardando ? 'not-allowed' : 'pointer' }}>
+                  {guardando ? 'Guardando...' : '👥 Guardar y generar links WA →'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* ── error global ── */}
-      {error && (
-        <div style={{ background: '#FCEBEB', border: '1px solid #E57373', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#A32D2D', marginBottom: 12 }}>
-          ⚠️ {error}
-        </div>
-      )}
-
-      {/* ── éxito + links WA ── */}
-      {exito && (
-        <div style={{ background: '#EAF3DE', border: '1px solid #97C459', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ fontWeight: 'bold', color: '#3B6D11', marginBottom: 8 }}>
-            ✅ Asignación guardada correctamente
-          </div>
-          <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
-            Inspector(es): <b>{exito.inspectores.map(i => i.nombre_completo).join(', ')}</b>
-          </div>
-          {exito.waLinks.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', marginBottom: 6 }}>
-                📱 Enviar notificación por WhatsApp:
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {exito.waLinks.map(l => (
-                  <a key={l.url} href={l.url} target="_blank" rel="noreferrer"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      fontSize: 12, padding: '6px 14px', borderRadius: 20,
-                      background: '#25D366', color: '#fff', fontWeight: 'bold',
-                      textDecoration: 'none',
-                    }}>
-                    💬 Notificar a {l.nombre}
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── formulario nueva asignación ── */}
-      {mostrarForm && (
-        <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 'bold', color: '#1A3A5C', marginBottom: 16 }}>
-            Nueva Asignación — {ot.ot_numero} · {ot.cliente}
-          </div>
-
-          {/* Inspectores */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>
-              Inspector(es) asignado(s) *
-              <span style={{ fontSize: 10, color: '#185FA5', fontWeight: 'normal', marginLeft: 6 }}>selección múltiple</span>
-            </label>
-            <div style={checkboxListStyle}>
-              {inspectores.filter(i => i.rol === 'INSPECTOR').map(insp => {
-                const sel = form.inspectoresSeleccionados.find(i => i.email === insp.email)
-                return (
-                  <label key={insp.email} style={checkRowStyle(!!sel)}>
-                    <input
-                      type="checkbox"
-                      checked={!!sel}
-                      onChange={() => toggleInspector(insp)}
-                      style={{ width: 'auto', cursor: 'pointer' }}
-                    />
-                    <span style={{ flex: 1, fontSize: 13 }}>{insp.nombre_completo}</span>
-                    <span style={{ fontSize: 10, color: '#aaa' }}>{insp.telefono_whatsapp || ''}</span>
-                  </label>
-                )
-              })}
-            </div>
-            {form.inspectoresSeleccionados.length > 0 && (
-              <div style={{ fontSize: 11, color: '#185FA5', marginTop: 5 }}>
-                ✅ {form.inspectoresSeleccionados.length} inspector(es): {form.inspectoresSeleccionados.map(i => i.nombre_completo).join(', ')}
-              </div>
-            )}
-          </div>
-
-          {/* Supervisor + Fecha/Hora */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={labelStyle}>Supervisor</label>
-              <input
-                value={form.supervisor}
-                onChange={e => setForm(f => ({ ...f, supervisor: e.target.value }))}
-                placeholder={user.nombre_completo}
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Fecha inspección *</label>
-              <input
-                type="date"
-                value={form.fechaInspeccion}
-                onChange={e => setForm(f => ({ ...f, fechaInspeccion: e.target.value }))}
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Hora</label>
-              <input
-                type="time"
-                value={form.hora}
-                onChange={e => setForm(f => ({ ...f, hora: e.target.value }))}
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          {/* Tiempo / Vehículo / Normas */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={labelStyle}>Tiempo estimado</label>
-              <input value={form.tiempoEstimado} onChange={e => setForm(f => ({ ...f, tiempoEstimado: e.target.value }))} placeholder="Ej: 6 horas" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Vehículo</label>
-              <input value={form.vehiculo} onChange={e => setForm(f => ({ ...f, vehiculo: e.target.value }))} placeholder="Ej: SKHP-59" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Norma ejecución</label>
-              <input value={form.normaEjecucion} onChange={e => setForm(f => ({ ...f, normaEjecucion: e.target.value }))} placeholder="Ej: ASME V" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Norma evaluación</label>
-              <input value={form.normaEvaluacion} onChange={e => setForm(f => ({ ...f, normaEvaluacion: e.target.value }))} placeholder="Ej: AWS D1.1" style={inputStyle} />
-            </div>
-          </div>
-
-          {/* Procedimientos */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>
-              Procedimientos WSS *
-              <span style={{ fontSize: 10, color: '#185FA5', fontWeight: 'normal', marginLeft: 6 }}>selección múltiple</span>
-            </label>
-            <div style={checkboxListStyle}>
-              {procedimientos.map(proc => {
-                const val = `${proc.codigo} — ${proc.nombre}`
-                const sel = form.procedimientosSeleccionados.includes(val)
-                return (
-                  <label key={proc.id} style={checkRowStyle(sel)}>
-                    <input type="checkbox" checked={sel} onChange={() => toggleProcedimiento(proc)} style={{ width: 'auto', cursor: 'pointer' }} />
-                    <span style={{ fontSize: 12 }}><b>{proc.codigo}</b> — {proc.nombre}</span>
-                  </label>
-                )
-              })}
-            </div>
-            {form.procedimientosSeleccionados.length > 0 && (
-              <div style={{ fontSize: 11, color: '#185FA5', marginTop: 5 }}>
-                ✅ {form.procedimientosSeleccionados.join(' · ')}
-              </div>
-            )}
-          </div>
-
-          {/* Equipos */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>
-              Equipos / instrumentos a utilizar
-              <span style={{ fontSize: 10, color: '#185FA5', fontWeight: 'normal', marginLeft: 6 }}>selección múltiple</span>
-            </label>
-            <div style={{ ...checkboxListStyle, maxHeight: 200 }}>
-              {equipos.map(eq => {
-                const val = `${eq.codigo} — ${eq.equipo_instrumento}`
-                const sel = form.equiposSeleccionados.includes(val)
-                return (
-                  <label key={eq.id} style={checkRowStyle(sel)}>
-                    <input type="checkbox" checked={sel} onChange={() => toggleEquipo(eq)} style={{ width: 'auto', cursor: 'pointer' }} />
-                    <span style={{ flex: 1, fontSize: 12 }}>{eq.equipo_instrumento}</span>
-                    <span style={{ fontSize: 10, color: '#aaa', fontFamily: 'monospace' }}>{eq.codigo}</span>
-                  </label>
-                )
-              })}
-            </div>
-            {form.equiposSeleccionados.length > 0 && (
-              <div style={{ fontSize: 11, color: '#185FA5', marginTop: 5 }}>
-                ✅ {form.equiposSeleccionados.length} equipo(s) seleccionado(s)
-              </div>
-            )}
-          </div>
-
-          {/* Tipos de inspección */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Tipos de inspección</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-              {TIPOS.map(t => {
-                const sel = form.tiposInspeccion.includes(t.cod)
-                return (
-                  <button
-                    key={t.cod}
-                    onClick={() => toggleTipo(t.cod)}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 8,
-                      border: `1.5px solid ${sel ? '#185FA5' : '#ddd'}`,
-                      background: sel ? '#E6F1FB' : '#fff',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      fontWeight: sel ? 'bold' : 'normal',
-                      color: sel ? '#185FA5' : '#555',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <span style={{ display: 'block', fontWeight: 900, fontSize: 13 }}>{t.cod}</span>
-                    <span style={{ display: 'block', fontSize: 9, color: sel ? '#185FA5' : '#aaa' }}>{t.desc}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Descripción */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Descripción de actividades / Alcance *</label>
-            <textarea
-              value={form.descripcionActividad}
-              onChange={e => setForm(f => ({ ...f, descripcionActividad: e.target.value }))}
-              placeholder="Detallar las actividades a realizar, alcance, elementos a inspeccionar..."
-              rows={4}
-              style={{ ...inputStyle, resize: 'vertical', minHeight: 90 }}
-            />
-          </div>
-
-          {/* Info WA */}
-          <div style={{ background: '#E6F1FB', border: '1px solid #85B7EB', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#185FA5', marginBottom: 14 }}>
-            💬 Al guardar se generarán los <b>links de WhatsApp</b> para notificar a cada inspector seleccionado.
-          </div>
-
-          {error && (
-            <div style={{ background: '#FCEBEB', border: '1px solid #E57373', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#A32D2D', marginBottom: 12 }}>
-              ⚠️ {error}
-            </div>
-          )}
-
-          {/* Botones */}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => { setMostrarForm(false); setError(null) }}
-              style={btnOutline}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={guardarAsignacion}
-              disabled={guardando}
-              style={{
-                ...btnPrimary,
-                opacity: guardando ? 0.7 : 1,
-                cursor: guardando ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {guardando ? 'Guardando...' : 'Guardar y generar links WA →'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── lista de asignaciones existentes ── */}
-      {asignaciones.length === 0 && !mostrarForm ? (
-        <div style={{ textAlign: 'center', padding: '32px 16px', color: '#aaa', background: '#fff', borderRadius: 10, border: '1px dashed #ddd' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-          <div style={{ fontSize: 14, fontWeight: 'bold', color: '#999' }}>Sin asignaciones</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>Crea la primera asignación para esta OT</div>
-        </div>
-      ) : (
-        <div>
-          {asignaciones.length > 0 && (
-            <div style={{ fontSize: 11, color: '#999', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-              {asignaciones.length} asignación(es) registrada(s)
-            </div>
-          )}
-          {asignaciones.map((a, i) => (
-            <TarjetaAsignacion key={i} asig={a} />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
 
-// ─── estilos reutilizables ───────────────────────────────────────────────────
-const labelStyle = {
-  display: 'block',
-  fontSize: 11,
-  color: '#666',
-  fontWeight: 'bold',
-  marginBottom: 4,
-}
-
-const inputStyle = {
-  width: '100%',
-  padding: '8px 10px',
-  border: '1.5px solid #ddd',
-  borderRadius: 8,
-  fontSize: 13,
-  fontFamily: 'Arial, sans-serif',
-  boxSizing: 'border-box',
-}
-
-const checkboxListStyle = {
-  border: '1.5px solid #ddd',
-  borderRadius: 8,
-  padding: 8,
-  maxHeight: 160,
-  overflowY: 'auto',
-  background: '#fff',
-}
-
-const checkRowStyle = (selected) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '5px 4px',
-  cursor: 'pointer',
-  borderRadius: 6,
-  fontWeight: 'normal',
-  margin: 0,
-  background: selected ? '#EEF5FF' : 'transparent',
-  transition: 'background 0.1s',
-})
-
-const btnPrimary = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  padding: '9px 18px',
-  borderRadius: 8,
-  border: 'none',
-  background: '#1A3A5C',
-  color: '#fff',
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 'bold',
-}
-
-const btnOutline = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  padding: '9px 18px',
-  borderRadius: 8,
-  border: '1.5px solid #1A3A5C',
-  background: '#fff',
-  color: '#1A3A5C',
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 'bold',
+// ─── estilos ─────────────────────────────────────────────────────────────────
+const S = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)',
+    zIndex: 300, display: 'flex', alignItems: 'flex-start',
+    justifyContent: 'center', padding: '24px 16px', overflowY: 'auto',
+  },
+  box: {
+    width: '100%', maxWidth: 860, background: '#fff',
+    borderRadius: 18, boxShadow: '0 24px 80px rgba(0,0,0,.3)',
+    overflow: 'hidden', marginBottom: 24,
+  },
+  header: {
+    background: 'linear-gradient(135deg, #B45309, #92400E)',
+    padding: '18px 24px',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  },
+  btnCerrar: {
+    background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff',
+    width: 32, height: 32, borderRadius: 8, fontSize: 14, cursor: 'pointer',
+  },
+  body: {
+    padding: 24, maxHeight: '80vh', overflowY: 'auto',
+  },
+  label: {
+    display: 'block', fontSize: 11, color: '#666',
+    fontWeight: 'bold', marginBottom: 4,
+  },
+  input: {
+    width: '100%', padding: '8px 10px',
+    border: '1.5px solid #ddd', borderRadius: 8,
+    fontSize: 13, fontFamily: 'Arial, sans-serif',
+    boxSizing: 'border-box',
+  },
+  checkList: {
+    border: '1.5px solid #ddd', borderRadius: 8, padding: 8,
+    maxHeight: 180, overflowY: 'auto', background: '#fff',
+  },
+  checkRow: (selected) => ({
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '5px 4px', cursor: 'pointer', borderRadius: 6,
+    fontWeight: 'normal', margin: 0,
+    background: selected ? '#EEF5FF' : 'transparent',
+  }),
+  btnPrimary: {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    padding: '9px 18px', borderRadius: 8, border: 'none',
+    background: '#B45309', color: '#fff', cursor: 'pointer',
+    fontSize: 13, fontWeight: 'bold',
+  },
+  btnOutline: {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    padding: '9px 18px', borderRadius: 8,
+    border: '1.5px solid #1A3A5C', background: '#fff',
+    color: '#1A3A5C', cursor: 'pointer', fontSize: 13, fontWeight: 'bold',
+  },
 }
