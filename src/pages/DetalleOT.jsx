@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 import ModalEditarOT from '../components/modules/ModalEditarOT'
 import ModalAsignarInspector from '../components/modules/ModalAsignarInspector'
 import TabAsignaciones from '../components/modules/TabAsignaciones'
+import TabDocumentos from '../components/modules/TabDocumentos'
 
 const TABS = [
   { id: 'info',         label: 'Información' },
@@ -26,14 +27,6 @@ function badgeEstado(estado) {
     'Cerrada documentalmente': 'badge-green',
   }
   return mapa[estado] || 'badge-gray'
-}
-
-function badgeDoc(estado) {
-  if (!estado) return 'badge-gray'
-  const e = estado.toLowerCase()
-  if (e === 'cargado' || e === 'aprobado') return 'badge-green'
-  if (e === 'pendiente') return 'badge-red'
-  return 'badge-amber'
 }
 
 export default function DetalleOT() {
@@ -79,7 +72,19 @@ export default function DetalleOT() {
 
       if (otErr) throw otErr
       if (!otData) throw new Error('No se encontró la OT ' + numero)
-      setOT(otData)
+
+      // Cargar campos Drive directamente desde tabla ots (pueden no estar en la vista)
+      const { data: otExtra } = await supabase
+        .from('ots')
+        .select('carpetas_drive, carpeta_drive_url')
+        .eq('ot_numero', numero)
+        .maybeSingle()
+
+      setOT({
+        ...otData,
+        carpetas_drive:    otExtra?.carpetas_drive    || otData.carpetas_drive    || {},
+        carpeta_drive_url: otExtra?.carpeta_drive_url || otData.carpeta_drive_url || null,
+      })
 
       // Cargar tabs en paralelo
       const [docs, asigs, actsData, resData] = await Promise.allSettled([
@@ -246,8 +251,8 @@ export default function DetalleOT() {
       {/* Contenido tab */}
       <div style={{ marginTop: 16 }}>
         {tabActivo === 'info'         && <TabInfo ot={ot} />}
-        {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} />}
-       {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
+        {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} ot={ot} />}
+        {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
         {tabActivo === 'actas'        && <TabActas actas={actas} />}
         {tabActivo === 'reservas'     && <TabReservas reservas={reservas} />}
       </div>
@@ -255,27 +260,27 @@ export default function DetalleOT() {
   )
 }
 
-// ─── Tab Información ─────────────────────────────────────────────────────────
+// ─── Tab Información ──────────────────────────────────────────────────────────
 function TabInfo({ ot }) {
   const campos = [
-    { label: 'N° OT',                    valor: ot.ot_numero },
-    { label: 'Cliente',                  valor: ot.cliente },
-    { label: 'Contacto',                 valor: ot.contacto },
-    { label: 'Email cliente',            valor: ot.email_cliente },
-    { label: 'Teléfono cliente',         valor: ot.telefono_cliente },
-    { label: 'RUT empresa',              valor: ot.rut_empresa },
-    { label: 'Sede',                     valor: ot.sede },
-    { label: 'Año / Mes',                valor: `${ot.anio} / ${String(ot.mes).padStart(2,'0')}` },
-    { label: 'Estado',                   valor: ot.estado },
-    { label: 'Progreso',                 valor: `${ot.progreso || 0}%` },
-    { label: 'Producto / Servicio',      valor: ot.producto_servicio_contratado || ot.tipo_servicio },
-    { label: 'Referencia cotización',    valor: ot.referencia_cotizacion },
-    { label: 'Dirección / Faena',        valor: ot.direccion_faena },
-    { label: 'Comercial',                valor: ot.comercial },
-    { label: 'Supervisor',               valor: ot.supervisor },
-    { label: 'Inspector',                valor: ot.inspector },
-    { label: 'Fecha creación',           valor: ot.fecha_creacion ? new Date(ot.fecha_creacion).toLocaleString('es-CL') : '—' },
-    { label: 'Observaciones',            valor: ot.observaciones },
+    { label: 'N° OT',                 valor: ot.ot_numero },
+    { label: 'Cliente',               valor: ot.cliente },
+    { label: 'Contacto',              valor: ot.contacto },
+    { label: 'Email cliente',         valor: ot.email_cliente },
+    { label: 'Teléfono cliente',      valor: ot.telefono_cliente },
+    { label: 'RUT empresa',           valor: ot.rut_empresa },
+    { label: 'Sede',                  valor: ot.sede },
+    { label: 'Año / Mes',             valor: `${ot.anio} / ${String(ot.mes).padStart(2,'0')}` },
+    { label: 'Estado',                valor: ot.estado },
+    { label: 'Progreso',              valor: `${ot.progreso || 0}%` },
+    { label: 'Producto / Servicio',   valor: ot.producto_servicio_contratado || ot.tipo_servicio },
+    { label: 'Referencia cotización', valor: ot.referencia_cotizacion },
+    { label: 'Dirección / Faena',     valor: ot.direccion_faena },
+    { label: 'Comercial',             valor: ot.comercial },
+    { label: 'Supervisor',            valor: ot.supervisor },
+    { label: 'Inspector',             valor: ot.inspector },
+    { label: 'Fecha creación',        valor: ot.fecha_creacion ? new Date(ot.fecha_creacion).toLocaleString('es-CL') : '—' },
+    { label: 'Observaciones',         valor: ot.observaciones },
   ]
 
   return (
@@ -305,68 +310,6 @@ function TabInfo({ ot }) {
   )
 }
 
-// ─── Tab Documentos ───────────────────────────────────────────────────────────
-function TabDocumentos({ docs }) {
-  if (!docs.length) return <Vacio mensaje="No hay documentos registrados para esta OT" />
-
-  const cargados  = docs.filter(d => d.estado_documento === 'Cargado').length
-  const pendientes = docs.filter(d => d.estado_documento === 'Pendiente').length
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <span className="badge badge-green">✓ {cargados} cargados</span>
-        <span className="badge badge-red">⏳ {pendientes} pendientes</span>
-        <span className="badge badge-gray">Total: {docs.length}</span>
-      </div>
-
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="tabla">
-          <thead>
-            <tr>
-              <th>Ítem</th>
-              <th>Documento</th>
-              <th>Etapa</th>
-              <th>Estado</th>
-              <th>Responsable</th>
-              <th>Fecha carga</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {docs.map((d, i) => (
-              <tr key={i}>
-                <td>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--azul)' }}>
-                    {d.item}
-                  </span>
-                </td>
-                <td>
-                  <div style={{ fontWeight: 600 }}>{d.nombre_documento}</div>
-                  {d.obligatorio && <span className="badge badge-red" style={{ fontSize: 10 }}>Obligatorio</span>}
-                </td>
-                <td><span className="badge badge-gray">{d.etapa}</span></td>
-                <td><span className={`badge ${badgeDoc(d.estado_documento)}`}>{d.estado_documento}</span></td>
-                <td className="text-sm">{d.responsable || '—'}</td>
-                <td className="text-sm">
-                  {d.fecha_carga ? new Date(d.fecha_carga).toLocaleDateString('es-CL') : '—'}
-                </td>
-                <td>
-                  {d.drive_url && (
-                    <a href={d.drive_url} target="_blank" rel="noopener noreferrer">
-                      <button className="btn btn-secondary btn-sm">📄 Ver</button>
-                    </a>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
 // ─── Tab Actas ────────────────────────────────────────────────────────────────
 function TabActas({ actas }) {
   if (!actas.length) return <Vacio mensaje="No hay actas emitidas para esta OT" />
@@ -386,7 +329,6 @@ function TabActas({ actas }) {
               </span>
             </div>
           </div>
-
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px 20px' }}>
             <Campo label="Inspector"       valor={a.inspector} />
             <Campo label="Supervisor"      valor={a.supervisor} />
@@ -397,14 +339,12 @@ function TabActas({ actas }) {
             <Campo label="Procedimiento"   valor={a.procedimiento} />
             {a.numero_acta_manual && <Campo label="N° acta manual" valor={a.numero_acta_manual} />}
           </div>
-
           {a.observaciones && (
             <div style={{ marginTop: 10 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gris)', textTransform: 'uppercase' }}>Observaciones</span>
               <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--texto-sub)' }}>{a.observaciones}</p>
             </div>
           )}
-
           {a.drive_url && (
             <div style={{ marginTop: 12 }}>
               <a href={a.drive_url} target="_blank" rel="noopener noreferrer">
@@ -429,42 +369,32 @@ function TabReservas({ reservas }) {
           {reservas.reduce((acc, r) => acc + (Number(r.cantidad) || 0), 0)} números reservados en total
         </span>
       </div>
-
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="tabla">
-          <thead>
-            <tr>
-              <th>Serie</th>
-              <th>Desde</th>
-              <th>Hasta</th>
-              <th>Cant.</th>
-              <th>Área</th>
-              <th>Producto</th>
-              <th>F. Inspección</th>
-              <th>F. Entrega</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reservas.map((r, i) => (
-              <tr key={i}>
-                <td><span className="badge badge-gold">{r.serie}</span></td>
-                <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{r.desde}</td>
-                <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{r.hasta}</td>
-                <td style={{ textAlign: 'center', fontWeight: 700 }}>{r.cantidad}</td>
-                <td>{r.area || '—'}</td>
-                <td className="text-sm">{r.producto || '—'}</td>
-                <td className="text-sm">
-                  {r.fecha_inspeccion ? new Date(r.fecha_inspeccion).toLocaleDateString('es-CL') : '—'}
-                </td>
-                <td className="text-sm">
-                  {r.fecha_entrega_informe ? new Date(r.fecha_entrega_informe).toLocaleDateString('es-CL') : '—'}
-                </td>
-                <td><span className="badge badge-green">{r.estado}</span></td>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="tabla">
+            <thead>
+              <tr>
+                <th>Serie</th><th>Desde</th><th>Hasta</th><th>Cant.</th>
+                <th>Área</th><th>Producto</th><th>F. Inspección</th><th>F. Entrega</th><th>Estado</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {reservas.map((r, i) => (
+                <tr key={i}>
+                  <td><span className="badge badge-gold">{r.serie}</span></td>
+                  <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{r.desde}</td>
+                  <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{r.hasta}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 700 }}>{r.cantidad}</td>
+                  <td>{r.area || '—'}</td>
+                  <td className="text-sm">{r.producto || '—'}</td>
+                  <td className="text-sm">{r.fecha_inspeccion ? new Date(r.fecha_inspeccion).toLocaleDateString('es-CL') : '—'}</td>
+                  <td className="text-sm">{r.fecha_entrega_informe ? new Date(r.fecha_entrega_informe).toLocaleDateString('es-CL') : '—'}</td>
+                  <td><span className="badge badge-green">{r.estado}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
@@ -495,7 +425,7 @@ function Chip({ n }) {
     <span style={{
       background: 'var(--azul)', color: '#fff',
       borderRadius: 999, fontSize: 10, fontWeight: 700,
-      padding: '1px 6px', marginLeft: 6
+      padding: '1px 6px', marginLeft: 6,
     }}>{n}</span>
   )
 }
@@ -511,28 +441,18 @@ function Vacio({ mensaje }) {
 
 const styles = {
   kpiRow: {
-    display: 'flex',
-    gap: 24,
-    flexWrap: 'wrap',
-    paddingTop: 16,
-    marginTop: 16,
-    borderTop: '1px solid var(--borde)',
+    display: 'flex', gap: 24, flexWrap: 'wrap',
+    paddingTop: 16, marginTop: 16, borderTop: '1px solid var(--borde)',
   },
   tabBar: {
-    display: 'flex',
-    gap: 0,
-    borderBottom: '2px solid var(--borde)',
-    overflowX: 'auto',
+    display: 'flex', gap: 0,
+    borderBottom: '2px solid var(--borde)', overflowX: 'auto',
   },
   tabBtn: {
-    background: 'none',
-    border: 'none',
-    padding: '10px 18px',
-    cursor: 'pointer',
-    fontSize: 14,
-    whiteSpace: 'nowrap',
+    background: 'none', border: 'none',
+    padding: '10px 18px', cursor: 'pointer',
+    fontSize: 14, whiteSpace: 'nowrap',
     transition: 'color .15s',
-    display: 'flex',
-    alignItems: 'center',
+    display: 'flex', alignItems: 'center',
   },
 }
