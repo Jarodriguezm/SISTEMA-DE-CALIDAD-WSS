@@ -6,6 +6,7 @@ import ModalEditarOT from '../components/modules/ModalEditarOT'
 import ModalAsignarInspector from '../components/modules/ModalAsignarInspector'
 import TabAsignaciones from '../components/modules/TabAsignaciones'
 import TabDocumentos from '../components/modules/TabDocumentos'
+import TabActa from '../components/modules/TabActa'
 
 const TABS = [
   { id: 'info',         label: 'Información' },
@@ -253,7 +254,7 @@ export default function DetalleOT() {
         {tabActivo === 'info'         && <TabInfo ot={ot} />}
         {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} ot={ot} />}
         {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
-        {tabActivo === 'actas'        && <TabActas actas={actas} />}
+        {tabActivo === 'actas'        && <TabActa ot={ot} asignaciones={asignaciones} onActaCreada={cargarTodo} />}
         {tabActivo === 'reservas'     && <TabReservas reservas={reservas} />}
       </div>
     </div>
