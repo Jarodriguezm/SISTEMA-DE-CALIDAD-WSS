@@ -62,6 +62,7 @@ function AppRoutes() {
 
       <Route path="/asignaciones" element={<RutaPrivada><Asignaciones /></RutaPrivada>} />
       <Route path="/actas" element={<RutaPrivada><Actas /></RutaPrivada>} />
+      <Route path="/reservas" element={<RutaPrivada><ReservaInformes /></RutaPrivada>} />
       <Route path="/reservas-informes" element={<RutaPrivada><ReservaInformes /></RutaPrivada>} />
 
       <Route path="/usuarios" element={<RutaPrivada><Usuarios /></RutaPrivada>} />
