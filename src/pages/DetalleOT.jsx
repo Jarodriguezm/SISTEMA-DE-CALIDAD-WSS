@@ -8,6 +8,7 @@ import TabAsignaciones from '../components/modules/TabAsignaciones'
 import TabDocumentos from '../components/modules/TabDocumentos'
 import TabActa from '../components/modules/TabActa'
 import TabInformes from '../components/modules/TabInformes'
+import TabFacturacion from '../components/modules/TabFacturacion'
 
 const TABS = [
   { id: 'info',         label: 'Información' },
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'asignaciones', label: 'Asignaciones' },
   { id: 'actas',        label: 'Actas' },
   { id: 'informes',     label: 'Informes ESI/EAI' },
+  { id: 'facturacion',  label: 'Facturación' },
 ]
 
 function badgeEstado(estado) {
@@ -257,6 +259,7 @@ export default function DetalleOT() {
         {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
         {tabActivo === 'actas'        && <TabActa ot={ot} asignaciones={asignaciones} onActaCreada={cargarTodo} />}
         {tabActivo === 'informes'     && <TabInformes ot={ot} onInformeCreado={cargarTodo} />}
+        {tabActivo === 'facturacion'  && <TabFacturacion ot={ot} onDocumentoSubido={cargarTodo} />}
       </div>
     </div>
   )
