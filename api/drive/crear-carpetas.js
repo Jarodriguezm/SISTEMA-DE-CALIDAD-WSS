@@ -33,7 +33,7 @@ const CARPETAS_12 = [
 
 // IDs de carpetas raíz por sede
 const FOLDERS_RAIZ = {
-  SCL: '1_0qiAgRMryRO5hrR3DnVa5tq28WtAJ4G',
+  SCL: '1bmG-L9JC0dBzsHxxUZQvMoBJwC5QzTbC',
   ANF: '16VmPA_nHsVyud9ELF9x4dLPsOI93s6Fw',
   CCP: null, // Agregar cuando exista
 }
