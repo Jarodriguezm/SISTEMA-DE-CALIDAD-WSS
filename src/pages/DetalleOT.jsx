@@ -7,13 +7,14 @@ import ModalAsignarInspector from '../components/modules/ModalAsignarInspector'
 import TabAsignaciones from '../components/modules/TabAsignaciones'
 import TabDocumentos from '../components/modules/TabDocumentos'
 import TabActa from '../components/modules/TabActa'
+import TabInformes from '../components/modules/TabInformes'
 
 const TABS = [
   { id: 'info',         label: 'Información' },
   { id: 'documentos',   label: 'Documentos' },
   { id: 'asignaciones', label: 'Asignaciones' },
   { id: 'actas',        label: 'Actas' },
-  { id: 'reservas',     label: 'Reservas ESI/EAI' },
+  { id: 'informes',     label: 'Informes ESI/EAI' },
 ]
 
 function badgeEstado(estado) {
@@ -221,7 +222,7 @@ export default function DetalleOT() {
           <KPIMini label="Pendientes" valor={docsPendientes} color={docsPendientes > 0 ? 'var(--rojo)' : 'var(--verde)'} />
           <KPIMini label="Asignaciones" valor={asignaciones.length} color="var(--ambar)" />
           <KPIMini label="Actas" valor={actas.length} color="var(--verde)" />
-          <KPIMini label="Reservas ESI/EAI" valor={reservas.length} color="var(--dorado)" />
+          <KPIMini label="Informes ESI/EAI" valor={reservas.length} color="var(--dorado)" />
           <KPIMini label="Supervisor" valor={ot.supervisor || '—'} color="var(--gris)" />
           <KPIMini label="Inspector" valor={ot.inspector || '—'} color="var(--gris)" />
         </div>
@@ -244,7 +245,7 @@ export default function DetalleOT() {
             {t.id === 'documentos'   && documentos.length   > 0 && <Chip n={documentos.length} />}
             {t.id === 'asignaciones' && asignaciones.length > 0 && <Chip n={asignaciones.length} />}
             {t.id === 'actas'        && actas.length        > 0 && <Chip n={actas.length} />}
-            {t.id === 'reservas'     && reservas.length     > 0 && <Chip n={reservas.length} />}
+            {t.id === 'informes'     && reservas.length     > 0 && <Chip n={reservas.length} />}
           </button>
         ))}
       </div>
@@ -255,7 +256,7 @@ export default function DetalleOT() {
         {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} ot={ot} />}
         {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
         {tabActivo === 'actas'        && <TabActa ot={ot} asignaciones={asignaciones} onActaCreada={cargarTodo} />}
-        {tabActivo === 'reservas'     && <TabReservas reservas={reservas} />}
+        {tabActivo === 'informes'     && <TabInformes ot={ot} onInformeCreado={cargarTodo} />}
       </div>
     </div>
   )
