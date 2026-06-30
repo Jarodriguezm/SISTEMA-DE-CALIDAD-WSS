@@ -69,7 +69,7 @@ export default function ModalCrearOT({ onClose, onCreada }) {
         .from('usuarios')
         .select('id, nombre, apellido, sede, telefono_whatsapp')
         .eq('activo', true)
-        .in('rol', ['SUPERVISOR', 'ADMIN', 'ADMINISTRADOR'])
+        .in('rol', ['SUPERVISOR', 'ADMIN'])
         .order('nombre')
       setSupervisores(data || [])
     } catch { /* no bloquea */ }
