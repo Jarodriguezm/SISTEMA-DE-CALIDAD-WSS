@@ -1,11 +1,29 @@
 // ============================================================
-// TabInformes.jsx — Reserva de Números de Informe REG-DII-055
+// TabInformes.jsx — Reserva + Carga de Informes REG-DII-055
 // ESI/EAI (Evaluación) | IVS/IVA (Verificación)
 // Santiago → ESI/IVS | Antofagasta → EAI/IVA
 // ============================================================
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+
+// ── Helper: subir archivo a Drive via Vercel Function ────────────────────────
+async function subirArchivoADrive(folderId, file) {
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+  const res = await fetch('/api/drive/subir-archivo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder_id: folderId, file_name: file.name, file_content_base64: base64, mime_type: file.type }),
+  })
+  const data = await res.json()
+  if (!data.ok) throw new Error(data.error || 'Error al subir a Drive')
+  return data
+}
 
 const AREAS = [
   { key: 'END', label: 'END', desc: 'Ensayos No Destructivos' },
@@ -267,6 +285,137 @@ function PantallaExito({ codigos, onVolver }) {
   )
 }
 
+// ── Sección Inspector: Cargar archivos + Notificar supervisor ─────────────────
+function SeccionCargaInforme({ ot }) {
+  const { usuario } = useAuth()
+  const fileRef = useRef(null)
+  const [archivos, setArchivos] = useState([])
+  const [subiendo, setSubiendo] = useState(false)
+  const [notificando, setNotificando] = useState(false)
+  const [mensajeObs, setMensajeObs] = useState('')
+  const [resultados, setResultados] = useState([])
+  const [error, setError] = useState('')
+  const [exito, setExito] = useState('')
+
+  // La carpeta 09 del OT
+  const carpeta09Id = ot.carpetas_drive?.['09']?.id
+  const carpeta09Url = ot.carpetas_drive?.['09']?.url
+
+  // Documentos ya subidos
+  const [docsSubidos, setDocsSubidos] = useState([])
+  useEffect(() => { cargarDocs() }, [ot.ot_numero])
+  async function cargarDocs() {
+    const { data } = await supabase.from('documentos_ot').select('*').eq('ot_numero', ot.ot_numero).eq('tipo', 'informe').order('created_at', { ascending: false })
+    setDocsSubidos(data || [])
+  }
+
+  function onFileChange(e) {
+    setArchivos(Array.from(e.target.files))
+    setError(''); setExito('')
+  }
+
+  async function subirInformes() {
+    if (archivos.length === 0) { setError('Selecciona al menos un archivo'); return }
+    if (!carpeta09Id) { setError('Esta OT no tiene carpeta Drive configurada (09 - Informes)'); return }
+    setSubiendo(true); setError(''); setResultados([])
+    try {
+      const nuevosResultados = []
+      for (const file of archivos) {
+        const driveData = await subirArchivoADrive(carpeta09Id, file)
+        // Guardar en DB
+        await supabase.from('documentos_ot').insert({
+          ot_numero: ot.ot_numero, tipo: 'informe',
+          nombre_archivo: file.name, drive_file_id: driveData.file_id,
+          drive_url: driveData.file_url, subido_por: usuario?.email || '',
+        })
+        nuevosResultados.push({ nombre: file.name, url: driveData.file_url })
+      }
+      setResultados(nuevosResultados)
+      setArchivos([])
+      if (fileRef.current) fileRef.current.value = ''
+      setExito(`✓ ${nuevosResultados.length} archivo${nuevosResultados.length > 1 ? 's subidos' : ' subido'} correctamente`)
+      cargarDocs()
+    } catch (e) { setError(e.message) } finally { setSubiendo(false) }
+  }
+
+  async function notificarSupervisor() {
+    setNotificando(true); setError('')
+    try {
+      const { data: informesOT } = await supabase.from('numeros_informe').select('codigo_informe').eq('ot_numero', ot.ot_numero).order('created_at')
+      const codigos = informesOT?.map(i => i.codigo_informe) || []
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notificar-supervisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ ot_numero: ot.ot_numero, inspector_nombre: usuario?.nombre || usuario?.email, informes_codigos: codigos, mensaje_adicional: mensajeObs }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error)
+      setExito(`✉️ Supervisor notificado correctamente (${data.supervisor_email})`)
+      setMensajeObs('')
+    } catch (e) { setError('Error al notificar: ' + e.message) } finally { setNotificando(false) }
+  }
+
+  return (
+    <div style={{ marginTop: 24, border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(135deg,#065F46,#059669)', color: '#fff', padding: '7px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase' }}>
+        Inspector — Cargar informes y notificar supervisor
+      </div>
+      <div style={{ padding: '16px' }}>
+        {error && <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#991B1B', marginBottom: 12 }}>⚠️ {error}</div>}
+        {exito && <div style={{ background: '#D1FAE5', border: '1px solid #6EE7B7', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#065F46', marginBottom: 12 }}>{exito}</div>}
+
+        {/* Carpeta Drive */}
+        {carpeta09Url && (
+          <div style={{ marginBottom: 14, fontSize: 12, color: '#64748B' }}>
+            📁 Carpeta Drive:&nbsp;
+            <a href={carpeta09Url} target="_blank" rel="noreferrer" style={{ color: '#185FA5', fontWeight: 600 }}>09 - Informe(s)</a>
+          </div>
+        )}
+
+        {/* Upload */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Seleccionar archivos de informe (PDF)</div>
+          <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,.xlsx,.xls,.zip" multiple onChange={onFileChange}
+            style={{ width: '100%', padding: '8px 10px', border: '1px dashed #CBD5E1', borderRadius: 6, fontSize: 13, background: '#F8FAFC', cursor: 'pointer' }} />
+          {archivos.length > 0 && (
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {archivos.map((f, i) => <span key={i} style={{ fontSize: 11, padding: '2px 8px', background: '#DBEAFE', borderRadius: 4, color: '#1E40AF' }}>📄 {f.name}</span>)}
+            </div>
+          )}
+        </div>
+        <button className="btn btn-primary" onClick={subirInformes} disabled={subiendo || archivos.length === 0} style={{ marginBottom: 16, background: '#059669', borderColor: '#059669' }}>
+          {subiendo ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Subiendo...</> : `📤 Subir ${archivos.length > 0 ? archivos.length + ' archivo' + (archivos.length > 1 ? 's' : '') : 'informes'} a Drive`}
+        </button>
+
+        {/* Documentos ya subidos */}
+        {docsSubidos.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Archivos subidos ({docsSubidos.length})</div>
+            {docsSubidos.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12 }}>
+                <span style={{ color: '#22C55E' }}>✓</span>
+                <a href={d.drive_url} target="_blank" rel="noreferrer" style={{ color: '#185FA5', flex: 1 }}>{d.nombre_archivo}</a>
+                <span style={{ color: '#94A3B8' }}>{new Date(d.created_at).toLocaleDateString('es-CL')}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Notificar supervisor */}
+        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Mensaje adicional al supervisor (opcional)</div>
+          <textarea value={mensajeObs} onChange={e => setMensajeObs(e.target.value)} placeholder="Observaciones, instrucciones o comentarios para el supervisor..."
+            style={{ width: '100%', padding: '7px 10px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, minHeight: 70, resize: 'vertical', boxSizing: 'border-box', marginBottom: 10 }} />
+          <button className="btn btn-primary" onClick={notificarSupervisor} disabled={notificando} style={{ background: '#7C3AED', borderColor: '#7C3AED' }}>
+            {notificando ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Notificando...</> : '📧 Notificar al Supervisor'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TabInformes({ ot, onInformeCreado }) {
   const [pantalla, setPantalla] = useState('lista')
   const [informes, setInformes] = useState([])
@@ -343,6 +492,10 @@ export default function TabInformes({ ot, onInformeCreado }) {
       )}
 
       {/* Lista de informes */}
+      {/* Sección carga de archivos + notificar supervisor */}
+      <SeccionCargaInforme ot={ot} />
+
+      <div style={{ marginTop: 24, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.5px' }}>Números reservados</div>
       {informesFiltrados.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', border: '2px dashed #E2E8F0', borderRadius: 12, color: '#94A3B8' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
