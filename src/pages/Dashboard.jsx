@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase, rpc, mensajeError } from '../lib/supabase'
+import { Link } from 'react-router-dom'
+import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const CARDS = [
@@ -29,15 +30,13 @@ export default function Dashboard() {
     try {
       setCargando(true)
       setError('')
-      // Intentar con vista directa (Supabase expone vistas como tablas)
       const { data, error } = await supabase
         .from('v_dashboard_portal')
         .select('*')
         .single()
 
       if (error) throw error
-      const resultado = data
-      setData(resultado)
+      setData(data)
     } catch (err) {
       setError(mensajeError(err))
     } finally {
@@ -74,30 +73,11 @@ export default function Dashboard() {
       <div style={{ marginTop: 32 }}>
         <h2 style={{ marginBottom: 16 }}>Acceso rápido</h2>
         <div style={styles.accionesGrid}>
-          <AccionCard
-            titulo="Ver OTs activas"
-            desc="Listado completo de órdenes de trabajo"
-            icono="📋"
-            href="/ots"
-          />
-          <AccionCard
-            titulo="Auditoría"
-            desc="Registro de todas las acciones del sistema"
-            icono="🔍"
-            href="/auditoria"
-          />
-          <AccionCard
-            titulo="Asignaciones"
-            desc="Calendario y asignaciones de inspecciones"
-            icono="👥"
-            href="/asignaciones"
-          />
-          <AccionCard
-            titulo="Actas emitidas"
-            desc="Consultar actas de trabajo generadas"
-            icono="✍️"
-            href="/actas"
-          />
+          <AccionCard titulo="Ver OTs activas"    desc="Listado completo de órdenes de trabajo"       icono="📋" to="/ots" />
+          <AccionCard titulo="Auditoría"           desc="Registro de todas las acciones del sistema"   icono="🔍" to="/auditoria" />
+          <AccionCard titulo="Asignaciones"        desc="Calendario y asignaciones de inspecciones"    icono="👥" to="/asignaciones" />
+          <AccionCard titulo="Actas emitidas"      desc="Consultar actas de trabajo generadas"         icono="✍️" to="/actas" />
+          <AccionCard titulo="Reserva Informes"    desc="Gestión de números de informes ESI/EAI/IVS"   icono="🔢" to="/reservas" />
         </div>
       </div>
     </div>
@@ -117,15 +97,15 @@ function KPICard({ label, valor, color }) {
   )
 }
 
-function AccionCard({ titulo, desc, icono, href }) {
+function AccionCard({ titulo, desc, icono, to }) {
   return (
-    <a href={href} style={{ textDecoration: 'none' }}>
+    <Link to={to} style={{ textDecoration: 'none' }}>
       <div className="card" style={styles.accionCard}>
         <div style={{ fontSize: 28, marginBottom: 10 }}>{icono}</div>
         <h3 style={{ marginBottom: 4, color: 'var(--azul)' }}>{titulo}</h3>
         <p style={{ fontSize: 13, color: 'var(--gris)', margin: 0 }}>{desc}</p>
       </div>
-    </a>
+    </Link>
   )
 }
 
@@ -138,7 +118,7 @@ function EstadoCargando() {
       </div>
       <div style={styles.kpiGrid}>
         {Array(10).fill(0).map((_, i) => (
-          <div key={i} className="card" style={{ height: 90, background: 'linear-gradient(90deg, #F2F4F7 25%, #EAECF0 50%, #F2F4F7 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+          <div key={i} className="card" style={{ height: 90, background: 'linear-gradient(90deg, #F2F4F7 25%, #EAECF0 50%, #F2F4F7 75%)', backgroundSize: '200% 100%' }} />
         ))}
       </div>
     </div>
@@ -170,9 +150,5 @@ const styles = {
   accionCard: {
     cursor: 'pointer',
     transition: 'box-shadow .15s, transform .15s',
-    ':hover': {
-      boxShadow: '0 8px 24px rgba(0,0,0,.12)',
-      transform: 'translateY(-2px)',
-    }
   }
 }
