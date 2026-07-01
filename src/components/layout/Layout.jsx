@@ -69,7 +69,7 @@ export default function Layout({ children }) {
           {sidebarAbierto && (
             <div style={styles.brandWrap}>
               <img
-                src="https://drive.google.com/thumbnail?id=1IzQfWUQ1BdzKI6VRW2XIX5ovkmb5Apzz&sz=w200"
+                src="/logo-wss.svg"
                 alt="WSS"
                 style={styles.sidebarLogo}
                 onError={e => { e.target.style.display = 'none' }}
@@ -377,4 +377,4 @@ const styles = {
     padding: '24px',
     overflow: 'auto',
   }
-}
+                }
