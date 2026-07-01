@@ -59,7 +59,7 @@ export default function Login() {
       <div style={styles.card}>
         <div style={styles.logoWrap}>
           <img
-            src="/logo-wss.jpg"
+            src="/logo-wss.png"
             alt="WSS Testing & Certification Chile"
             style={styles.logo}
             onError={e => { e.target.style.display = 'none' }}
