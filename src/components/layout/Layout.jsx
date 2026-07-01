@@ -69,7 +69,7 @@ export default function Layout({ children }) {
           {sidebarAbierto && (
             <div style={styles.brandWrap}>
               <img
-                src="/logo-wss.jpg"
+                src="/logo-wss.png"
                 alt="WSS"
                 style={styles.sidebarLogo}
                 onError={e => { e.target.style.display = 'none' }}
