@@ -11,7 +11,7 @@ export default function Usuarios() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
-  const [modalUsuario, setModalUsuario] = useState(null) // null=cerrado, {}=nuevo, {data}=editar
+  const [modalUsuario, setModalUsuario] = useState(null)
   const [mensajeExito, setMensajeExito] = useState('')
 
   useEffect(() => { cargar() }, [])
@@ -35,25 +35,35 @@ export default function Usuarios() {
   const filtrados = usuarios.filter(u => {
     if (!busqueda) return true
     const q = busqueda.toLowerCase()
-    return [u.nombre, u.apellido, u.email, u.rol, u.sede]
-      .some(v => String(v || '').toLowerCase().includes(q))
+    return [u.nombre, u.apellido, u.email, u.rol, u.sede].some(v => String(v || '').toLowerCase().includes(q))
   })
 
   async function toggleActivo(u) {
     if (!esAdmin()) return
-    const { error } = await supabase
-      .from('usuarios')
-      .update({ activo: !u.activo })
-      .eq('id', u.id)
+    const { error } = await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id)
     if (!error) {
       setUsuarios(prev => prev.map(x => x.id === u.id ? { ...x, activo: !x.activo } : x))
       mostrarExito(`Usuario ${u.activo ? 'desactivado' : 'activado'} correctamente`)
     }
   }
 
+  async function enviarAcceso(u) {
+    if (!u.email) return
+    try {
+      const { error: err } = await supabase.auth.resetPasswordForEmail(
+        u.email.toLowerCase(),
+        { redirectTo: window.location.origin + '/login' }
+      )
+      if (err) throw err
+      mostrarExito(`Link de acceso enviado a ${u.email}`)
+    } catch (err) {
+      setError(mensajeError(err))
+    }
+  }
+
   function mostrarExito(msg) {
     setMensajeExito(msg)
-    setTimeout(() => setMensajeExito(''), 3000)
+    setTimeout(() => setMensajeExito(''), 4000)
   }
 
   if (!esAdmin()) {
@@ -64,8 +74,8 @@ export default function Usuarios() {
     <div>
       <div className="flex-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1>Gestión de Usuarios</h1>
-          <p className="text-sm" style={{ marginTop: 4 }}>{filtrados.length} usuario{filtrados.length !== 1 ? 's' : ''}</p>
+          <h1>Gestión de Personal</h1>
+          <p className="text-sm" style={{ marginTop: 4 }}>{filtrados.length} usuario{filtrados.length !== 1 ? 's' : ''} registrado{filtrados.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex gap-8">
           <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
@@ -88,16 +98,13 @@ export default function Usuarios() {
           <table className="tabla">
             <thead>
               <tr>
-                <th>Nombre</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Sede</th>
-                <th>Cargo</th>
-                <th>Estado</th>
-                <th>Acciones</th>
+                <th>Nombre</th><th>Email</th><th>Rol</th><th>Sede</th><th>Cargo</th><th>Estado</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody>
+              {filtrados.length === 0 && (
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--gris)', padding: '32px 0' }}>No se encontraron usuarios</td></tr>
+              )}
               {filtrados.map(u => (
                 <tr key={u.id}>
                   <td>
@@ -108,20 +115,15 @@ export default function Usuarios() {
                   <td><span className="badge badge-blue">{u.rol}</span></td>
                   <td><span className="badge badge-gray">{u.sede}</span></td>
                   <td className="text-sm">{u.cargo || '—'}</td>
+                  <td><span className={`badge ${u.activo ? 'badge-green' : 'badge-red'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span></td>
                   <td>
-                    <span className={`badge ${u.activo ? 'badge-green' : 'badge-red'}`}>
-                      {u.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="flex gap-8">
-                      <button className="btn btn-secondary btn-sm" onClick={() => setModalUsuario(u)}>
-                        ✏ Editar
-                      </button>
+                    <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setModalUsuario(u)}>✏ Editar</button>
+                      {u.email && (
+                        <button className="btn btn-ghost btn-sm" title="Enviar link de acceso" onClick={() => enviarAcceso(u)}>📧 Acceso</button>
+                      )}
                       {u.id !== usuarioActual?.id && (
-                        <button
-                          className={`btn btn-sm ${u.activo ? 'btn-danger' : 'btn-ghost'}`}
-                          onClick={() => toggleActivo(u)}>
+                        <button className={`btn btn-sm ${u.activo ? 'btn-danger' : 'btn-ghost'}`} onClick={() => toggleActivo(u)}>
                           {u.activo ? 'Desactivar' : 'Activar'}
                         </button>
                       )}
@@ -138,11 +140,7 @@ export default function Usuarios() {
         <ModalUsuario
           usuario={modalUsuario.id ? modalUsuario : null}
           onClose={() => setModalUsuario(null)}
-          onGuardado={() => {
-            setModalUsuario(null)
-            cargar()
-            mostrarExito('Usuario guardado correctamente')
-          }}
+          onGuardado={(msg) => { setModalUsuario(null); cargar(); mostrarExito(msg || 'Usuario guardado correctamente') }}
         />
       )}
     </div>
@@ -162,53 +160,36 @@ function ModalUsuario({ usuario, onClose, onGuardado }) {
     sede: usuario?.sede || 'SCL',
   })
 
-  function set(campo, valor) {
-    setForm(f => ({ ...f, [campo]: valor }))
-    if (error) setError('')
-  }
+  function set(campo, valor) { setForm(f => ({ ...f, [campo]: valor })); if (error) setError('') }
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return }
     if (!form.email.trim()) { setError('El email es obligatorio'); return }
-
     try {
       setGuardando(true)
       setError('')
-
       if (usuario?.id) {
-        // Editar
-        const { error: err } = await supabase
-          .from('usuarios')
-          .update({
-            nombre: form.nombre.trim(),
-            apellido: form.apellido.trim(),
-            email: form.email.trim().toLowerCase(),
-            telefono_whatsapp: form.telefono_whatsapp.trim() || null,
-            cargo: form.cargo.trim() || null,
-            rol: form.rol,
-            sede: form.sede,
-          })
-          .eq('id', usuario.id)
+        const { error: err } = await supabase.from('usuarios').update({
+          nombre: form.nombre.trim(), apellido: form.apellido.trim(),
+          email: form.email.trim().toLowerCase(), telefono_whatsapp: form.telefono_whatsapp.trim() || null,
+          cargo: form.cargo.trim() || null, rol: form.rol, sede: form.sede,
+        }).eq('id', usuario.id)
         if (err) throw err
+        onGuardado('Usuario actualizado correctamente')
       } else {
-        // Crear
-        const { error: err } = await supabase
-          .from('usuarios')
-          .insert({
-            nombre: form.nombre.trim(),
-            apellido: form.apellido.trim(),
-            email: form.email.trim().toLowerCase(),
-            telefono_whatsapp: form.telefono_whatsapp.trim() || null,
-            cargo: form.cargo.trim() || null,
-            rol: form.rol,
-            sede: form.sede,
-            activo: true,
-          })
-        if (err) throw err
+        const emailNorm = form.email.trim().toLowerCase()
+        const { error: errDB } = await supabase.from('usuarios').insert({
+          nombre: form.nombre.trim(), apellido: form.apellido.trim(), email: emailNorm,
+          telefono_whatsapp: form.telefono_whatsapp.trim() || null,
+          cargo: form.cargo.trim() || null, rol: form.rol, sede: form.sede, activo: true,
+        })
+        if (errDB) throw errDB
+        try {
+          await supabase.auth.resetPasswordForEmail(emailNorm, { redirectTo: window.location.origin + '/login' })
+        } catch { /* no crítico */ }
+        onGuardado(`Usuario ${form.nombre.trim()} creado. Se envió un correo de acceso a ${emailNorm}.`)
       }
-
-      onGuardado()
     } catch (err) {
       setError(mensajeError(err))
     } finally {
@@ -220,59 +201,45 @@ function ModalUsuario({ usuario, onClose, onGuardado }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 600, overflow: 'hidden' }}>
         <div style={{ background: 'linear-gradient(135deg, #0E2A45, #17395C)', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, color: '#fff', fontSize: 18 }}>{usuario?.id ? 'Editar usuario' : 'Nuevo usuario'}</h2>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 8, cursor: 'pointer' }}>✕</button>
+          <h2 style={{ margin: 0, color: '#fff', fontSize: 18 }}>{usuario?.id ? '✏ Editar usuario' : '＋ Nuevo usuario'}</h2>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>✕</button>
         </div>
-
         <div style={{ padding: 24 }}>
           {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>⚠ {error}</div>}
-
           <form onSubmit={handleSubmit}>
             <div className="grid">
-              <div className="col-6 field">
-                <label>Nombre *</label>
-                <input className="input" value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={guardando} />
+              <div className="col-6 field"><label>Nombre *</label>
+                <input className="input" value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={guardando} /></div>
+              <div className="col-6 field"><label>Apellido</label>
+                <input className="input" value={form.apellido} onChange={e => set('apellido', e.target.value)} disabled={guardando} /></div>
+              <div className="col-6 field"><label>Email *</label>
+                <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)}
+                  disabled={guardando || !!usuario?.id}
+                  style={usuario?.id ? { background: 'var(--fondo)', color: 'var(--gris)' } : {}} />
+                {usuario?.id && <p style={{ fontSize: 11, color: 'var(--gris)', marginTop: 4 }}>El email no se puede cambiar</p>}
               </div>
-              <div className="col-6 field">
-                <label>Apellido</label>
-                <input className="input" value={form.apellido} onChange={e => set('apellido', e.target.value)} disabled={guardando} />
-              </div>
-              <div className="col-6 field">
-                <label>Email *</label>
-                <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)} disabled={guardando} />
-              </div>
-              <div className="col-6 field">
-                <label>Teléfono WhatsApp</label>
-                <input className="input" placeholder="+56 9 XXXX XXXX" value={form.telefono_whatsapp} onChange={e => set('telefono_whatsapp', e.target.value)} disabled={guardando} />
-              </div>
-              <div className="col-6 field">
-                <label>Cargo</label>
-                <input className="input" placeholder="Ej: Inspector END" value={form.cargo} onChange={e => set('cargo', e.target.value)} disabled={guardando} />
-              </div>
-              <div className="col-3 field">
-                <label>Rol</label>
+              <div className="col-6 field"><label>Teléfono WhatsApp</label>
+                <input className="input" placeholder="+56 9 XXXX XXXX" value={form.telefono_whatsapp} onChange={e => set('telefono_whatsapp', e.target.value)} disabled={guardando} /></div>
+              <div className="col-6 field"><label>Cargo</label>
+                <input className="input" placeholder="Ej: Inspector END" value={form.cargo} onChange={e => set('cargo', e.target.value)} disabled={guardando} /></div>
+              <div className="col-3 field"><label>Rol</label>
                 <select className="select" value={form.rol} onChange={e => set('rol', e.target.value)} disabled={guardando}>
                   {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div className="col-3 field">
-                <label>Sede</label>
+                </select></div>
+              <div className="col-3 field"><label>Sede</label>
                 <select className="select" value={form.sede} onChange={e => set('sede', e.target.value)} disabled={guardando}>
                   {SEDES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
+                </select></div>
             </div>
-
             {!usuario?.id && (
-              <div className="alert alert-info" style={{ margin: '16px 0' }}>
-                ⚠ Después de crear el usuario, debes ir a <strong>Supabase → Authentication → Users</strong> y crear la contraseña para que pueda iniciar sesión.
+              <div className="alert alert-info" style={{ margin: '16px 0', fontSize: 13 }}>
+                📧 Al crear el usuario se le enviará un correo con su link de acceso para establecer su contraseña.
               </div>
             )}
-
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTop: '1px solid var(--borde)', marginTop: 8 }}>
               <button type="button" className="btn btn-ghost" onClick={onClose} disabled={guardando}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={guardando}>
-                {guardando ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Guardando...</> : '✓ Guardar'}
+                {guardando ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Guardando...</> : usuario?.id ? '✓ Guardar cambios' : '✓ Crear usuario'}
               </button>
             </div>
           </form>
@@ -280,4 +247,4 @@ function ModalUsuario({ usuario, onClose, onGuardado }) {
       </div>
     </div>
   )
-}
+        }
