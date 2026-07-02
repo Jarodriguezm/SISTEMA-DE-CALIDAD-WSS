@@ -66,7 +66,7 @@ export default function Layout({ children }) {
         <div style={styles.sidebarHeader}>
           {sidebarAbierto && (
             <div style={styles.brandWrap}>
-              <img src="/logo-wss.png" alt="WSS" style={styles.sidebarLogo} onError={e => { e.target.style.display = 'none' }} />
+              <img src="/assets/wss-logo-horizontal-transparent.png" alt="WSS" style={styles.sidebarLogo} onError={e => { e.target.style.display = 'none' }} />
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', marginTop: 4 }}>Sistema de Calidad</div>
             </div>
           )}
