@@ -7,6 +7,31 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
+// ── Resolver MIME type por extensión (evita que Drive clasifique mal) ─────────
+function getMimeType(file) {
+  if (file.type && file.type !== 'application/octet-stream') return file.type
+  const ext = file.name.split('.').pop().toLowerCase()
+  const mimes = {
+    pdf:  'application/pdf',
+    msg:  'application/vnd.ms-outlook',
+    eml:  'message/rfc822',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    doc:  'application/msword',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls:  'application/vnd.ms-excel',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    png:  'image/png',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif:  'image/gif',
+    zip:  'application/zip',
+    xml:  'application/xml',
+    txt:  'text/plain',
+    csv:  'text/csv',
+  }
+  return mimes[ext] || 'application/octet-stream'
+}
+
 // ── Helper: subir archivo a Drive via Vercel Function ────────────────────────
 async function subirArchivoADrive(folderId, file) {
   const base64 = await new Promise((resolve, reject) => {
@@ -18,7 +43,7 @@ async function subirArchivoADrive(folderId, file) {
   const res = await fetch('/api/drive/subir-archivo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ folder_id: folderId, file_name: file.name, file_content_base64: base64, mime_type: file.type }),
+    body: JSON.stringify({ folder_id: folderId, file_name: file.name, file_content_base64: base64, mime_type: getMimeType(file) }),
   })
   const data = await res.json()
   if (!data.ok) throw new Error(data.error || 'Error al subir a Drive')
