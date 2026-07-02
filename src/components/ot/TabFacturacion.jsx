@@ -35,17 +35,17 @@ const TIPOS_FACTURACION = [
     icon: '📧',
     color: '#7C3AED',
     bg: '#EDE9FE',
-    accept: 'application/pdf,.pdf',
+    accept: '.pdf,.eml,.msg,.png,.jpg,.jpeg,.docx',
   },
   {
     key: 'factura',
     carpetaNum: '12',
     titulo: 'Factura',
-    subtitulo: 'Documento de factura emitida (PDF)',
+    subtitulo: 'Documento de factura emitida',
     icon: '🧾',
     color: '#0369A1',
     bg: '#E0F2FE',
-    accept: 'application/pdf,.pdf',
+    accept: '.pdf,.xml,.png,.jpg,.jpeg',
   },
 ]
 
@@ -68,9 +68,7 @@ function SeccionUploadDoc({ tipo, ot, onSubido }) {
   }
 
   async function subir() {
-    if (archivos.length === 0) { setError('Selecciona al menos un PDF'); return }
-    const noValidos = archivos.filter(f => f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf'))
-    if (noValidos.length > 0) { setError(`Solo se permiten PDFs: ${noValidos.map(f => f.name).join(', ')}`); return }
+    if (archivos.length === 0) { setError('Selecciona al menos un archivo'); return }
     if (!folderId) { setError(`Carpeta Drive "${tipo.carpetaNum}" no encontrada para esta OT. Verifica que la OT tenga carpetas creadas.`); return }
     setSubiendo(true); setError(''); setExito('')
     try {

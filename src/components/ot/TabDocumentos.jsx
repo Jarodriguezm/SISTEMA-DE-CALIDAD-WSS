@@ -71,12 +71,6 @@ export default function TabDocumentos({ docs = [], ot }) {
   async function handleSubirArchivo(etapa, archivo) {
     if (!archivo || !ot) return
 
-    // Validar que sea PDF
-    if (archivo.type !== 'application/pdf' && !archivo.name.toLowerCase().endsWith('.pdf')) {
-      setError('Solo se permiten archivos PDF. Por favor convierte el documento antes de subirlo.')
-      return
-    }
-
     setSubiendo(etapa.num)
     setError('')
 
@@ -84,8 +78,7 @@ export default function TabDocumentos({ docs = [], ot }) {
       const carpetaInfo = carpetas[etapa.num]
 
       // Subir a Supabase Storage (carpeta: ots/{ot_numero}/etapa_{num}/)
-      const nombrePdf = archivo.name.toLowerCase().endsWith('.pdf') ? archivo.name : archivo.name + '.pdf'
-      const ruta = `${ot.ot_numero}/etapa_${etapa.num}/${Date.now()}_${nombrePdf}`
+      const ruta = `${ot.ot_numero}/etapa_${etapa.num}/${Date.now()}_${archivo.name}`
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('documentos-ot')
         .upload(ruta, archivo, { upsert: false })
@@ -330,7 +323,6 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
           <label style={{ cursor: subiendo ? 'not-allowed' : 'pointer' }}>
             <input
               type="file"
-              accept="application/pdf,.pdf"
               style={{ display: 'none' }}
               disabled={subiendo}
               onChange={e => {

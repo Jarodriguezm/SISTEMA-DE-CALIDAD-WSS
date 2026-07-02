@@ -523,22 +523,19 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
   function onFile(e) {
     const f = e.target.files[0]
     if (!f) return
-    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-      setError('Solo se permiten archivos PDF. Escanea el acta y guárdala como PDF antes de subirla.')
-      return
-    }
     setArchivo(f)
     const url = URL.createObjectURL(f)
     setPreview(url)
   }
 
   async function guardar() {
-    if (!archivo) { setError('Selecciona un PDF del acta'); return }
+    if (!archivo) { setError('Selecciona una foto o archivo del acta'); return }
     setGuardando(true)
     setError('')
     try {
-      // Subir PDF a Supabase Storage
-      const path = `${ot.ot_numero}/${Date.now()}.pdf`
+      // Subir archivo a Supabase Storage
+      const ext = archivo.name.split('.').pop()
+      const path = `${ot.ot_numero}/${Date.now()}.${ext}`
       const { error: upErr } = await supabase.storage
         .from('actas-manuales')
         .upload(path, archivo, { upsert: true })
@@ -596,24 +593,24 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <Lbl>Acta escaneada (PDF)</Lbl>
+        <Lbl>Foto / Scan del Acta (JPG, PNG o PDF)</Lbl>
         <label style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
           border: '2px dashed #93C5FD', borderRadius: 10, padding: '32px 20px',
           cursor: 'pointer', background: '#F0F9FF', transition: 'background .15s',
         }}>
-          <input type="file" accept="application/pdf,.pdf" onChange={onFile} style={{ display: 'none' }} />
+          <input type="file" accept="image/*,.pdf" onChange={onFile} style={{ display: 'none' }} />
           {preview ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 48 }}>📄</div>
-              <div style={{ fontSize: 13, color: '#1D4ED8', fontWeight: 600, marginTop: 6 }}>{archivo?.name}</div>
-              <div style={{ fontSize: 12, color: '#64748B' }}>PDF listo para subir</div>
-            </div>
+            archivo?.type?.startsWith('image') ? (
+              <img src={preview} alt="preview" style={{ maxHeight: 300, maxWidth: '100%', borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,.15)' }} />
+            ) : (
+              <div style={{ fontSize: 40 }}>📄</div>
+            )
           ) : (
             <>
-              <div style={{ fontSize: 36 }}>📄</div>
+              <div style={{ fontSize: 36 }}>📸</div>
               <div style={{ fontSize: 14, color: '#0284C7', fontWeight: 600 }}>Toca aquí para seleccionar o tomar foto</div>
-              <div style={{ fontSize: 12, color: '#64748B' }}>Solo PDF · hasta 50 MB</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>JPG · PNG · PDF · hasta 10 MB</div>
             </>
           )}
         </label>

@@ -310,19 +310,12 @@ function SeccionCargaInforme({ ot }) {
   }
 
   function onFileChange(e) {
-    const files = Array.from(e.target.files)
-    const noValidos = files.filter(f => f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf'))
-    if (noValidos.length > 0) {
-      setError(`Solo se permiten PDFs. Archivo(s) no válido(s): ${noValidos.map(f => f.name).join(', ')}`)
-      e.target.value = ''
-      return
-    }
-    setArchivos(files)
+    setArchivos(Array.from(e.target.files))
     setError(''); setExito('')
   }
 
   async function subirInformes() {
-    if (archivos.length === 0) { setError('Selecciona al menos un PDF'); return }
+    if (archivos.length === 0) { setError('Selecciona al menos un archivo'); return }
     if (!carpeta09Id) { setError('Esta OT no tiene carpeta Drive configurada (09 - Informes)'); return }
     setSubiendo(true); setError(''); setResultados([])
     try {
@@ -383,7 +376,7 @@ function SeccionCargaInforme({ ot }) {
         {/* Upload */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Seleccionar archivos de informe (PDF)</div>
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple onChange={onFileChange}
+          <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,.xlsx,.xls,.zip" multiple onChange={onFileChange}
             style={{ width: '100%', padding: '8px 10px', border: '1px dashed #CBD5E1', borderRadius: 6, fontSize: 13, background: '#F8FAFC', cursor: 'pointer' }} />
           {archivos.length > 0 && (
             <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
