@@ -59,7 +59,7 @@ export default function Login() {
       <div style={styles.card}>
         <div style={styles.logoWrap}>
           <img
-            src="/logo-wss.png"
+            src="/assets/wss-logo-horizontal-transparent.png"
             alt="WSS Testing & Certification Chile"
             style={styles.logo}
             onError={e => { e.target.style.display = 'none' }}
@@ -133,7 +133,7 @@ const styles = {
   bg: { minHeight: '100vh', background: 'linear-gradient(135deg, #0E2A45 0%, #17395C 50%, #1E4D7B 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' },
   card: { background: '#fff', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: '0 24px 80px rgba(0,0,0,.3)' },
   logoWrap: { display: 'flex', justifyContent: 'center', marginBottom: 20 },
-  logo: { maxWidth: 260, height: 'auto' },
+  logo: { maxWidth: 300, height: 'auto', maxHeight: 100 },
   titulo: { textAlign: 'center', marginBottom: 4, fontSize: 22 },
   subtitulo: { textAlign: 'center', color: 'var(--gris)', fontSize: 12, marginBottom: 28 },
   linkOlvide: { display: 'block', width: '100%', marginTop: 12, padding: '8px', background: 'none', border: 'none', color: 'var(--primario)', fontSize: 13, cursor: 'pointer', textAlign: 'center' },
