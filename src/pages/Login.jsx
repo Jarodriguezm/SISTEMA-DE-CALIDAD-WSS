@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
+import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const { login } = useAuth()
@@ -7,17 +8,35 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [cargando, setCargando] = useState(false)
   const [error, setError]       = useState('')
+  const [recuperando, setRecuperando]       = useState(false)
+  const [mensajeRecuperar, setMensajeRecuperar] = useState('')
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!email || !password) { setError('Ingresa tu correo y contraseÃ±a'); return }
+    if (!email || !password) { setError('Ingresa tu correo y contraseña'); return }
     try {
-      setCargando(true); setError('')
+      setCargando(true); setError(''); setMensajeRecuperar('')
       await login(email, password)
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesiÃ³n')
+      setError(err.message || 'Error al iniciar sesión')
     } finally {
       setCargando(false)
+    }
+  }
+
+  async function handleRecuperarPassword() {
+    if (!email) { setError('Ingresa tu correo primero para recuperar contraseña'); return }
+    try {
+      setRecuperando(true); setError('')
+      const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      if (err) throw err
+      setMensajeRecuperar('Revisa tu correo para restablecer tu contraseña')
+    } catch (err) {
+      setError(err.message || 'Error al enviar email de recuperación')
+    } finally {
+      setRecuperando(false)
     }
   }
 
@@ -32,7 +51,6 @@ export default function Login() {
             alt="WSS Testing & Certification Chile"
             style={styles.logo}
             onError={e => {
-              // fallback a versiÃ³n cuadrada si no existe la horizontal
               e.target.src = '/assets/wss-logo-square-512.png'
               e.target.style.maxHeight = '80px'
             }}
@@ -40,13 +58,16 @@ export default function Login() {
         </div>
 
         <h1 style={styles.titulo}>Sistema de Calidad</h1>
-        <p style={styles.subtitulo}>World Survey Services S.A. Â· DivisiÃ³n InspecciÃ³n Industrial</p>
+        <p style={styles.subtitulo}>World Survey Services S.A. · División Inspección Industrial</p>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+        {mensajeRecuperar && (
+          <div className="alert alert-success" style={{ marginBottom: 16 }}>{mensajeRecuperar}</div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="field" style={{ marginBottom: 14 }}>
-            <label>Correo electrÃ³nico</label>
+            <label>Correo electrónico</label>
             <input
               className="input"
               type="email"
@@ -60,11 +81,11 @@ export default function Login() {
           </div>
 
           <div className="field" style={{ marginBottom: 20 }}>
-            <label>ContraseÃ±a</label>
+            <label>Contraseña</label>
             <input
               className="input"
               type="password"
-              placeholder="â¢â¢â¢â¢â¢â¢â¢â¢"
+              placeholder="••••••••"
               value={password}
               onChange={e => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -86,8 +107,16 @@ export default function Login() {
 
         <div style={styles.footer}>
           <div style={styles.divider} />
-          <p style={{ color: 'var(--gris)', fontSize: 12, textAlign: 'center', marginTop: 16 }}>
-            Acceso restringido Â· Solo personal autorizado WSS
+          <button
+            type="button"
+            onClick={handleRecuperarPassword}
+            disabled={recuperando || cargando}
+            style={styles.btnRecuperar}
+          >
+            {recuperando ? 'Enviando enlace...' : '¿Olvidaste tu contraseña?'}
+          </button>
+          <p style={{ color: 'var(--gris)', fontSize: 12, textAlign: 'center', marginTop: 12 }}>
+            Acceso restringido · Solo personal autorizado WSS
           </p>
         </div>
       </div>
@@ -123,4 +152,9 @@ const styles = {
   subtitulo: { textAlign: 'center', color: 'var(--gris)', fontSize: 12, marginBottom: 28 },
   footer:   { marginTop: 20 },
   divider:  { height: 1, background: 'var(--borde)', margin: '16px 0' },
+  btnRecuperar: {
+    background: 'none', border: 'none', color: 'var(--azul)',
+    fontSize: 13, cursor: 'pointer', width: '100%',
+    textAlign: 'center', padding: '6px 0', textDecoration: 'underline',
+  },
 }
