@@ -31,13 +31,21 @@ export default async function handler(req, res) {
 
     const token = await getGoogleToken()
 
-    // Multipart upload a Drive
-    const fileBytes = Buffer.from(file_content_base64, 'base64')
-    const boundary  = '-------WSS_BOUNDARY_' + Date.now()
-    const mimeType  = mime_type || 'application/octet-stream'
+    // Resolver MIME type por extensión si el cliente no lo envió
+    const mimeType = resolverMime(mime_type, file_name)
 
-    const metadata = JSON.stringify({ name: file_name, parents: [folder_id] })
-    const CRLF = '\r\n'
+    // Multipart upload a Drive
+    // IMPORTANTE: mimeType va TAMBIÉN en el metadata JSON para evitar
+    // que Drive haga content-sniffing y clasifique mal el archivo.
+    const fileBytes = Buffer.from(file_content_base64, 'base64')
+    const boundary  = 'wssBoundary' + Date.now()
+    const CRLF      = '\r\n'
+
+    const metadata = JSON.stringify({
+      name:     file_name,
+      parents:  [folder_id],
+      mimeType: mimeType,   // ← clave: fuerza el tipo correcto en Drive
+    })
 
     const body = Buffer.concat([
       Buffer.from(`--${boundary}${CRLF}Content-Type: application/json; charset=UTF-8${CRLF}${CRLF}${metadata}${CRLF}`),
@@ -47,11 +55,11 @@ export default async function handler(req, res) {
     ])
 
     const uploadRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true',
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink&supportsAllDrives=true',
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization:  `Bearer ${token}`,
           'Content-Type': `multipart/related; boundary="${boundary}"`,
           'Content-Length': body.length,
         },
@@ -66,16 +74,49 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      ok: true,
-      file_id:  data.id,
+      ok:        true,
+      file_id:   data.id,
       file_name: data.name,
-      file_url: data.webViewLink || `https://drive.google.com/file/d/${data.id}/view`,
+      mime_type: data.mimeType,
+      file_url:  data.webViewLink || `https://drive.google.com/file/d/${data.id}/view`,
     })
 
   } catch (err) {
     console.error('[subir-archivo] Error:', err.message)
     return res.status(500).json({ ok: false, error: err.message })
   }
+}
+
+// ── Resolver MIME type por extensión ─────────────────────────────────────────
+function resolverMime(clientMime, fileName) {
+  // Si el cliente envió un tipo válido (no vacío ni octet-stream), úsalo
+  if (clientMime && clientMime !== 'application/octet-stream') return clientMime
+  // Fallback: detectar por extensión del nombre de archivo
+  const ext = (fileName || '').split('.').pop().toLowerCase()
+  const mimes = {
+    pdf:  'application/pdf',
+    msg:  'application/vnd.ms-outlook',
+    eml:  'message/rfc822',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    doc:  'application/msword',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls:  'application/vnd.ms-excel',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ppt:  'application/vnd.ms-powerpoint',
+    png:  'image/png',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif:  'image/gif',
+    webp: 'image/webp',
+    zip:  'application/zip',
+    rar:  'application/x-rar-compressed',
+    xml:  'application/xml',
+    txt:  'text/plain',
+    csv:  'text/csv',
+    html: 'text/html',
+    json: 'application/json',
+  }
+  return mimes[ext] || 'application/octet-stream'
 }
 
 // ── Google Auth (mismo patrón que crear-carpetas) ─────────────────────────────
