@@ -67,7 +67,6 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     try {
-      setCargando(true)
       setError(null)
 
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
@@ -76,13 +75,14 @@ export function AuthProvider({ children }) {
         throw new Error('Usuario o contraseña incorrectos')
       }
 
+      // No tocar cargando aquí: onAuthStateChange ya disparó cargarDatosUsuario
+      // que gestiona cargando=true/false por su cuenta
       return { ok: true }
     } catch (err) {
       const msg = mensajeError(err)
       setError(msg)
-      throw new Error(msg)
-    } finally {
       setCargando(false)
+      throw new Error(msg)
     }
   }
 
