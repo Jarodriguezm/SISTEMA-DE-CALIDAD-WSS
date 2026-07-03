@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import OTs from './pages/OTs'
 import DetalleOT from './pages/DetalleOT'
@@ -46,13 +47,16 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Rutas públicas — sin autenticación */}
       <Route
         path="/login"
         element={usuario ? <Navigate to="/dashboard" replace /> : <Login />}
       />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
+      {/* Rutas protegidas */}
       <Route path="/dashboard" element={
         <RutaPrivada><Dashboard /></RutaPrivada>
       } />
