@@ -1,20 +1,13 @@
-// ============================================================
-// AuthContext.jsx — Autenticación WSS
-// SEGURIDAD: Requiere sesión Supabase Auth válida.
-// No existe fallback sin contraseña. Cualquier fallo
-// de auth.signInWithPassword es un error de login.
-// v2: usa query directa a tabla usuarios (sin RPCs).
-// ============================================================
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase, mensajeError } from './supabase'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [usuario, setUsuario]   = useState(null)
-  const [menu, setMenu]         = useState([])
+  const [usuario, setUsuario] = useState(null)
+  const [menu, setMenu] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [error, setError]       = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     // Verificar sesión al cargar
@@ -26,7 +19,7 @@ export function AuthProvider({ children }) {
       }
     })
 
-    // Escuchar cambios de sesión (login / logout / expiración)
+    // Escuchar cambios de sesión
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         cargarDatosUsuario(session.user.email)
@@ -45,9 +38,6 @@ export function AuthProvider({ children }) {
       setCargando(true)
       setError(null)
 
-      // Consulta directa a tabla usuarios — NO usa funciones RPC.
-      // Las funciones obtener_usuario_por_email / obtener_menu_por_email
-      // no existen en Supabase y causaban un error 404 que bloqueaba el login.
       const { data: userData, error: userError } = await supabase
         .from('usuarios')
         .select('*')
@@ -55,22 +45,17 @@ export function AuthProvider({ children }) {
         .maybeSingle()
 
       if (userError) {
-        // Error técnico (RLS, red, etc.) — no cerrar sesión automáticamente
         throw new Error('Error al cargar perfil de usuario: ' + (userError.message || userError.code))
       }
 
       if (!userData) {
-        // Usuario autenticado en Auth pero sin registro en tabla usuarios
         await supabase.auth.signOut()
         throw new Error('Tu cuenta no tiene acceso al sistema. Contacta al administrador.')
       }
 
-      // Layout.jsx construye la navegación directamente desde el rol del usuario.
-      // No se necesita una tabla de menú separada.
       setUsuario(userData)
       setMenu([])
       setError(null)
-
     } catch (err) {
       setError(mensajeError(err))
       setUsuario(null)
@@ -80,9 +65,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ── Login ─────────────────────────────────────────────────────────────────
-  // SEGURIDAD: Solo acepta credenciales válidas de Supabase Auth.
-  // No existe fallback sin contraseña.
   async function login(email, password) {
     try {
       setCargando(true)
@@ -91,34 +73,28 @@ export function AuthProvider({ children }) {
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
       if (authError) {
-        // Credenciales inválidas → error inmediato, sin bypass
-        throw new Error('Correo o contraseña incorrectos.')
+        throw new Error('Usuario o contraseña incorrectos')
       }
 
-      // Si llegamos aquí, signInWithPassword fue exitoso.
-      // onAuthStateChange disparará cargarDatosUsuario automáticamente.
       return { ok: true }
-
     } catch (err) {
       const msg = mensajeError(err)
       setError(msg)
-      setCargando(false)
       throw new Error(msg)
+    } finally {
+      setCargando(false)
     }
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────
   async function logout() {
+    await supabase.auth.signOut()
     setUsuario(null)
     setMenu([])
-    await supabase.auth.signOut()
   }
 
-  // ── Verificación de permisos ──────────────────────────────────────────────
   async function verificarPermiso(modulo, accion) {
     if (!usuario?.email) return false
     try {
-      // Consulta directa — si la tabla permisos_roles no existe, retorna false
       const { data } = await supabase
         .from('permisos_roles')
         .select('permitido')
@@ -132,11 +108,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ── Helpers de rol ────────────────────────────────────────────────────────
-  const esAdmin       = () => { const r = (usuario?.rol || '').toUpperCase(); return r === 'ADMIN' || r === 'ADMINISTRADOR' }
-  const esSupervisor  = () => (usuario?.rol || '').toUpperCase() === 'SUPERVISOR'
-  const esComercial   = () => (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
-  const esInspector   = () => (usuario?.rol || '').toUpperCase() === 'INSPECTOR'
+  const esAdmin = () => {
+    const rol = (usuario?.rol || '').toUpperCase()
+    return rol === 'ADMIN' || rol === 'ADMINISTRADOR'
+  }
+
+  const esSupervisor = () => (usuario?.rol || '').toUpperCase() === 'SUPERVISOR'
+  const esComercial = () => (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
+  const esInspector = () => (usuario?.rol || '').toUpperCase() === 'INSPECTOR'
   const esFacturacion = () => (usuario?.rol || '').toUpperCase() === 'FACTURACION'
 
   return (
@@ -152,7 +131,7 @@ export function AuthProvider({ children }) {
       esSupervisor,
       esComercial,
       esInspector,
-      esFacturacion,
+      esFacturacion
     }}>
       {children}
     </AuthContext.Provider>
