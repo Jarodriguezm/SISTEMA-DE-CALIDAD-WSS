@@ -77,7 +77,6 @@ export default function DetalleOT() {
       if (otErr) throw otErr
       if (!otData) throw new Error('No se encontró la OT ' + numero)
 
-      // Cargar campos Drive directamente desde tabla ots (pueden no estar en la vista)
       const { data: otExtra } = await supabase
         .from('ots')
         .select('carpetas_drive, carpeta_drive_url')
@@ -90,7 +89,6 @@ export default function DetalleOT() {
         carpeta_drive_url: otExtra?.carpeta_drive_url || otData.carpeta_drive_url || null,
       })
 
-      // Cargar tabs en paralelo
       const [docs, asigs, actsData, resData] = await Promise.allSettled([
         rpc('obtener_documentos_por_ot',   { p_ot_numero: numero }),
         rpc('obtener_asignaciones_por_ot', { p_ot_numero: numero }),
@@ -255,7 +253,7 @@ export default function DetalleOT() {
       {/* Contenido tab */}
       <div style={{ marginTop: 16 }}>
         {tabActivo === 'info'         && <TabInfo ot={ot} />}
-        {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} ot={ot} />}
+        {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} ot={ot} onActualizar={cargarTodo} />}
         {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
         {tabActivo === 'actas'        && <TabActa ot={ot} asignaciones={asignaciones} onActaCreada={cargarTodo} />}
         {tabActivo === 'informes'     && <TabInformes ot={ot} onInformeCreado={cargarTodo} />}
@@ -458,6 +456,4 @@ const styles = {
     padding: '10px 18px', cursor: 'pointer',
     fontSize: 14, whiteSpace: 'nowrap',
     transition: 'color .15s',
-    display: 'flex', alignItems: 'center',
-  },
-}
+    display: 'flex', ali
