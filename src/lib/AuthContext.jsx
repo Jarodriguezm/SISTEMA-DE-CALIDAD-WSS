@@ -3,9 +3,10 @@
 // SEGURIDAD: Requiere sesión Supabase Auth válida.
 // No existe fallback sin contraseña. Cualquier fallo
 // de auth.signInWithPassword es un error de login.
+// v2: usa query directa a tabla usuarios (sin RPCs).
 // ============================================================
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, rpc, mensajeError } from './supabase'
+import { supabase, mensajeError } from './supabase'
 
 const AuthContext = createContext(null)
 
@@ -30,7 +31,6 @@ export function AuthProvider({ children }) {
       if (session?.user) {
         cargarDatosUsuario(session.user.email)
       } else {
-        // Sesión cerrada o expirada → limpiar estado
         setUsuario(null)
         setMenu([])
         setCargando(false)
@@ -43,24 +43,34 @@ export function AuthProvider({ children }) {
   async function cargarDatosUsuario(email) {
     try {
       setCargando(true)
+      setError(null)
 
-      // Obtener perfil del usuario desde tabla usuarios
-      const perfil = await rpc('obtener_usuario_por_email', { p_email: email })
+      // Consulta directa a tabla usuarios — NO usa funciones RPC.
+      // Las funciones obtener_usuario_por_email / obtener_menu_por_email
+      // no existen en Supabase y causaban un error 404 que bloqueaba el login.
+      const { data: userData, error: userError } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle()
 
-      if (!perfil || perfil.length === 0) {
-        // Usuario autenticado en Auth pero no registrado en el sistema → cerrar sesión
-        await supabase.auth.signOut()
-        throw new Error('Usuario no encontrado en el sistema. Contacte al administrador.')
+      if (userError) {
+        // Error técnico (RLS, red, etc.) — no cerrar sesión automáticamente
+        throw new Error('Error al cargar perfil de usuario: ' + (userError.message || userError.code))
       }
 
-      const userData = perfil[0] || perfil
+      if (!userData) {
+        // Usuario autenticado en Auth pero sin registro en tabla usuarios
+        await supabase.auth.signOut()
+        throw new Error('Tu cuenta no tiene acceso al sistema. Contacta al administrador.')
+      }
 
-      // Obtener menú según rol
-      const menuData = await rpc('obtener_menu_por_email', { p_email: email })
-
+      // Layout.jsx construye la navegación directamente desde el rol del usuario.
+      // No se necesita una tabla de menú separada.
       setUsuario(userData)
-      setMenu(menuData || [])
+      setMenu([])
       setError(null)
+
     } catch (err) {
       setError(mensajeError(err))
       setUsuario(null)
@@ -99,10 +109,8 @@ export function AuthProvider({ children }) {
 
   // ── Logout ────────────────────────────────────────────────────────────────
   async function logout() {
-    // Limpiar estado local primero para UI inmediata
     setUsuario(null)
     setMenu([])
-    // Luego cerrar sesión en Supabase (invalida el token)
     await supabase.auth.signOut()
   }
 
@@ -110,12 +118,15 @@ export function AuthProvider({ children }) {
   async function verificarPermiso(modulo, accion) {
     if (!usuario?.email) return false
     try {
-      const resultado = await rpc('usuario_tiene_permiso', {
-        p_email:  usuario.email,
-        p_modulo: modulo,
-        p_accion: accion,
-      })
-      return !!resultado
+      // Consulta directa — si la tabla permisos_roles no existe, retorna false
+      const { data } = await supabase
+        .from('permisos_roles')
+        .select('permitido')
+        .eq('rol', usuario.rol)
+        .eq('modulo', modulo)
+        .eq('accion', accion)
+        .maybeSingle()
+      return data?.permitido === true
     } catch {
       return false
     }
