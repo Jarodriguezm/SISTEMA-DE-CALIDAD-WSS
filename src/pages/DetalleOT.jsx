@@ -456,4 +456,6 @@ const styles = {
     padding: '10px 18px', cursor: 'pointer',
     fontSize: 14, whiteSpace: 'nowrap',
     transition: 'color .15s',
-    display: 'flex', ali
+    display: 'flex', alignItems: 'center',
+  },
+}
