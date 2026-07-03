@@ -44,18 +44,38 @@ export async function rpc(nombre, params = {}) {
 
 export function mensajeError(error) {
   if (!error) return 'Error desconocido'
-  
-  const msg = error.message || error.toString()
-  
-  if (msg.includes('permission') || msg.includes('policy')) {
+
+  const raw = typeof error === 'string'
+    ? error
+    : (error.message || error.toString())
+
+  // Mensajes vacíos o ilegibles que Supabase puede devolver cuando tiene
+  // problemas de servicio o la respuesta HTTP es un JSON vacío {}
+  const esIlegible = !raw
+    || raw === '{}'
+    || raw === '[]'
+    || raw === '[object Object]'
+    || raw.trim() === ''
+
+  if (esIlegible) {
+    return 'Error de conexión. Verifica tu red e intenta de nuevo.'
+  }
+
+  if (raw.includes('permission') || raw.includes('policy')) {
     return 'No tiene permisos para realizar esta acción'
   }
-  if (msg.includes('not found') || msg.includes('no rows')) {
+  if (raw.includes('not found') || raw.includes('no rows')) {
     return 'No se encontró el registro solicitado'
   }
-  if (msg.includes('duplicate') || msg.includes('unique')) {
+  if (raw.includes('duplicate') || raw.includes('unique')) {
     return 'Ya existe un registro con esos datos'
   }
-  
-  return msg
+  if (raw.includes('rate limit') || raw.includes('too many') || raw.includes('429')) {
+    return 'Demasiados intentos. Espera unos minutos e intenta de nuevo.'
+  }
+  if (raw.includes('Invalid login credentials') || raw.includes('invalid_grant')) {
+    return 'Usuario o contraseña incorrectos'
+  }
+
+  return raw
 }
