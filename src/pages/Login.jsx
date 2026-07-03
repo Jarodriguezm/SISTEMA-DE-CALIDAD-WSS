@@ -4,11 +4,11 @@ import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const { login } = useAuth()
-  const [email, setEmail]       = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [cargando, setCargando] = useState(false)
-  const [error, setError]       = useState('')
-  const [recuperando, setRecuperando]       = useState(false)
+  const [error, setError] = useState('')
+  const [recuperando, setRecuperando] = useState(false)
   const [mensajeRecuperar, setMensajeRecuperar] = useState('')
 
   async function handleSubmit(e) {
@@ -18,7 +18,9 @@ export default function Login() {
       setCargando(true); setError(''); setMensajeRecuperar('')
       await login(email, password)
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesión')
+      const raw = err?.message || ''
+      const usable = raw && raw !== '{}' && raw !== '[object Object]'
+      setError(usable ? raw : 'Error al iniciar sesión. Intenta de nuevo.')
     } finally {
       setCargando(false)
     }
@@ -31,7 +33,11 @@ export default function Login() {
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
-      if (err) throw err
+      if (err) {
+        const raw = err?.message || ''
+        const usable = raw && raw !== '{}' && raw !== '[object Object]'
+        throw new Error(usable ? raw : 'Error al enviar email de recuperación. Intenta de nuevo.')
+      }
       setMensajeRecuperar('Revisa tu correo para restablecer tu contraseña')
     } catch (err) {
       setError(err.message || 'Error al enviar email de recuperación')
@@ -148,10 +154,10 @@ const styles = {
     objectFit: 'contain',
     display: 'block',
   },
-  titulo:   { textAlign: 'center', marginBottom: 4, fontSize: 22 },
+  titulo: { textAlign: 'center', marginBottom: 4, fontSize: 22 },
   subtitulo: { textAlign: 'center', color: 'var(--gris)', fontSize: 12, marginBottom: 28 },
-  footer:   { marginTop: 20 },
-  divider:  { height: 1, background: 'var(--borde)', margin: '16px 0' },
+  footer: { marginTop: 20 },
+  divider: { height: 1, background: 'var(--borde)', margin: '16px 0' },
   btnRecuperar: {
     background: 'none', border: 'none', color: 'var(--azul)',
     fontSize: 13, cursor: 'pointer', width: '100%',
