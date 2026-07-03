@@ -247,8 +247,7 @@ export default function Calendario() {
         <div style={s.vistaBtns}>
           {'semana mes dia'.split(' ').map(v => (
             <button key={v} style={{...s.vBtn, ...(vista===v ? s.vBtnActive : {})}}
-              onClick={()=>setVista(v)}>{v.charAt(0).toUpperCase()+v
-+.slice(1)}</button>
+              onClick={()=>setVista(v)}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
           ))}
         </div>
         {/* Filtros */}
