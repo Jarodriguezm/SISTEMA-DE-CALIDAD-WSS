@@ -1,14 +1,11 @@
 // api/drive/escanear-ot.js
-// Escanea las carpetas de Google Drive de una OT,
+// Escanea las carpetas de Google Drive asociadas a una OT,
 // registra/actualiza documentos_ot en Supabase.
+// Si carpetas_drive está vacío, lo descubre automáticamente.
 //
-// Campos reales de documentos_ot:
-//   id, ot_numero, tipo, nombre_archivo, drive_file_id,
-//   drive_url, observacion, subido_por, created_at
-//
-// POST /api/drive/escanear-ot  { ot_numero: "OT-2024-001" }
+// POST /api/drive/escanear-ot  { ot_numero: "OT062628781" }
 
-import { google } from 'googleapis'
+import { createSign } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -35,7 +32,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -44,53 +40,62 @@ export default async function handler(req, res) {
 
   try {
     const { data: ot, error: otErr } = await supabase
-      .from('ots').select('ot_numero, carpetas_drive').eq('ot_numero', ot_numero).single()
+      .from('ots')
+      .select('ot_numero, carpeta_drive_url, carpetas_drive')
+      .eq('ot_numero', ot_numero)
+      .single()
 
-    if (otErr || !ot) return res.status(404).json({ error: 'OT ' + ot_numero + ' no encontrada' })
+    if (otErr || !ot) return res.status(404).json({ error: `OT ${ot_numero} no encontrada` })
 
-    const carpetas = typeof ot.carpetas_drive === 'string'
-      ? JSON.parse(ot.carpetas_drive) : (ot.carpetas_drive || {})
+    let carpetas = typeof ot.carpetas_drive === 'string'
+      ? JSON.parse(ot.carpetas_drive)
+      : (ot.carpetas_drive || {})
 
-    if (!Object.keys(carpetas).length)
-      return res.status(400).json({ error: 'Esta OT no tiene carpetas Drive configuradas' })
+    const token = await getGoogleToken()
 
-    const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
-    const auth = new google.auth.GoogleAuth({
-      credentials: serviceAccount,
-      scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-    })
-    const drive = google.drive({ version: 'v3', auth })
+    // Si no hay carpetas_drive, descubrirlas desde la carpeta principal
+    if (!Object.keys(carpetas).length && ot.carpeta_drive_url) {
+      const mainFolderId = ot.carpeta_drive_url.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1]
+      if (mainFolderId) {
+        const subfolders = await listarSubcarpetas(token, mainFolderId)
+        for (const folder of subfolders) {
+          const match = folder.name.match(/^(\d{2})\s*[-–]/)
+          if (match) {
+            carpetas[match[1]] = {
+              id:     folder.id,
+              nombre: folder.name,
+              url:    `https://drive.google.com/drive/folders/${folder.id}`,
+            }
+          }
+        }
+        if (Object.keys(carpetas).length > 0) {
+          await supabase.from('ots').update({ carpetas_drive: carpetas }).eq('ot_numero', ot_numero)
+        }
+      }
+    }
+
+    if (!Object.keys(carpetas).length) {
+      return res.status(400).json({ error: 'Esta OT no tiene carpetas Drive configuradas ni detectables' })
+    }
 
     const resultados = []
-    const upserts = []
+    const upserts    = []
 
     for (const [numEtapa, info] of Object.entries(carpetas)) {
       const tipoDoc = ETAPA_NUM_A_TIPO[numEtapa]
-
       if (!tipoDoc) {
-        resultados.push({ etapa: numEtapa, tipo: null, archivos: 0, omitida: true })
+        resultados.push({ etapa: numEtapa, omitida: true })
         continue
       }
 
-      const folderId =
-        info?.id ||
-        info?.url?.split('/folders/')?.[1]?.split('?')?.[0] ||
-        info?.url?.split('/drive/folders/')?.[1]?.split('?')?.[0]
-
+      const folderId = info?.id || info?.url?.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1]
       if (!folderId) {
         resultados.push({ etapa: numEtapa, tipo: tipoDoc, archivos: 0, error: 'Sin folder ID' })
         continue
       }
 
       try {
-        const { data: filesData } = await drive.files.list({
-          q: "'" + folderId + "' in parents and trashed = false",
-          fields: 'files(id, name, webViewLink, mimeType, createdTime)',
-          orderBy: 'createdTime desc',
-          pageSize: 50,
-        })
-
-        const files = filesData?.files || []
+        const files = await listarArchivos(token, folderId)
         resultados.push({ etapa: numEtapa, tipo: tipoDoc, archivos: files.length })
 
         if (files.length > 0) {
@@ -101,8 +106,8 @@ export default async function handler(req, res) {
             nombre_archivo: archivo.name,
             drive_file_id:  archivo.id || null,
             drive_url:      archivo.webViewLink || info?.url || null,
-            observacion:    'Archivos en Drive: ' + files.length + '. ' + files.map(f => f.name).join(', '),
-            subido_por:     'Sincronizacion Drive',
+            observacion:    `Archivos detectados: ${files.length}. ${files.map(f => f.name).join(', ')}`,
+            subido_por:     'Sincronización Drive',
           })
         }
       } catch (driveErr) {
@@ -112,19 +117,21 @@ export default async function handler(req, res) {
 
     if (upserts.length > 0) {
       const { error: upsertErr } = await supabase
-        .from('documentos_ot').upsert(upserts, { onConflict: 'ot_numero,tipo' })
-      if (upsertErr) return res.status(500).json({ error: upsertErr.message, detalle: resultados })
+        .from('documentos_ot')
+        .upsert(upserts, { onConflict: 'ot_numero,tipo' })
+
+      if (upsertErr) {
+        return res.status(500).json({ error: `Error guardando en DB: ${upsertErr.message}`, detalle: resultados })
+      }
     }
 
-    const etapasConDocumentos = resultados.filter(r => r.archivos > 0).length
-    const totalArchivos = resultados.reduce((sum, r) => sum + (r.archivos || 0), 0)
-
     return res.status(200).json({
-      ok: true, ot_numero,
-      etapas_escaneadas: resultados.filter(r => !r.omitida).length,
-      etapas_con_documentos: etapasConDocumentos,
-      total_archivos: totalArchivos,
-      detalle: resultados,
+      ok:                      true,
+      ot_numero,
+      etapas_escaneadas:       resultados.filter(r => !r.omitida).length,
+      etapas_con_documentos:   resultados.filter(r => r.archivos > 0).length,
+      total_archivos:          resultados.reduce((s, r) => s + (r.archivos || 0), 0),
+      detalle:                 resultados,
     })
 
   } catch (err) {
@@ -132,3 +139,51 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+async function listarSubcarpetas(token, folderId) {
+  const q = encodeURIComponent(`'${folderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  const d = await r.json()
+  if (d.error) throw new Error(`Drive API: ${d.error.message}`)
+  return d.files || []
+}
+
+async function listarArchivos(token, folderId) {
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`)
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,webViewLink,createdTime)&orderBy=createdTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  const d = await r.json()
+  if (d.error) throw new Error(`Drive API: ${d.error.message}`)
+  return d.files || []
+}
+
+async function getGoogleToken() {
+  const email  = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  if (!email || !rawKey) throw new Error('Faltan variables GOOGLE_SERVICE_ACCOUNT_EMAIL / PRIVATE_KEY en Vercel')
+  const privateKey = rawKey.replace(/\\n/g, '\n')
+  const now = Math.floor(Date.now() / 1000)
+  const header  = toBase64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+  const payload = toBase64Url(JSON.stringify({ iss: email, scope: 'https://www.googleapis.com/auth/drive', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }))
+  const signer = createSign('RSA-SHA256')
+  signer.update(`${header}.${payload}`)
+  const signature = signer.sign(privateKey, 'base64url')
+  const jwt = `${header}.${payload}.${signature}`
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  })
+  const data = await tokenRes.json()
+  if (!data.access_token) throw new Error('No se pudo obtener token: ' + JSON.stringify(data))
+  return data.access_token
+}
+
+function toBase64Url(str) {
+  return Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+                                                 }
