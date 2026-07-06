@@ -16,11 +16,14 @@ const CARDS = [
   { key: 'total_auditoria',        label: 'Registros Auditoría',    color: 'var(--gris)' },
 ]
 
+const ROLES_ADMIN = ['administrador', 'admin', 'jefe', 'supervisor', 'gerente', 'coordinador']
+
 export default function Dashboard() {
   const { usuario } = useAuth()
   const [data, setData] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [syncState, setSyncState] = useState({ loading: false, resultado: null, error: null })
 
   useEffect(() => {
     cargarDashboard()
@@ -41,6 +44,19 @@ export default function Dashboard() {
       setError(mensajeError(err))
     } finally {
       setCargando(false)
+    }
+  }
+
+  async function sincronizarDrive() {
+    setSyncState({ loading: true, resultado: null, error: null })
+    try {
+      const res = await fetch('/api/drive/sincronizar-todas', { method: 'POST' })
+      const d   = await res.json()
+      if (!res.ok) throw new Error(d.error || `Error ${res.status}`)
+      setSyncState({ loading: false, resultado: d, error: null })
+      cargarDashboard()
+    } catch (err) {
+      setSyncState({ loading: false, resultado: null, error: err.message })
     }
   }
 
@@ -80,6 +96,47 @@ export default function Dashboard() {
           <AccionCard titulo="Reserva Informes"    desc="Gestión de números de informes ESI/EAI/IVS"   icono="🔢" to="/reservas" />
         </div>
       </div>
+
+      {/* Panel Sincronización Drive — solo roles admin/supervisor */}
+      {ROLES_ADMIN.includes((usuario?.rol || '').toLowerCase()) && (
+        <div className="card" style={{ marginTop: 32, borderLeft: '4px solid var(--azul)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h3 style={{ margin: 0, marginBottom: 4 }}>Sincronización Drive</h3>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--gris)' }}>
+                Escanea todas las OTs, registra carpetas y documentos desde Google Drive.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={sincronizarDrive}
+              disabled={syncState.loading}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {syncState.loading ? 'Sincronizando...' : 'Sincronizar todas las OTs'}
+            </button>
+          </div>
+
+          {syncState.resultado && (
+            <div style={{ marginTop: 16, padding: '12px 16px', background: '#F0FDF4', borderRadius: 8, fontSize: 13 }}>
+              <strong style={{ color: '#166534' }}>
+                Completado: {syncState.resultado.total_ots} OTs procesadas,{' '}
+                {syncState.resultado.ots_con_documentos_nuevos} con documentos nuevos detectados.
+              </strong>
+              {syncState.resultado.ots_con_error > 0 && (
+                <span style={{ color: '#B45309', marginLeft: 8 }}>
+                  ({syncState.resultado.ots_con_error} con errores)
+                </span>
+              )}
+            </div>
+          )}
+          {syncState.error && (
+            <div style={{ marginTop: 16, padding: '12px 16px', background: '#FEF2F2', borderRadius: 8, fontSize: 13, color: '#991B1B' }}>
+              Error: {syncState.error}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -149,6 +206,7 @@ const styles = {
   },
   accionCard: {
     cursor: 'pointer',
-    transition: 'box-shadow .15s, transform .15s',
-  }
-}
+    transition: 'transform 0.15s',
+    padding: 20,
+  },
+      }
