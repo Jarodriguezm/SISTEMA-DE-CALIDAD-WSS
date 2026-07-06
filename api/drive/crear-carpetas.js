@@ -5,9 +5,17 @@
 // Variables de entorno requeridas en Vercel:
 //   GOOGLE_SERVICE_ACCOUNT_EMAIL   — email de la service account
 //   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY — clave privada (con \n reales)
+//   SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY — para guardar en DB
 // ============================================================
 
 import { createSign } from 'node:crypto'
+import { createClient } from '@supabase/supabase-js'
+
+// Cliente Supabase con service role (para guardar sin restricciones RLS)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
 
 // ── Configuración ─────────────────────────────────────────────────────────────
 
@@ -89,6 +97,23 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── 4. Guardar en Supabase directamente (respaldo — ModalCrearOT también lo hace)
+    if (ot_numero && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        await supabase
+          .from('ots')
+          .update({
+            carpeta_drive_url: otFolderUrl,
+            carpetas_drive:    subcarpetas,
+          })
+          .eq('ot_numero', ot_numero)
+        console.log(`[crear-carpetas] carpetas_drive guardadas para ${ot_numero}`)
+      } catch (sbErr) {
+        // No es fatal — el frontend también guarda
+        console.warn(`[crear-carpetas] Supabase update falló para ${ot_numero}:`, sbErr.message)
+      }
+    }
+
     return res.status(200).json({
       ok: true,
       carpeta_ot_id:  otFolderId,
@@ -112,7 +137,6 @@ async function getGoogleToken() {
     throw new Error('Variables GOOGLE_SERVICE_ACCOUNT_EMAIL / PRIVATE_KEY no configuradas en Vercel')
   }
 
-  // Las nuevas líneas en env vars de Vercel llegan como \n literal — convertir
   const privateKey = rawKey.replace(/\\n/g, '\n')
 
   const now = Math.floor(Date.now() / 1000)
@@ -158,7 +182,6 @@ function toBase64Url(str) {
 // ── Drive API helpers ─────────────────────────────────────────────────────────
 
 async function findOrCreateFolder(token, name, parentId) {
-  // Buscar carpeta existente para no duplicar
   const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&supportsAllDrives=true`,
