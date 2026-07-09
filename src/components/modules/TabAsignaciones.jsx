@@ -269,14 +269,33 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
 
   const tituloArchivo = `REG-DII-036_${ot.ot_numero}_${new Date().toISOString().slice(0,10)}.pdf`
   const tituloModal   = `REG-DII-036 · ${ot.ot_numero}`
-  const folderId      = getAsignFolderId(ot)
 
   async function handleGuardarDrive() {
-    if (!folderId) {
-      setDriveState({ error: 'Esta OT no tiene carpeta Drive configurada. Crea las carpetas primero.' })
-      return
-    }
     try {
+      let folderId = getAsignFolderId(ot)
+
+      // Si la OT no tiene carpetas Drive creadas → crearlas ahora
+      if (!folderId) {
+        if (!['SCL', 'ANF'].includes(ot.sede)) {
+          setDriveState({ error: `La sede ${ot.sede || '—'} no tiene carpeta raíz configurada en Drive.` })
+          return
+        }
+        setDriveState('carpetas')
+        const creRes = await fetch('/api/drive/crear-carpetas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ot_numero: ot.ot_numero,
+            cliente:   ot.cliente || '',
+            sede:      ot.sede,
+          }),
+        })
+        const creData = await creRes.json()
+        if (!creData.ok) throw new Error('No se crearon las carpetas: ' + (creData.error || ''))
+        folderId = creData.subcarpetas?.['07']?.id || null
+        if (!folderId) throw new Error('No se encontró la carpeta 07 en Drive')
+      }
+
       setDriveState('generando')
       const base64 = await generatePDFBase64(asig, ot)
       setDriveState('subiendo')
@@ -304,10 +323,11 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
               ☁️ Guardar en Drive
             </button>
           )}
-          {(driveState === 'generando' || driveState === 'subiendo') && (
+          {(driveState === 'carpetas' || driveState === 'generando' || driveState === 'subiendo') && (
             <span style={{ fontSize:12, color:'#93C5FD', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⏳</span>
-              {driveState === 'generando' ? 'Generando PDF...' : 'Subiendo a Drive...'}
+              {driveState === 'carpetas'  ? 'Creando carpetas Drive...' :
+               driveState === 'generando' ? 'Generando PDF...' : 'Subiendo a Drive...'}
             </span>
           )}
           {driveState?.url && (
