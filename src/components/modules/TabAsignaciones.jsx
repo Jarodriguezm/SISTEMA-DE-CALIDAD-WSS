@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
@@ -25,14 +25,43 @@ function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion,
 // ─── PDF ────────────────────────────────────────────────────────────────────
 const SEDE_NOMBRE = { SCL: 'Santiago (SCL)', ANF: 'Antofagasta (ANF)', CCP: 'Concepción (CCP)' }
 
-function generarPDFAsignacion(asig, ot) {
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function htmlDesc(text) {
+  if (!text) return '—'
+  return text
+    .split('\n')
+    .map(l => {
+      const t = l.trim()
+      if (!t) return '<br>'
+      if (t.startsWith('*')) return `<div style="margin:2px 0 2px 14px">• ${escHtml(t.slice(1).trim())}</div>`
+      return `<div style="margin:2px 0">${escHtml(t)}</div>`
+    })
+    .join('')
+}
+
+function htmlEquipos(text) {
+  if (!text) return '—'
+  return text
+    .split(',')
+    .map(e => e.trim())
+    .filter(Boolean)
+    .map(e => `<div style="margin:2px 0">• ${escHtml(e)}</div>`)
+    .join('')
+}
+
+function buildPDFHtml(asig, ot) {
   const hoy = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const fechaInsp = asig.fecha_inspeccion
     ? new Date(asig.fecha_inspeccion + 'T00:00:00').toLocaleDateString('es-CL')
     : '—'
   const sedeLabel = SEDE_NOMBRE[ot.sede] || ot.sede || '—'
 
-  // Separar equipos de descripción (si vienen embebidos)
   const rawDesc = asig.descripcion_actividad || ''
   const SEP = '\n\nEquipos/instrumentos:'
   let descActividad = rawDesc
@@ -43,87 +72,57 @@ function generarPDFAsignacion(asig, ot) {
     descEquipos = rawDesc.slice(idx + SEP.length).trim()
   }
 
-  // Formatear descripción: líneas con * → viñetas
-  function htmlDesc(text) {
-    if (!text) return '—'
-    return text
-      .split('\n')
-      .map(l => {
-        const t = l.trim()
-        if (!t) return '<br>'
-        if (t.startsWith('*')) return `<div style="margin:2px 0 2px 12px">• ${escHtml(t.slice(1).trim())}</div>`
-        return `<div style="margin:2px 0">${escHtml(t)}</div>`
-      })
-      .join('')
-  }
-
-  function escHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-  }
-
-  // Formatear equipos como lista (separados por coma)
-  function htmlEquipos(text) {
-    if (!text) return '—'
-    return text
-      .split(',')
-      .map(e => e.trim())
-      .filter(Boolean)
-      .map(e => `<div style="margin:2px 0">• ${escHtml(e)}</div>`)
-      .join('')
-  }
-
   const seccion = (titulo, contenido) => `
     <div style="margin-bottom:10px">
-      <div style="background:#1A3A5C;color:#fff;font-weight:bold;font-size:11px;padding:5px 10px;border-radius:4px 4px 0 0">${titulo}</div>
-      <div style="border:1px solid #c5cfe0;border-top:none;border-radius:0 0 4px 4px;padding:10px 12px;font-size:10.5px;line-height:1.6;color:#333">${contenido}</div>
+      <div style="background:#1A3A5C;color:#fff;font-weight:bold;font-size:11px;
+                  padding:5px 10px;border-radius:4px 4px 0 0">${titulo}</div>
+      <div style="border:1px solid #c5cfe0;border-top:none;border-radius:0 0 4px 4px;
+                  padding:10px 12px;font-size:10.5px;line-height:1.6;color:#333">${contenido}</div>
     </div>`
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>REG-DII-036 · ${ot.ot_numero}</title>
+  <title>REG-DII-036 · ${escHtml(ot.ot_numero)}</title>
   <style>
     @page { margin: 14mm 18mm; size: A4; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222;
+           padding: 20px; background: #fff; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 6px 10px; border: 1px solid #d0dce9; font-size: 10.5px; vertical-align: top; }
     th { background: #EEF4FB; font-weight: bold; color: #1A3A5C; width: 130px; white-space: nowrap; }
     .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px;
               font-size: 9px; color: #999; text-align: center; font-style: italic; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    @media print { body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   </style>
 </head>
 <body>
-
-  <!-- ── Encabezado ── -->
-  <div style="border:2px solid #1A3A5C;border-radius:4px;margin-bottom:14px;display:flex;overflow:hidden">
-    <!-- Logo -->
-    <div style="padding:10px 14px;border-right:2px solid #1A3A5C;display:flex;align-items:center;min-width:110px">
+  <!-- Encabezado -->
+  <div style="border:2px solid #1A3A5C;border-radius:4px;margin-bottom:14px;
+              display:flex;overflow:hidden">
+    <div style="padding:10px 14px;border-right:2px solid #1A3A5C;
+                display:flex;align-items:center;min-width:110px">
       <div>
         <div style="font-size:26px;font-weight:900;color:#1A3A5C;letter-spacing:-1px;line-height:1">WSS</div>
         <div style="font-size:6.5px;color:#185FA5;font-style:italic;margin-top:2px">Testing &amp; Certification CHILE</div>
       </div>
     </div>
-    <!-- Título -->
     <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px">
       <div style="font-size:15px;font-weight:900;color:#1A3A5C;text-align:center">
         Asignación de Actividades — REG-DII-036
       </div>
     </div>
-    <!-- Info empresa -->
-    <div style="padding:8px 14px;border-left:2px solid #1A3A5C;text-align:right;font-size:10px;color:#444;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:180px">
+    <div style="padding:8px 14px;border-left:2px solid #1A3A5C;text-align:right;
+                font-size:10px;color:#444;display:flex;flex-direction:column;
+                justify-content:center;gap:2px;min-width:180px">
       <div><strong style="color:#1A3A5C">World Survey Services SA</strong></div>
       <div>División Inspección Industrial</div>
       <div>Revisión: 04 &nbsp;|&nbsp; Fecha: ${hoy}</div>
     </div>
   </div>
 
-  <!-- ── Datos generales ── -->
   ${seccion('Datos generales de la OT', `
     <table>
       <tr>
@@ -144,7 +143,6 @@ function generarPDFAsignacion(asig, ot) {
     </table>
   `)}
 
-  <!-- ── Condiciones de ejecución ── -->
   ${(asig.tiempo_estimado || asig.vehiculo || asig.norma_ejecucion || asig.norma_evaluacion)
     ? seccion('Condiciones de ejecución', `
         <table>
@@ -156,49 +154,109 @@ function generarPDFAsignacion(asig, ot) {
             <th>Norma ejecución</th><td>${escHtml(asig.norma_ejecucion || '—')}</td>
             <th>Norma evaluación</th><td>${escHtml(asig.norma_evaluacion || '—')}</td>
           </tr>
-        </table>
-      `)
+        </table>`)
     : ''}
 
-  <!-- ── Procedimientos ── -->
-  ${asig.procedimientos
-    ? seccion('Procedimientos definidos por supervisor', escHtml(asig.procedimientos))
-    : ''}
-
-  <!-- ── Tipos de inspección ── -->
-  ${asig.tipos_inspeccion
-    ? seccion('Tipos de inspección', escHtml(asig.tipos_inspeccion))
-    : ''}
-
-  <!-- ── Equipos ── -->
-  ${descEquipos
-    ? seccion('Equipos / instrumentos a utilizar', htmlEquipos(descEquipos))
-    : ''}
-
-  <!-- ── Descripción ── -->
-  ${descActividad
-    ? seccion('Descripción de actividades / alcance', htmlDesc(descActividad))
-    : ''}
+  ${asig.procedimientos ? seccion('Procedimientos definidos por supervisor', escHtml(asig.procedimientos)) : ''}
+  ${asig.tipos_inspeccion ? seccion('Tipos de inspección', escHtml(asig.tipos_inspeccion)) : ''}
+  ${descEquipos ? seccion('Equipos / instrumentos a utilizar', htmlEquipos(descEquipos)) : ''}
+  ${descActividad ? seccion('Descripción de actividades / alcance', htmlDesc(descActividad)) : ''}
 
   <div class="footer">
     Documento generado automáticamente por el Portal WSS — División Inspección Industrial.
   </div>
-
-  <script>window.onload = function(){ window.print(); }</script>
 </body>
 </html>`
+}
 
-  const w = window.open('', '_blank', 'width=900,height=720')
-  if (!w) {
-    alert('El navegador bloqueó la ventana emergente. Permite pop-ups para este sitio y vuelve a intentarlo.')
-    return
+// ─── Modal visor PDF ─────────────────────────────────────────────────────────
+function ModalPDF({ html, titulo, driveUrl, onCerrar }) {
+  const iframeRef = useRef(null)
+
+  function descargar() {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.print()
+    }
   }
-  w.document.write(html)
-  w.document.close()
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.75)',
+      zIndex: 9999,
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Barra superior */}
+      <div style={{
+        background: '#1A3A5C', color: '#fff',
+        padding: '10px 16px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexShrink: 0,
+        gap: 8,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 'bold' }}>{titulo}</span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {driveUrl && (
+            <a
+              href={driveUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '6px 14px', borderRadius: 6,
+                background: '#fff', color: '#1A3A5C',
+                fontWeight: 'bold', fontSize: 12,
+                textDecoration: 'none', border: 'none',
+              }}
+            >
+              📁 Abrir carpeta Drive
+            </a>
+          )}
+          <button
+            onClick={descargar}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '6px 14px', borderRadius: 6,
+              background: '#2563EB', color: '#fff',
+              fontWeight: 'bold', fontSize: 12,
+              border: 'none', cursor: 'pointer',
+            }}
+          >
+            📥 Descargar PDF
+          </button>
+          <button
+            onClick={onCerrar}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '6px 12px', borderRadius: 6,
+              background: 'rgba(255,255,255,0.15)', color: '#fff',
+              fontWeight: 'bold', fontSize: 12,
+              border: '1px solid rgba(255,255,255,0.3)', cursor: 'pointer',
+            }}
+          >
+            ✕ Cerrar
+          </button>
+        </div>
+      </div>
+
+      {/* Visor */}
+      <iframe
+        ref={iframeRef}
+        srcDoc={html}
+        style={{
+          flex: 1,
+          border: 'none',
+          background: '#f0f0f0',
+          width: '100%',
+        }}
+        title="Vista previa REG-DII-036"
+      />
+    </div>
+  )
 }
 
 // ─── subcomponente: tarjeta de asignación existente ─────────────────────────
-function TarjetaAsignacion({ asig, ot }) {
+function TarjetaAsignacion({ asig, ot, onVerPDF }) {
   return (
     <div style={{
       background: '#fff',
@@ -222,13 +280,8 @@ function TarjetaAsignacion({ asig, ot }) {
         </div>
         <div style={{ textAlign: 'right' }}>
           <span style={{
-            display: 'inline-block',
-            fontSize: 10,
-            fontWeight: 'bold',
-            padding: '3px 10px',
-            borderRadius: 20,
-            background: '#EAF3DE',
-            color: '#3B6D11',
+            display: 'inline-block', fontSize: 10, fontWeight: 'bold',
+            padding: '3px 10px', borderRadius: 20, background: '#EAF3DE', color: '#3B6D11',
           }}>
             ✅ {asig.estado}
           </span>
@@ -267,7 +320,7 @@ function TarjetaAsignacion({ asig, ot }) {
         </div>
       )}
 
-      {/* ── Acciones ── */}
+      {/* Acciones */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
         {asig.whatsapp_inspectores_url && (
           <a href={asig.whatsapp_inspectores_url} target="_blank" rel="noreferrer"
@@ -281,7 +334,7 @@ function TarjetaAsignacion({ asig, ot }) {
           </a>
         )}
         <button
-          onClick={() => generarPDFAsignacion(asig, ot)}
+          onClick={() => onVerPDF(asig)}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 12, padding: '5px 14px', borderRadius: 20,
@@ -289,7 +342,7 @@ function TarjetaAsignacion({ asig, ot }) {
             border: 'none', cursor: 'pointer',
           }}
         >
-          📄 Descargar PDF
+          📄 Ver documento
         </button>
       </div>
     </div>
@@ -307,19 +360,20 @@ export default function TabAsignaciones({ ot }) {
   const [mostrarForm, setMostrarForm]   = useState(false)
   const [guardando, setGuardando]       = useState(false)
   const [exito, setExito]               = useState(null)
+  const [pdfModal, setPdfModal]         = useState(null) // { html, titulo, driveUrl }
 
   // catálogos
-  const [equipos, setEquipos]           = useState([])
+  const [equipos, setEquipos]               = useState([])
   const [procedimientos, setProcedimientos] = useState([])
-  const [inspectores, setInspectores]   = useState([])
+  const [inspectores, setInspectores]       = useState([])
 
   // form state
   const [form, setForm] = useState({
     supervisor: '',
-    inspectoresSeleccionados: [],   // array de objetos {nombre_completo, email, telefono_whatsapp}
-    equiposSeleccionados: [],       // array de strings "codigo — nombre"
-    procedimientosSeleccionados: [],// array de strings "codigo — nombre"
-    tiposInspeccion: [],            // array de strings
+    inspectoresSeleccionados: [],
+    equiposSeleccionados: [],
+    procedimientosSeleccionados: [],
+    tiposInspeccion: [],
     fechaInspeccion: '',
     hora: '',
     tiempoEstimado: '',
@@ -346,7 +400,6 @@ export default function TabAsignaciones({ ot }) {
     { cod: 'O',   desc: 'Otros' },
   ]
 
-  // ── cargar asignaciones existentes ──────────────────────────────────────
   const cargarAsignaciones = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -363,25 +416,13 @@ export default function TabAsignaciones({ ot }) {
     }
   }, [ot.ot_numero])
 
-  // ── cargar catálogos ─────────────────────────────────────────────────────
   const cargarCatalogos = useCallback(async () => {
     try {
       const [{ data: eq }, { data: proc }, { data: insp }] = await Promise.all([
-        supabase
-          .from('equipos')
-          .select('id, equipo_instrumento, codigo')
-          .eq('activo', true)
-          .order('equipo_instrumento'),
-        supabase
-          .from('catalogo_procedimientos')
-          .select('id, nombre, codigo')
-          .eq('activo', true)
-          .order('codigo'),
-        supabase
-          .from('v_usuarios_portal')
-          .select('nombre_completo, email, telefono_whatsapp, rol')
-          .in('rol', ['INSPECTOR', 'SUPERVISOR', 'ADMIN'])
-          .order('nombre_completo'),
+        supabase.from('equipos').select('id, equipo_instrumento, codigo').eq('activo', true).order('equipo_instrumento'),
+        supabase.from('catalogo_procedimientos').select('id, nombre, codigo').eq('activo', true).order('codigo'),
+        supabase.from('v_usuarios_portal').select('nombre_completo, email, telefono_whatsapp, rol')
+          .in('rol', ['INSPECTOR', 'SUPERVISOR', 'ADMIN']).order('nombre_completo'),
       ])
       setEquipos(eq || [])
       setProcedimientos(proc || [])
@@ -396,7 +437,6 @@ export default function TabAsignaciones({ ot }) {
     cargarCatalogos()
   }, [cargarAsignaciones, cargarCatalogos])
 
-  // ── toggle helpers ───────────────────────────────────────────────────────
   function toggleInspector(inspector) {
     setForm(f => {
       const existe = f.inspectoresSeleccionados.find(i => i.email === inspector.email)
@@ -438,7 +478,16 @@ export default function TabAsignaciones({ ot }) {
     }))
   }
 
-  // ── guardar ──────────────────────────────────────────────────────────────
+  function abrirPDF(asig) {
+    const html = buildPDFHtml(asig, ot)
+    const fechaInsp = asig.fecha_inspeccion
+      ? new Date(asig.fecha_inspeccion + 'T00:00:00').toLocaleDateString('es-CL')
+      : ''
+    const titulo = `REG-DII-036 · ${ot.ot_numero} · ${fechaInsp}`
+    const driveUrl = ot.carpeta_drive || ot.drive_url || ot.link_drive || null
+    setPdfModal({ html, titulo, driveUrl })
+  }
+
   async function guardarAsignacion() {
     if (form.inspectoresSeleccionados.length === 0) {
       alert('Selecciona al menos un inspector.')
@@ -454,12 +503,11 @@ export default function TabAsignaciones({ ot }) {
     setError(null)
 
     try {
-      const inspectoresStr = form.inspectoresSeleccionados.map(i => i.nombre_completo).join(', ')
-      const procedimientosStr = form.procedimientosSeleccionados.join(', ')
-      const tiposStr = form.tiposInspeccion.join(', ')
-      const equiposStr = form.equiposSeleccionados.join(', ')
+      const inspectoresStr      = form.inspectoresSeleccionados.map(i => i.nombre_completo).join(', ')
+      const procedimientosStr   = form.procedimientosSeleccionados.join(', ')
+      const tiposStr            = form.tiposInspeccion.join(', ')
+      const equiposStr          = form.equiposSeleccionados.join(', ')
 
-      // Construir link WA (todos los inspectores)
       const mensajeWA = buildWAMensaje({
         otNumero: ot.ot_numero,
         cliente: ot.cliente,
@@ -469,30 +517,28 @@ export default function TabAsignaciones({ ot }) {
         supervisorNombre: form.supervisor || nombreCompleto,
       })
 
-      // Primer inspector con teléfono para el link (link único al primero con tel)
       const primerConTel = form.inspectoresSeleccionados.find(i => i.telefono_whatsapp)
       const waUrl = primerConTel ? waLink(primerConTel.telefono_whatsapp, mensajeWA) : null
 
-      // Descripción enriquecida con equipos si hay seleccionados
       const descripcionFinal = equiposStr
         ? `${form.descripcionActividad}\n\nEquipos/instrumentos: ${equiposStr}`
         : form.descripcionActividad
 
-      const { data, error: err } = await supabase.rpc('crear_asignacion_portal', {
-        p_email_usuario:          usuario?.email || '',
-        p_ot_numero:              ot.ot_numero,
-        p_supervisor:             form.supervisor || nombreCompleto,
-        p_inspectores_asignados:  inspectoresStr,
-        p_fecha_inspeccion:       form.fechaInspeccion || null,
-        p_hora:                   form.hora || null,
-        p_tiempo_estimado:        form.tiempoEstimado || null,
-        p_vehiculo:               form.vehiculo || null,
-        p_norma_ejecucion:        form.normaEjecucion || null,
-        p_norma_evaluacion:       form.normaEvaluacion || null,
-        p_procedimientos:         procedimientosStr || null,
-        p_tipos_inspeccion:       tiposStr || null,
-        p_descripcion_actividad:  descripcionFinal,
-        p_drive_url:              null,
+      const { error: err } = await supabase.rpc('crear_asignacion_portal', {
+        p_email_usuario:            usuario?.email || '',
+        p_ot_numero:                ot.ot_numero,
+        p_supervisor:               form.supervisor || nombreCompleto,
+        p_inspectores_asignados:    inspectoresStr,
+        p_fecha_inspeccion:         form.fechaInspeccion || null,
+        p_hora:                     form.hora || null,
+        p_tiempo_estimado:          form.tiempoEstimado || null,
+        p_vehiculo:                 form.vehiculo || null,
+        p_norma_ejecucion:          form.normaEjecucion || null,
+        p_norma_evaluacion:         form.normaEvaluacion || null,
+        p_procedimientos:           procedimientosStr || null,
+        p_tipos_inspeccion:         tiposStr || null,
+        p_descripcion_actividad:    descripcionFinal,
+        p_drive_url:                null,
         p_whatsapp_inspectores_url: waUrl,
       })
 
@@ -508,18 +554,10 @@ export default function TabAsignaciones({ ot }) {
 
       setMostrarForm(false)
       setForm({
-        supervisor: '',
-        inspectoresSeleccionados: [],
-        equiposSeleccionados: [],
-        procedimientosSeleccionados: [],
-        tiposInspeccion: [],
-        fechaInspeccion: '',
-        hora: '',
-        tiempoEstimado: '',
-        vehiculo: '',
-        normaEjecucion: '',
-        normaEvaluacion: '',
-        descripcionActividad: '',
+        supervisor: '', inspectoresSeleccionados: [], equiposSeleccionados: [],
+        procedimientosSeleccionados: [], tiposInspeccion: [],
+        fechaInspeccion: '', hora: '', tiempoEstimado: '', vehiculo: '',
+        normaEjecucion: '', normaEvaluacion: '', descripcionActividad: '',
       })
       await cargarAsignaciones()
     } catch (e) {
@@ -529,7 +567,6 @@ export default function TabAsignaciones({ ot }) {
     }
   }
 
-  // ── render ───────────────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 32, color: '#aaa' }}>
       Cargando asignaciones...
@@ -538,7 +575,17 @@ export default function TabAsignaciones({ ot }) {
 
   return (
     <div>
-      {/* ── encabezado ── */}
+      {/* Modal PDF */}
+      {pdfModal && (
+        <ModalPDF
+          html={pdfModal.html}
+          titulo={pdfModal.titulo}
+          driveUrl={pdfModal.driveUrl}
+          onCerrar={() => setPdfModal(null)}
+        />
+      )}
+
+      {/* Encabezado */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 'bold', color: '#1A3A5C' }}>
@@ -561,35 +608,28 @@ export default function TabAsignaciones({ ot }) {
         )}
       </div>
 
-      {/* ── error global ── */}
       {error && (
         <div style={{ background: '#FCEBEB', border: '1px solid #E57373', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#A32D2D', marginBottom: 12 }}>
           ⚠️ {error}
         </div>
       )}
 
-      {/* ── éxito + links WA ── */}
       {exito && (
         <div style={{ background: '#EAF3DE', border: '1px solid #97C459', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ fontWeight: 'bold', color: '#3B6D11', marginBottom: 8 }}>
-            ✅ Asignación guardada correctamente
-          </div>
+          <div style={{ fontWeight: 'bold', color: '#3B6D11', marginBottom: 8 }}>✅ Asignación guardada correctamente</div>
           <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
             Inspector(es): <b>{exito.inspectores.map(i => i.nombre_completo).join(', ')}</b>
           </div>
           {exito.waLinks.length > 0 && (
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', marginBottom: 6 }}>
-                📱 Enviar notificación por WhatsApp:
-              </div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', marginBottom: 6 }}>📱 Enviar notificación por WhatsApp:</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {exito.waLinks.map(l => (
                   <a key={l.url} href={l.url} target="_blank" rel="noreferrer"
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5,
                       fontSize: 12, padding: '6px 14px', borderRadius: 20,
-                      background: '#25D366', color: '#fff', fontWeight: 'bold',
-                      textDecoration: 'none',
+                      background: '#25D366', color: '#fff', fontWeight: 'bold', textDecoration: 'none',
                     }}>
                     💬 Notificar a {l.nombre}
                   </a>
@@ -600,7 +640,7 @@ export default function TabAsignaciones({ ot }) {
         </div>
       )}
 
-      {/* ── formulario nueva asignación ── */}
+      {/* Formulario */}
       {mostrarForm && (
         <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 12, padding: 20, marginBottom: 16 }}>
           <div style={{ fontSize: 14, fontWeight: 'bold', color: '#1A3A5C', marginBottom: 16 }}>
@@ -618,12 +658,7 @@ export default function TabAsignaciones({ ot }) {
                 const sel = form.inspectoresSeleccionados.find(i => i.email === insp.email)
                 return (
                   <label key={insp.email} style={checkRowStyle(!!sel)}>
-                    <input
-                      type="checkbox"
-                      checked={!!sel}
-                      onChange={() => toggleInspector(insp)}
-                      style={{ width: 'auto', cursor: 'pointer' }}
-                    />
+                    <input type="checkbox" checked={!!sel} onChange={() => toggleInspector(insp)} style={{ width: 'auto', cursor: 'pointer' }} />
                     <span style={{ flex: 1, fontSize: 13 }}>{insp.nombre_completo}</span>
                     <span style={{ fontSize: 10, color: '#aaa' }}>{insp.telefono_whatsapp || ''}</span>
                   </label>
@@ -641,30 +676,16 @@ export default function TabAsignaciones({ ot }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Supervisor</label>
-              <input
-                value={form.supervisor}
-                onChange={e => setForm(f => ({ ...f, supervisor: e.target.value }))}
-                placeholder={nombreCompleto}
-                style={inputStyle}
-              />
+              <input value={form.supervisor} onChange={e => setForm(f => ({ ...f, supervisor: e.target.value }))}
+                placeholder={nombreCompleto} style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Fecha inspección *</label>
-              <input
-                type="date"
-                value={form.fechaInspeccion}
-                onChange={e => setForm(f => ({ ...f, fechaInspeccion: e.target.value }))}
-                style={inputStyle}
-              />
+              <input type="date" value={form.fechaInspeccion} onChange={e => setForm(f => ({ ...f, fechaInspeccion: e.target.value }))} style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Hora</label>
-              <input
-                type="time"
-                value={form.hora}
-                onChange={e => setForm(f => ({ ...f, hora: e.target.value }))}
-                style={inputStyle}
-              />
+              <input type="time" value={form.hora} onChange={e => setForm(f => ({ ...f, hora: e.target.value }))} style={inputStyle} />
             </div>
           </div>
 
@@ -739,28 +760,21 @@ export default function TabAsignaciones({ ot }) {
             )}
           </div>
 
-          {/* Tipos de inspección */}
+          {/* Tipos */}
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Tipos de inspección</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
               {TIPOS.map(t => {
                 const sel = form.tiposInspeccion.includes(t.cod)
                 return (
-                  <button
-                    key={t.cod}
-                    onClick={() => toggleTipo(t.cod)}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 8,
-                      border: `1.5px solid ${sel ? '#185FA5' : '#ddd'}`,
-                      background: sel ? '#E6F1FB' : '#fff',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      fontWeight: sel ? 'bold' : 'normal',
-                      color: sel ? '#185FA5' : '#555',
-                      transition: 'all 0.15s',
-                    }}
-                  >
+                  <button key={t.cod} onClick={() => toggleTipo(t.cod)} style={{
+                    padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 11,
+                    border: `1.5px solid ${sel ? '#185FA5' : '#ddd'}`,
+                    background: sel ? '#E6F1FB' : '#fff',
+                    fontWeight: sel ? 'bold' : 'normal',
+                    color: sel ? '#185FA5' : '#555',
+                    transition: 'all 0.15s',
+                  }}>
                     <span style={{ display: 'block', fontWeight: 900, fontSize: 13 }}>{t.cod}</span>
                     <span style={{ display: 'block', fontSize: 9, color: sel ? '#185FA5' : '#aaa' }}>{t.desc}</span>
                   </button>
@@ -781,7 +795,6 @@ export default function TabAsignaciones({ ot }) {
             />
           </div>
 
-          {/* Info WA */}
           <div style={{ background: '#E6F1FB', border: '1px solid #85B7EB', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#185FA5', marginBottom: 14 }}>
             💬 Al guardar se generarán los <b>links de WhatsApp</b> para notificar a cada inspector seleccionado.
           </div>
@@ -792,30 +805,17 @@ export default function TabAsignaciones({ ot }) {
             </div>
           )}
 
-          {/* Botones */}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => { setMostrarForm(false); setError(null) }}
-              style={btnOutline}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={guardarAsignacion}
-              disabled={guardando}
-              style={{
-                ...btnPrimary,
-                opacity: guardando ? 0.7 : 1,
-                cursor: guardando ? 'not-allowed' : 'pointer',
-              }}
-            >
+            <button onClick={() => { setMostrarForm(false); setError(null) }} style={btnOutline}>Cancelar</button>
+            <button onClick={guardarAsignacion} disabled={guardando}
+              style={{ ...btnPrimary, opacity: guardando ? 0.7 : 1, cursor: guardando ? 'not-allowed' : 'pointer' }}>
               {guardando ? 'Guardando...' : 'Guardar y generar links WA →'}
             </button>
           </div>
         </div>
       )}
 
-      {/* ── lista de asignaciones existentes ── */}
+      {/* Lista */}
       {asignaciones.length === 0 && !mostrarForm ? (
         <div style={{ textAlign: 'center', padding: '32px 16px', color: '#aaa', background: '#fff', borderRadius: 10, border: '1px dashed #ddd' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
@@ -830,7 +830,7 @@ export default function TabAsignaciones({ ot }) {
             </div>
           )}
           {asignaciones.map((a, i) => (
-            <TarjetaAsignacion key={i} asig={a} ot={ot} />
+            <TarjetaAsignacion key={i} asig={a} ot={ot} onVerPDF={abrirPDF} />
           ))}
         </div>
       )}
@@ -838,71 +838,10 @@ export default function TabAsignaciones({ ot }) {
   )
 }
 
-// ─── estilos reutilizables ───────────────────────────────────────────────────
-const labelStyle = {
-  display: 'block',
-  fontSize: 11,
-  color: '#666',
-  fontWeight: 'bold',
-  marginBottom: 4,
-}
-
-const inputStyle = {
-  width: '100%',
-  padding: '8px 10px',
-  border: '1.5px solid #ddd',
-  borderRadius: 8,
-  fontSize: 13,
-  fontFamily: 'Arial, sans-serif',
-  boxSizing: 'border-box',
-}
-
-const checkboxListStyle = {
-  border: '1.5px solid #ddd',
-  borderRadius: 8,
-  padding: 8,
-  maxHeight: 160,
-  overflowY: 'auto',
-  background: '#fff',
-}
-
-const checkRowStyle = (selected) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '5px 4px',
-  cursor: 'pointer',
-  borderRadius: 6,
-  fontWeight: 'normal',
-  margin: 0,
-  background: selected ? '#EEF5FF' : 'transparent',
-  transition: 'background 0.1s',
-})
-
-const btnPrimary = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  padding: '9px 18px',
-  borderRadius: 8,
-  border: 'none',
-  background: '#1A3A5C',
-  color: '#fff',
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 'bold',
-}
-
-const btnOutline = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  padding: '9px 18px',
-  borderRadius: 8,
-  border: '1.5px solid #1A3A5C',
-  background: '#fff',
-  color: '#1A3A5C',
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 'bold',
-}
+// ─── estilos ─────────────────────────────────────────────────────────────────
+const labelStyle = { display: 'block', fontSize: 11, color: '#666', fontWeight: 'bold', marginBottom: 4 }
+const inputStyle = { width: '100%', padding: '8px 10px', border: '1.5px solid #ddd', borderRadius: 8, fontSize: 13, fontFamily: 'Arial, sans-serif', boxSizing: 'border-box' }
+const checkboxListStyle = { border: '1.5px solid #ddd', borderRadius: 8, padding: 8, maxHeight: 160, overflowY: 'auto', background: '#fff' }
+const checkRowStyle = (selected) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 4px', cursor: 'pointer', borderRadius: 6, fontWeight: 'normal', margin: 0, background: selected ? '#EEF5FF' : 'transparent', transition: 'background 0.1s' })
+const btnPrimary = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 18px', borderRadius: 8, border: 'none', background: '#1A3A5C', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }
+const btnOutline = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 18px', borderRadius: 8, border: '1.5px solid #1A3A5C', background: '#fff', color: '#1A3A5C', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }
