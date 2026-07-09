@@ -202,8 +202,12 @@ async function generatePDFBase64(asig, ot) {
     remaining -= pageH
   }
 
-  // Retornar base64 puro (sin el prefijo data:...)
-  return pdf.output('datauristring').split(',')[1]
+  // Retornar base64 puro usando arraybuffer (más confiable que datauristring)
+  const arrayBuffer = pdf.output('arraybuffer')
+  const bytes = new Uint8Array(arrayBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
 }
 
 /** Extrae el folder ID de Drive para la carpeta 07-Asignaciones de esta OT */
@@ -225,6 +229,8 @@ function getAsignFolderId(ot) {
 
 /** Sube PDF a Drive via el serverless function existente */
 async function subirPDFaDrive(base64, nombre, folderId) {
+  if (!folderId) throw new Error('No hay folder ID válido para subir el archivo')
+  if (!base64 || base64.length < 100) throw new Error('El PDF generado está vacío o es inválido')
   const res = await fetch('/api/drive/subir-archivo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -236,7 +242,10 @@ async function subirPDFaDrive(base64, nombre, folderId) {
     }),
   })
   const data = await res.json()
-  if (!data.ok) throw new Error(data.error || 'Error al subir a Drive')
+  if (!data.ok) {
+    // Error detallado para diagnóstico
+    throw new Error(`${data.error || 'Error Drive'} [folder: ${folderId}]`)
+  }
   return data // { ok, file_id, file_url, file_name }
 }
 
