@@ -299,16 +299,55 @@ function SeccionCargaInforme({ ot }) {
   const [error, setError] = useState('')
   const [exito, setExito] = useState('')
 
+  // Lista de supervisores/admins para seleccionar a quién notificar
+  const [supervisores, setSupervisores] = useState([])
+  const [supervisorSeleccionado, setSupervisorSeleccionado] = useState(null)
+
   // La carpeta 09 del OT
   const carpeta09Id = ot.carpetas_drive?.['09']?.id
   const carpeta09Url = ot.carpetas_drive?.['09']?.url
 
   // Documentos ya subidos
   const [docsSubidos, setDocsSubidos] = useState([])
-  useEffect(() => { cargarDocs() }, [ot.ot_numero])
+  useEffect(() => { cargarDocs(); cargarSupervisores() }, [ot.ot_numero])
   async function cargarDocs() {
     const { data } = await supabase.from('documentos_ot').select('*').eq('ot_numero', ot.ot_numero).eq('tipo', 'informe').order('created_at', { ascending: false })
     setDocsSubidos(data || [])
+  }
+  async function cargarSupervisores() {
+    // Consultar tabla usuarios directamente (igual que ModalCrearOT) para tener email y teléfono
+    const { data } = await supabase
+      .from('usuarios')
+      .select('id, nombre, apellido, email, telefono_whatsapp, rol, sede')
+      .eq('activo', true)
+      .in('rol', ['SUPERVISOR', 'ADMIN'])
+      .order('nombre')
+    // Normalizar a { nombre_completo, email, telefono_whatsapp } para compatibilidad con el JSX
+    const lista = (data || []).map(s => ({
+      ...s,
+      nombre_completo: `${s.nombre} ${s.apellido}`.trim(),
+    }))
+    setSupervisores(lista)
+
+    // Intentar preseleccionar el supervisor de la última asignación de esta OT
+    const { data: asigs } = await supabase
+      .from('asignaciones')
+      .select('supervisor')
+      .eq('ot_numero', ot.ot_numero)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const supNombre = asigs?.[0]?.supervisor || ot.supervisor || null
+    if (supNombre && lista.length > 0) {
+      const normalizar = str => str?.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() || ''
+      const supNorm = normalizar(supNombre.trim())
+      const match = lista.find(s => {
+        const n = normalizar(s.nombre_completo)
+        return n.includes(supNorm) || supNorm.includes(n)
+      })
+      setSupervisorSeleccionado(match || lista[0])
+    } else if (lista.length > 0) {
+      setSupervisorSeleccionado(lista[0])
+    }
   }
 
   function onFileChange(e) {
@@ -339,35 +378,12 @@ function SeccionCargaInforme({ ot }) {
   }
 
   async function notificarSupervisor() {
+    if (!supervisorSeleccionado) { setError('Selecciona un supervisor para notificar.'); return }
+    if (!supervisorSeleccionado.email) { setError(`El supervisor "${supervisorSeleccionado.nombre_completo}" no tiene email registrado en el sistema.`); return }
     setNotificando(true); setError('')
     try {
       const { data: informesOT } = await supabase.from('numeros_informe').select('codigo_informe').eq('ot_numero', ot.ot_numero).order('created_at')
       const codigos = informesOT?.map(i => i.codigo_informe) || []
-
-      // Buscar nombre del supervisor desde la última asignación de esta OT
-      const { data: asigs } = await supabase
-        .from('asignaciones')
-        .select('supervisor')
-        .eq('ot_numero', ot.ot_numero)
-        .order('created_at', { ascending: false })
-        .limit(1)
-      const supNombre = asigs?.[0]?.supervisor || ot.supervisor || null
-
-      // Buscar email del supervisor en v_usuarios_portal
-      let supervisorEmail = null
-      if (supNombre) {
-        const { data: supData } = await supabase
-          .from('v_usuarios_portal')
-          .select('email,nombre_completo')
-          .ilike('nombre_completo', `%${supNombre.trim()}%`)
-          .maybeSingle()
-        supervisorEmail = supData?.email || null
-        if (!supervisorEmail) {
-          throw new Error(`No se encontró el correo del supervisor "${supNombre}". Verifica que tenga email registrado en el sistema.`)
-        }
-      } else {
-        throw new Error('Esta OT no tiene supervisor asignado.')
-      }
 
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notificar-supervisor`, {
@@ -378,12 +394,12 @@ function SeccionCargaInforme({ ot }) {
           inspector_nombre: usuario?.nombre || usuario?.email,
           informes_codigos: codigos,
           mensaje_adicional: mensajeObs,
-          supervisor_email: supervisorEmail, // pasar email directamente
+          supervisor_email: supervisorSeleccionado.email,
         }),
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
-      setExito(`✉️ Supervisor notificado correctamente (${data.supervisor_email || supervisorEmail})`)
+      setExito(`✉️ Supervisor notificado correctamente (${supervisorSeleccionado.email})`)
       setMensajeObs('')
     } catch (e) { setError('Error al notificar: ' + e.message) } finally { setNotificando(false) }
   }
@@ -436,10 +452,37 @@ function SeccionCargaInforme({ ot }) {
 
         {/* Notificar supervisor */}
         <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Mensaje adicional al supervisor (opcional)</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Notificar supervisor</div>
+
+          {/* Selector de supervisor */}
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 12, color: '#475569', display: 'block', marginBottom: 4 }}>Enviar notificación a:</label>
+            {supervisores.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#94A3B8' }}>Cargando supervisores...</div>
+            ) : (
+              <select
+                value={supervisorSeleccionado?.email || ''}
+                onChange={e => setSupervisorSeleccionado(supervisores.find(s => s.email === e.target.value) || null)}
+                style={{ width: '100%', padding: '7px 10px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#fff', marginBottom: 4 }}
+              >
+                {supervisores.map(s => (
+                  <option key={s.email} value={s.email}>
+                    {s.nombre_completo} {s.email ? `— ${s.email}` : '(sin email)'}
+                  </option>
+                ))}
+              </select>
+            )}
+            {supervisorSeleccionado && !supervisorSeleccionado.email && (
+              <div style={{ fontSize: 11, color: '#DC2626', marginTop: 2 }}>
+                ⚠️ Este supervisor no tiene email registrado. No se puede notificar automáticamente.
+              </div>
+            )}
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Mensaje adicional (opcional)</div>
           <textarea value={mensajeObs} onChange={e => setMensajeObs(e.target.value)} placeholder="Observaciones, instrucciones o comentarios para el supervisor..."
             style={{ width: '100%', padding: '7px 10px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, minHeight: 70, resize: 'vertical', boxSizing: 'border-box', marginBottom: 10 }} />
-          <button className="btn btn-primary" onClick={notificarSupervisor} disabled={notificando} style={{ background: '#7C3AED', borderColor: '#7C3AED' }}>
+          <button className="btn btn-primary" onClick={notificarSupervisor} disabled={notificando || !supervisorSeleccionado} style={{ background: '#7C3AED', borderColor: '#7C3AED' }}>
             {notificando ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Notificando...</> : '📧 Notificar al Supervisor'}
           </button>
         </div>
