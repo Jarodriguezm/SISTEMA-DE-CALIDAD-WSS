@@ -22,8 +22,183 @@ function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion,
   )
 }
 
+// ─── PDF ────────────────────────────────────────────────────────────────────
+const SEDE_NOMBRE = { SCL: 'Santiago (SCL)', ANF: 'Antofagasta (ANF)', CCP: 'Concepción (CCP)' }
+
+function generarPDFAsignacion(asig, ot) {
+  const hoy = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const fechaInsp = asig.fecha_inspeccion
+    ? new Date(asig.fecha_inspeccion + 'T00:00:00').toLocaleDateString('es-CL')
+    : '—'
+  const sedeLabel = SEDE_NOMBRE[ot.sede] || ot.sede || '—'
+
+  // Separar equipos de descripción (si vienen embebidos)
+  const rawDesc = asig.descripcion_actividad || ''
+  const SEP = '\n\nEquipos/instrumentos:'
+  let descActividad = rawDesc
+  let descEquipos = null
+  if (rawDesc.includes(SEP)) {
+    const idx = rawDesc.indexOf(SEP)
+    descActividad = rawDesc.slice(0, idx).trim()
+    descEquipos = rawDesc.slice(idx + SEP.length).trim()
+  }
+
+  // Formatear descripción: líneas con * → viñetas
+  function htmlDesc(text) {
+    if (!text) return '—'
+    return text
+      .split('\n')
+      .map(l => {
+        const t = l.trim()
+        if (!t) return '<br>'
+        if (t.startsWith('*')) return `<div style="margin:2px 0 2px 12px">• ${escHtml(t.slice(1).trim())}</div>`
+        return `<div style="margin:2px 0">${escHtml(t)}</div>`
+      })
+      .join('')
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+  }
+
+  // Formatear equipos como lista (separados por coma)
+  function htmlEquipos(text) {
+    if (!text) return '—'
+    return text
+      .split(',')
+      .map(e => e.trim())
+      .filter(Boolean)
+      .map(e => `<div style="margin:2px 0">• ${escHtml(e)}</div>`)
+      .join('')
+  }
+
+  const seccion = (titulo, contenido) => `
+    <div style="margin-bottom:10px">
+      <div style="background:#1A3A5C;color:#fff;font-weight:bold;font-size:11px;padding:5px 10px;border-radius:4px 4px 0 0">${titulo}</div>
+      <div style="border:1px solid #c5cfe0;border-top:none;border-radius:0 0 4px 4px;padding:10px 12px;font-size:10.5px;line-height:1.6;color:#333">${contenido}</div>
+    </div>`
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>REG-DII-036 · ${ot.ot_numero}</title>
+  <style>
+    @page { margin: 14mm 18mm; size: A4; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #222; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 6px 10px; border: 1px solid #d0dce9; font-size: 10.5px; vertical-align: top; }
+    th { background: #EEF4FB; font-weight: bold; color: #1A3A5C; width: 130px; white-space: nowrap; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px;
+              font-size: 9px; color: #999; text-align: center; font-style: italic; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+
+  <!-- ── Encabezado ── -->
+  <div style="border:2px solid #1A3A5C;border-radius:4px;margin-bottom:14px;display:flex;overflow:hidden">
+    <!-- Logo -->
+    <div style="padding:10px 14px;border-right:2px solid #1A3A5C;display:flex;align-items:center;min-width:110px">
+      <div>
+        <div style="font-size:26px;font-weight:900;color:#1A3A5C;letter-spacing:-1px;line-height:1">WSS</div>
+        <div style="font-size:6.5px;color:#185FA5;font-style:italic;margin-top:2px">Testing &amp; Certification CHILE</div>
+      </div>
+    </div>
+    <!-- Título -->
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px">
+      <div style="font-size:15px;font-weight:900;color:#1A3A5C;text-align:center">
+        Asignación de Actividades — REG-DII-036
+      </div>
+    </div>
+    <!-- Info empresa -->
+    <div style="padding:8px 14px;border-left:2px solid #1A3A5C;text-align:right;font-size:10px;color:#444;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:180px">
+      <div><strong style="color:#1A3A5C">World Survey Services SA</strong></div>
+      <div>División Inspección Industrial</div>
+      <div>Revisión: 04 &nbsp;|&nbsp; Fecha: ${hoy}</div>
+    </div>
+  </div>
+
+  <!-- ── Datos generales ── -->
+  ${seccion('Datos generales de la OT', `
+    <table>
+      <tr>
+        <th>N° OT</th><td>${escHtml(ot.ot_numero)}</td>
+        <th>Cliente</th><td>${escHtml(ot.cliente || '—')}</td>
+      </tr>
+      <tr>
+        <th>Sede</th><td>${escHtml(sedeLabel)}</td>
+        <th>Supervisor</th><td>${escHtml(asig.supervisor || '—')}</td>
+      </tr>
+      <tr>
+        <th>Fecha inspección</th><td>${escHtml(fechaInsp)}</td>
+        <th>Hora</th><td>${escHtml(asig.hora || '—')}</td>
+      </tr>
+      <tr>
+        <th>Inspector(es)</th><td colspan="3">${escHtml(asig.inspectores_asignados || '—')}</td>
+      </tr>
+    </table>
+  `)}
+
+  <!-- ── Condiciones de ejecución ── -->
+  ${(asig.tiempo_estimado || asig.vehiculo || asig.norma_ejecucion || asig.norma_evaluacion)
+    ? seccion('Condiciones de ejecución', `
+        <table>
+          <tr>
+            <th>Tiempo estimado</th><td>${escHtml(asig.tiempo_estimado || '—')}</td>
+            <th>Vehículo</th><td>${escHtml(asig.vehiculo || '—')}</td>
+          </tr>
+          <tr>
+            <th>Norma ejecución</th><td>${escHtml(asig.norma_ejecucion || '—')}</td>
+            <th>Norma evaluación</th><td>${escHtml(asig.norma_evaluacion || '—')}</td>
+          </tr>
+        </table>
+      `)
+    : ''}
+
+  <!-- ── Procedimientos ── -->
+  ${asig.procedimientos
+    ? seccion('Procedimientos definidos por supervisor', escHtml(asig.procedimientos))
+    : ''}
+
+  <!-- ── Tipos de inspección ── -->
+  ${asig.tipos_inspeccion
+    ? seccion('Tipos de inspección', escHtml(asig.tipos_inspeccion))
+    : ''}
+
+  <!-- ── Equipos ── -->
+  ${descEquipos
+    ? seccion('Equipos / instrumentos a utilizar', htmlEquipos(descEquipos))
+    : ''}
+
+  <!-- ── Descripción ── -->
+  ${descActividad
+    ? seccion('Descripción de actividades / alcance', htmlDesc(descActividad))
+    : ''}
+
+  <div class="footer">
+    Documento generado automáticamente por el Portal WSS — División Inspección Industrial.
+  </div>
+
+  <script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`
+
+  const w = window.open('', '_blank', 'width=900,height=720')
+  if (!w) {
+    alert('El navegador bloqueó la ventana emergente. Permite pop-ups para este sitio y vuelve a intentarlo.')
+    return
+  }
+  w.document.write(html)
+  w.document.close()
+}
+
 // ─── subcomponente: tarjeta de asignación existente ─────────────────────────
-function TarjetaAsignacion({ asig }) {
+function TarjetaAsignacion({ asig, ot }) {
   return (
     <div style={{
       background: '#fff',
@@ -92,17 +267,31 @@ function TarjetaAsignacion({ asig }) {
         </div>
       )}
 
-      {asig.whatsapp_inspectores_url && (
-        <a href={asig.whatsapp_inspectores_url} target="_blank" rel="noreferrer"
+      {/* ── Acciones ── */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+        {asig.whatsapp_inspectores_url && (
+          <a href={asig.whatsapp_inspectores_url} target="_blank" rel="noreferrer"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 12, padding: '5px 12px', borderRadius: 20,
+              background: '#25D366', color: '#fff', fontWeight: 'bold',
+              textDecoration: 'none',
+            }}>
+            💬 Reenviar WhatsApp
+          </a>
+        )}
+        <button
+          onClick={() => generarPDFAsignacion(asig, ot)}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 12, padding: '5px 12px', borderRadius: 20,
-            background: '#25D366', color: '#fff', fontWeight: 'bold',
-            textDecoration: 'none',
-          }}>
-          💬 Reenviar WhatsApp
-        </a>
-      )}
+            fontSize: 12, padding: '5px 14px', borderRadius: 20,
+            background: '#1A3A5C', color: '#fff', fontWeight: 'bold',
+            border: 'none', cursor: 'pointer',
+          }}
+        >
+          📄 Descargar PDF
+        </button>
+      </div>
     </div>
   )
 }
@@ -641,7 +830,7 @@ export default function TabAsignaciones({ ot }) {
             </div>
           )}
           {asignaciones.map((a, i) => (
-            <TarjetaAsignacion key={i} asig={a} />
+            <TarjetaAsignacion key={i} asig={a} ot={ot} />
           ))}
         </div>
       )}
