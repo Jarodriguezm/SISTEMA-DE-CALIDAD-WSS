@@ -70,7 +70,9 @@ export default async function handler(req, res) {
     const data = await uploadRes.json()
 
     if (!data.id) {
-      throw new Error('Drive no retornó ID de archivo: ' + JSON.stringify(data))
+      const code = data.error?.code || uploadRes.status
+      const msg  = data.error?.message || data.error?.errors?.[0]?.reason || JSON.stringify(data)
+      throw new Error(`Drive error ${code}: ${msg}`)
     }
 
     return res.status(200).json({
