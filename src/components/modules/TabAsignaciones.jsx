@@ -11,12 +11,14 @@ function waLink(tel, mensaje) {
   return `https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`
 }
 
-function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion, supervisorNombre }) {
+function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion, supervisorNombre, pdfUrl }) {
   return (
     `Hola, te informamos que has sido asignado/a a una actividad de inspección.\n\n` +
     `*OT:* ${otNumero}\n*Cliente:* ${cliente}\n*Fecha:* ${fechaInspeccion || 'Por confirmar'}\n` +
     `*Hora:* ${hora || 'Por confirmar'}\n*Descripción:* ${descripcion || '—'}\n` +
-    `*Supervisor:* ${supervisorNombre}\n\nPor favor confirma recepción. — WSS División Inspección Industrial`
+    `*Supervisor:* ${supervisorNombre}\n\n` +
+    (pdfUrl ? `📄 *Asignación REG-DII-036:* ${pdfUrl}\n\n` : '') +
+    `Por favor confirma recepción. — WSS División Inspección Industrial`
   )
 }
 
@@ -232,8 +234,11 @@ async function subirPDFaSupabase(base64, nombre, otNumero) {
 // ─── Modal visor PDF ──────────────────────────────────────────────────────────
 function ModalPDF({ html, asig, ot, onCerrar }) {
   const iframeRef   = useRef(null)
+  const { usuario } = useAuth()
+  const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
+
   const [pdfState, setPdfState] = useState(null)
-  // pdfState: null | 'generando' | 'subiendo' | { url } | { error: string }
+  // pdfState: null | 'generando' | 'subiendo' | { url, contactos[] } | { error: string }
 
   const tituloArchivo = `REG-DII-036_${ot.ot_numero}_${new Date().toISOString().slice(0,10)}.pdf`
   const tituloModal   = `REG-DII-036 · ${ot.ot_numero}`
@@ -244,7 +249,25 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
       const base64 = await generatePDFBase64(asig, ot)
       setPdfState('subiendo')
       const url = await subirPDFaSupabase(base64, tituloArchivo, ot.ot_numero)
-      setPdfState({ url })
+
+      // Registrar en documentos_ot como etapa 07 completada
+      await supabase.from('documentos_ot').upsert({
+        ot_numero:      ot.ot_numero,
+        tipo:           'asignacion',
+        nombre_archivo: tituloArchivo,
+        drive_url:      url,
+        subido_por:     nombreCompleto || 'Sistema',
+      }, { onConflict: 'ot_numero,tipo' })
+
+      // Buscar email y teléfono de los inspectores asignados
+      const nombres = (asig.inspectores_asignados || '')
+        .split(',').map(n => n.trim()).filter(Boolean)
+      const { data: contactos } = await supabase
+        .from('v_usuarios_portal')
+        .select('nombre_completo,email,telefono_whatsapp')
+        .in('nombre_completo', nombres)
+
+      setPdfState({ url, contactos: contactos || [] })
     } catch (e) {
       setPdfState({ error: e.message })
     }
@@ -273,12 +296,47 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
               {pdfState === 'generando' ? 'Generando PDF...' : 'Guardando PDF...'}
             </span>
           )}
-          {pdfState?.url && (
-            <a href={pdfState.url} target="_blank" rel="noreferrer"
-              style={{ ...btnModal, background:'#059669', textDecoration:'none' }}>
-              ✅ Ver / Descargar
-            </a>
-          )}
+          {pdfState?.url && (() => {
+            const contactos  = pdfState.contactos || []
+            const conTel     = contactos.find(c => c.telefono_whatsapp)
+            const emailsStr  = contactos.map(c => c.email).filter(Boolean).join(',')
+            const msgWA      = buildWAMensaje({
+              otNumero: ot.ot_numero, cliente: ot.cliente,
+              fechaInspeccion: asig.fecha_inspeccion, hora: asig.hora,
+              descripcion: asig.descripcion_actividad,
+              supervisorNombre: asig.supervisor, pdfUrl: pdfState.url,
+            })
+            const urlWA = conTel ? waLink(conTel.telefono_whatsapp, msgWA) : null
+            const asunto = encodeURIComponent(`Asignación OT ${ot.ot_numero} — WSS División Inspección Industrial`)
+            const cuerpo = encodeURIComponent(
+              `Estimado/a inspector/a,\n\nHas sido asignado/a a la siguiente actividad de inspección:\n\n` +
+              `OT: ${ot.ot_numero}\nCliente: ${ot.cliente || '—'}\nFecha: ${asig.fecha_inspeccion || 'Por confirmar'}\n` +
+              `Hora: ${asig.hora || 'Por confirmar'}\nSupervisor: ${asig.supervisor || '—'}\n` +
+              `Descripción: ${asig.descripcion_actividad || '—'}\n\n` +
+              `Documento REG-DII-036: ${pdfState.url}\n\nPor favor confirma recepción.\n\nWSS División Inspección Industrial`
+            )
+            const urlEmail = emailsStr ? `mailto:${emailsStr}?subject=${asunto}&body=${cuerpo}` : null
+            return (
+              <>
+                <a href={pdfState.url} target="_blank" rel="noreferrer"
+                  style={{ ...btnModal, background:'#059669', textDecoration:'none' }}>
+                  ✅ Ver / Descargar
+                </a>
+                {urlWA && (
+                  <a href={urlWA} target="_blank" rel="noreferrer"
+                    style={{ ...btnModal, background:'#16a34a', textDecoration:'none' }}>
+                    📱 WhatsApp inspector
+                  </a>
+                )}
+                {urlEmail && (
+                  <a href={urlEmail}
+                    style={{ ...btnModal, background:'#7c3aed', textDecoration:'none' }}>
+                    📧 Email inspector
+                  </a>
+                )}
+              </>
+            )
+          })()}
           {pdfState?.error && (
             <span style={{ fontSize:11, color:'#FCA5A5', maxWidth:260 }} title={pdfState.error}>
               ⚠️ {pdfState.error.length > 50 ? pdfState.error.slice(0,50)+'…' : pdfState.error}
