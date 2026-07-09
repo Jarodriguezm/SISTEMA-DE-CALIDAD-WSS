@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 
 // ─── helpers generales ───────────────────────────────────────────────────────
 function waLink(tel, mensaje) {
@@ -156,30 +158,8 @@ function buildPDFHtml(asig, ot) {
 <body>${buildBodyContent(asig, ot)}</body></html>`
 }
 
-// ─── Cargar script desde CDN ──────────────────────────────────────────────────
-function loadScript(url, globalCheck) {
-  return new Promise((resolve, reject) => {
-    if (globalCheck()) { resolve(); return }
-    const s = document.createElement('script')
-    s.src = url
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('No se pudo cargar: ' + url))
-    document.head.appendChild(s)
-  })
-}
-
-/** Genera PDF como string base64 usando html2canvas + jsPDF cargados desde CDN */
+/** Genera PDF como string base64 usando html2canvas + jsPDF (bundled via npm) */
 async function generatePDFBase64(asig, ot) {
-  // Cargar librerías si no están
-  await loadScript(
-    'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-    () => !!window.html2canvas,
-  )
-  await loadScript(
-    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-    () => !!window.jspdf,
-  )
-
   // Contenedor temporal para renderizar
   const container = document.createElement('div')
   Object.assign(container.style, {
@@ -194,7 +174,7 @@ async function generatePDFBase64(asig, ot) {
   // Pequeño delay para que el browser termine de renderizar
   await new Promise(r => setTimeout(r, 400))
 
-  const canvas = await window.html2canvas(container, {
+  const canvas = await html2canvas(container, {
     scale: 2,
     useCORS: true,
     backgroundColor: '#ffffff',
@@ -204,7 +184,6 @@ async function generatePDFBase64(asig, ot) {
   })
   document.body.removeChild(container)
 
-  const { jsPDF } = window.jspdf
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = pdf.internal.pageSize.getWidth()   // 210
   const pageH = pdf.internal.pageSize.getHeight()  // 297
