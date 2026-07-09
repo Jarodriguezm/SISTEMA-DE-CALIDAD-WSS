@@ -7,9 +7,18 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
+// ── Sanitiza nombre de archivo para usar como key en Supabase Storage ────────
+function sanitizarNombre(nombre) {
+  return nombre
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quitar tildes
+    .replace(/[^a-zA-Z0-9._-]/g, '_')                 // reemplazar caracteres inválidos
+    .replace(/_+/g, '_')                               // colapsar guiones bajos múltiples
+}
+
 // ── Helper: subir archivo a Supabase Storage directamente desde el browser ────
 async function subirArchivoAStorage(otNumero, file) {
-  const ruta = `${otNumero}/etapa_09/${Date.now()}_${file.name}`
+  const nombreSeguro = sanitizarNombre(file.name)
+  const ruta = `${otNumero}/etapa_09/${Date.now()}_${nombreSeguro}`
   const { error: upErr } = await supabase.storage
     .from('documentos-ot')
     .upload(ruta, file, { contentType: file.type || 'application/octet-stream', upsert: false })
@@ -334,15 +343,47 @@ function SeccionCargaInforme({ ot }) {
     try {
       const { data: informesOT } = await supabase.from('numeros_informe').select('codigo_informe').eq('ot_numero', ot.ot_numero).order('created_at')
       const codigos = informesOT?.map(i => i.codigo_informe) || []
+
+      // Buscar nombre del supervisor desde la última asignación de esta OT
+      const { data: asigs } = await supabase
+        .from('asignaciones')
+        .select('supervisor')
+        .eq('ot_numero', ot.ot_numero)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      const supNombre = asigs?.[0]?.supervisor || ot.supervisor || null
+
+      // Buscar email del supervisor en v_usuarios_portal
+      let supervisorEmail = null
+      if (supNombre) {
+        const { data: supData } = await supabase
+          .from('v_usuarios_portal')
+          .select('email,nombre_completo')
+          .ilike('nombre_completo', `%${supNombre.trim()}%`)
+          .maybeSingle()
+        supervisorEmail = supData?.email || null
+        if (!supervisorEmail) {
+          throw new Error(`No se encontró el correo del supervisor "${supNombre}". Verifica que tenga email registrado en el sistema.`)
+        }
+      } else {
+        throw new Error('Esta OT no tiene supervisor asignado.')
+      }
+
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notificar-supervisor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ ot_numero: ot.ot_numero, inspector_nombre: usuario?.nombre || usuario?.email, informes_codigos: codigos, mensaje_adicional: mensajeObs }),
+        body: JSON.stringify({
+          ot_numero: ot.ot_numero,
+          inspector_nombre: usuario?.nombre || usuario?.email,
+          informes_codigos: codigos,
+          mensaje_adicional: mensajeObs,
+          supervisor_email: supervisorEmail, // pasar email directamente
+        }),
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
-      setExito(`✉️ Supervisor notificado correctamente (${data.supervisor_email})`)
+      setExito(`✉️ Supervisor notificado correctamente (${data.supervisor_email || supervisorEmail})`)
       setMensajeObs('')
     } catch (e) { setError('Error al notificar: ' + e.message) } finally { setNotificando(false) }
   }
