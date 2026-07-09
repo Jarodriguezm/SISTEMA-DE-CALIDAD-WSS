@@ -37,10 +37,11 @@ function anioActual() { return String(new Date().getFullYear()) }
 export default function ModalCrearOT({ onClose, onCreada }) {
   const { usuario } = useAuth()
   const [guardando, setGuardando] = useState(false)
-  const [mensajePaso, setMensajePaso] = useState('')   // texto durante carga
+  const [mensajePaso, setMensajePaso] = useState('')
   const [error, setError] = useState('')
   const [supervisores, setSupervisores] = useState([])
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
+  const [exito, setExito] = useState(null)   // { otNumero, waUrl, emailUrl, supervisorNombre }
 
   const [form, setForm] = useState({
     ot_numero: '',
@@ -66,11 +67,16 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     try {
       const { data } = await supabase
         .from('usuarios')
-        .select('id, nombre, apellido, sede')
+        .select('id, nombre, apellido, sede, email, telefono_whatsapp')
         .eq('activo', true)
-        .in('rol', ['SUPERVISOR', 'ADMIN', 'ADMINISTRADOR'])
+        .in('rol', ['SUPERVISOR', 'ADMIN'])
         .order('nombre')
-      setSupervisores(data || [])
+      const lista = data || []
+      setSupervisores(lista)
+      // Pre-seleccionar el primer supervisor disponible
+      if (lista.length > 0 && !form.supervisor_id) {
+        setForm(f => ({ ...f, supervisor_id: lista[0].id }))
+      }
     } catch { /* no bloquea */ }
   }
 
@@ -91,6 +97,7 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     if (!form.cliente.trim()) return 'Ingresa el nombre del cliente'
     if (!form.tipo_servicio.trim()) return 'Ingresa el producto / servicio contratado'
     if (!form.descripcion.trim()) return 'Ingresa la descripción del trabajo'
+    if (!form.supervisor_id) return 'Selecciona un supervisor para la OT'
     return null
   }
 
@@ -150,14 +157,20 @@ export default function ModalCrearOT({ onClose, onCreada }) {
         const driveData = await driveRes.json()
 
         if (driveData.ok && driveData.carpeta_ot_url) {
-          // Guardar URL y subcarpetas en la OT
-          await supabase
+          // Guardar URL y subcarpetas en la OT (crear-carpetas ya lo hizo en servidor,
+          // esto es un respaldo desde el frontend)
+          const { error: sbUpdateErr } = await supabase
             .from('ots')
             .update({
               carpeta_drive_url: driveData.carpeta_ot_url,
               carpetas_drive:    driveData.subcarpetas,
             })
             .eq('ot_numero', otNumero)
+
+          if (sbUpdateErr) {
+            console.error('[ModalCrearOT] Error guardando carpetas_drive en Supabase:', sbUpdateErr.message)
+            // No es fatal porque crear-carpetas.js ya lo guardó en el servidor
+          }
 
           setMensajePaso('✅ OT creada con carpetas Drive')
         } else {
@@ -170,8 +183,66 @@ export default function ModalCrearOT({ onClose, onCreada }) {
         console.warn('[ModalCrearOT] Drive network error:', driveErr.message)
       }
 
-      // ── Éxito ──────────────────────────────────────────────────────────────
-      onCreada && onCreada(otNumero)
+      // ── Éxito — generar links de notificación al supervisor ───────────────
+      const sup = supervisores.find(s => s.id === form.supervisor_id)
+      const supNombreCompleto = sup ? `${sup.nombre} ${sup.apellido}`.trim() : ''
+      const servicios = [form.tipo_servicio, serviciosSeleccionados.join(', ')].filter(Boolean).join(' — ')
+
+      // Guardar supervisor en la OT
+      if (sup) {
+        try {
+          await supabase.from('ots').update({ supervisor: supNombreCompleto }).eq('ot_numero', otNumero)
+        } catch { /* no bloquea */ }
+      }
+
+      // Link WhatsApp
+      let waUrl = null
+      if (sup?.telefono_whatsapp) {
+        const tel = sup.telefono_whatsapp.replace(/\D/g, '')
+        const msgWA = [
+          `📋 *NUEVA OT CREADA*`,
+          ``,
+          `*OT:* ${otNumero}`,
+          `*Cliente:* ${form.cliente.trim()}`,
+          `*Sede:* ${form.sede}`,
+          `*Servicio:* ${servicios}`,
+          form.direccion_faena ? `*Dirección:* ${form.direccion_faena.trim()}` : null,
+          ``,
+          form.descripcion ? `*Descripción:*\n${form.descripcion.trim().substring(0, 300)}` : null,
+          ``,
+          `⚡ Acción requerida: asignar inspector en el portal WSS.`,
+        ].filter(l => l !== null).join('\n')
+        waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(msgWA)}`
+        try {
+          await supabase.from('ots').update({ whatsapp_supervisor_url: waUrl }).eq('ot_numero', otNumero)
+        } catch { /* no bloquea */ }
+      }
+
+      // Link Email
+      let emailUrl = null
+      if (sup?.email) {
+        const asunto = `Nueva OT creada: ${otNumero} — ${form.cliente.trim()}`
+        const cuerpo = [
+          `Hola ${sup.nombre},`,
+          ``,
+          `Se ha creado una nueva Orden de Trabajo que requiere tu gestión.`,
+          ``,
+          `OT: ${otNumero}`,
+          `Cliente: ${form.cliente.trim()}`,
+          `Sede: ${form.sede}`,
+          `Servicio: ${servicios}`,
+          form.direccion_faena ? `Dirección/Faena: ${form.direccion_faena.trim()}` : null,
+          ``,
+          form.descripcion ? `Descripción:\n${form.descripcion.trim().substring(0, 400)}` : null,
+          ``,
+          `Por favor ingresa al portal para asignar el inspector.`,
+          ``,
+          `— WSS División Inspección Industrial`,
+        ].filter(l => l !== null).join('\n')
+        emailUrl = `mailto:${sup.email}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`
+      }
+
+      setExito({ otNumero, waUrl, emailUrl, supervisorNombre: supNombreCompleto })
 
     } catch (err) {
       setError(mensajeError(err))
@@ -179,6 +250,69 @@ export default function ModalCrearOT({ onClose, onCreada }) {
       setGuardando(false)
       setMensajePaso('')
     }
+  }
+
+  // ── Pantalla éxito + notificación supervisor ────────────────────────────
+  if (exito) {
+    return (
+      <div style={styles.overlay}>
+        <div style={{ ...styles.box, maxWidth: 480, textAlign: 'center', padding: '40px 32px' }}>
+          <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
+          <h2 style={{ margin: '0 0 6px', color: 'var(--azul)', fontSize: 20 }}>
+            OT {exito.otNumero} creada
+          </h2>
+          <p style={{ color: '#444', marginBottom: 6, fontSize: 14 }}>
+            Carpetas en Drive generadas correctamente.
+          </p>
+          <p style={{ color: '#666', marginBottom: 24, fontSize: 13 }}>
+            Notifica a <strong>{exito.supervisorNombre}</strong> para que asigne el inspector.
+          </p>
+
+          {/* WhatsApp */}
+          {exito.waUrl ? (
+            <a href={exito.waUrl} target="_blank" rel="noreferrer" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              background: '#25D366', color: '#fff', borderRadius: 10,
+              padding: '13px 24px', textDecoration: 'none', fontWeight: 700, fontSize: 15,
+              marginBottom: 10,
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+              📱 Notificar por WhatsApp
+            </a>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 10, padding: '10px', background: '#F8FAFC', borderRadius: 8 }}>
+              ⚠️ {exito.supervisorNombre} no tiene teléfono registrado — WhatsApp no disponible
+            </div>
+          )}
+
+          {/* Email */}
+          {exito.emailUrl ? (
+            <a href={exito.emailUrl} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              background: '#2563EB', color: '#fff', borderRadius: 10,
+              padding: '13px 24px', textDecoration: 'none', fontWeight: 700, fontSize: 15,
+              marginBottom: 10,
+            }}>
+              ✉️ Notificar por Email
+            </a>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 10, padding: '10px', background: '#F8FAFC', borderRadius: 8 }}>
+              ⚠️ {exito.supervisorNombre} no tiene email registrado — correo no disponible
+            </div>
+          )}
+
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', marginTop: 8 }}
+            onClick={() => { onCreada && onCreada(exito.otNumero); onClose() }}
+          >
+            Ir a la OT →
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -326,15 +460,19 @@ export default function ModalCrearOT({ onClose, onCreada }) {
                   <input className="input" value={usuario?.nombre || ''} readOnly style={{ background: '#F9FAFB' }} />
                 </div>
                 <div className="col-4 field">
-                  <label>Supervisor (opcional)</label>
-                  <select className="select" value={form.supervisor_id} onChange={e => set('supervisor_id', e.target.value)} disabled={guardando}>
-                    <option value="">— Sin asignar aún —</option>
-                    {supervisores.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.nombre} {s.apellido} · {s.sede}
-                      </option>
-                    ))}
+                  <label>Supervisor *</label>
+                  <select className="select" value={form.supervisor_id} onChange={e => set('supervisor_id', e.target.value)} disabled={guardando}
+                    style={{ borderColor: !form.supervisor_id ? '#FCA5A5' : undefined }}>
+                    {supervisores.length === 0
+                      ? <option value="">Cargando supervisores...</option>
+                      : supervisores.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.nombre} {s.apellido} · {s.sede}
+                          </option>
+                        ))
+                    }
                   </select>
+                  <span className="text-sm" style={{ color: '#6B7280' }}>Requerido para crear la OT</span>
                 </div>
                 <div className="col-4 field">
                   <label>Observaciones</label>
@@ -439,20 +577,23 @@ const styles = {
     borderTop: '1px solid var(--borde)',
     marginTop: 8,
   },
+ 
   serviciosGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+    display: 'flex',
+    flexWrap: 'wrap',
     gap: 8,
   },
   pillCheck: {
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'center',
     gap: 2,
-    padding: '8px 12px',
+    padding: '6px 12px',
     border: '1.5px solid',
-    borderRadius: 10,
+    borderRadius: 8,
     cursor: 'pointer',
-    transition: 'all .15s',
+    fontSize: 12,
     userSelect: 'none',
+    transition: 'all .15s',
   },
 }
