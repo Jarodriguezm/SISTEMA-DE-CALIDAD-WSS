@@ -210,87 +210,43 @@ async function generatePDFBase64(asig, ot) {
   return btoa(binary)
 }
 
-/** Extrae el folder ID de Drive para la carpeta 07-Asignaciones de esta OT */
-function getAsignFolderId(ot) {
-  try {
-    const carpetas = ot.carpetas_drive
-    if (carpetas) {
-      const obj = typeof carpetas === 'string' ? JSON.parse(carpetas) : carpetas
-      if (obj['07']?.id) return obj['07'].id
-    }
-  } catch { /* no bloquea */ }
-  // Fallback: carpeta raíz de la OT
-  if (ot.carpeta_drive_url) {
-    const m = ot.carpeta_drive_url.match(/\/folders\/([a-zA-Z0-9_-]+)/)
-    if (m) return m[1]
-  }
-  return null
-}
-
-/** Sube PDF a Drive via el serverless function existente */
-async function subirPDFaDrive(base64, nombre, folderId) {
-  if (!folderId) throw new Error('No hay folder ID válido para subir el archivo')
+/** Sube PDF a Supabase Storage y retorna una URL firmada */
+async function subirPDFaSupabase(base64, nombre, otNumero) {
   if (!base64 || base64.length < 100) throw new Error('El PDF generado está vacío o es inválido')
-  const res = await fetch('/api/drive/subir-archivo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      folder_id:            folderId,
-      file_name:            nombre,
-      file_content_base64:  base64,
-      mime_type:            'application/pdf',
-    }),
-  })
-  const data = await res.json()
-  if (!data.ok) {
-    // Error detallado para diagnóstico
-    throw new Error(`${data.error || 'Error Drive'} [folder: ${folderId}]`)
-  }
-  return data // { ok, file_id, file_url, file_name }
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+  const blob  = new Blob([bytes], { type: 'application/pdf' })
+  const ruta  = `asignaciones/${otNumero}/${nombre}`
+
+  const { error: upErr } = await supabase.storage
+    .from('documentos-ot')
+    .upload(ruta, blob, { contentType: 'application/pdf', upsert: true })
+  if (upErr) throw new Error(upErr.message)
+
+  const { data, error: signErr } = await supabase.storage
+    .from('documentos-ot')
+    .createSignedUrl(ruta, 60 * 60 * 24 * 365) // URL válida 1 año
+  if (signErr) throw new Error(signErr.message)
+  return data.signedUrl
 }
 
 // ─── Modal visor PDF ──────────────────────────────────────────────────────────
 function ModalPDF({ html, asig, ot, onCerrar }) {
   const iframeRef   = useRef(null)
-  const [driveState, setDriveState] = useState(null)
-  // driveState: null | 'generando' | 'subiendo' | { url } | { error: string }
+  const [pdfState, setPdfState] = useState(null)
+  // pdfState: null | 'generando' | 'subiendo' | { url } | { error: string }
 
   const tituloArchivo = `REG-DII-036_${ot.ot_numero}_${new Date().toISOString().slice(0,10)}.pdf`
   const tituloModal   = `REG-DII-036 · ${ot.ot_numero}`
 
-  async function handleGuardarDrive() {
+  async function handleGuardarPDF() {
     try {
-      let folderId = getAsignFolderId(ot)
-
-      // Si la OT no tiene carpetas Drive creadas → crearlas ahora
-      if (!folderId) {
-        if (!['SCL', 'ANF'].includes(ot.sede)) {
-          setDriveState({ error: `La sede ${ot.sede || '—'} no tiene carpeta raíz configurada en Drive.` })
-          return
-        }
-        setDriveState('carpetas')
-        const creRes = await fetch('/api/drive/crear-carpetas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ot_numero: ot.ot_numero,
-            cliente:   ot.cliente || '',
-            sede:      ot.sede,
-          }),
-        })
-        const creData = await creRes.json()
-        if (!creData.ok) throw new Error('No se crearon las carpetas: ' + (creData.error || ''))
-        folderId = creData.subcarpetas?.['07']?.id || null
-        if (!folderId) throw new Error('No se encontró la carpeta 07 en Drive')
-      }
-
-      setDriveState('generando')
+      setPdfState('generando')
       const base64 = await generatePDFBase64(asig, ot)
-      setDriveState('subiendo')
-      const result = await subirPDFaDrive(base64, tituloArchivo, folderId)
-      setDriveState({ url: result.file_url })
+      setPdfState('subiendo')
+      const url = await subirPDFaSupabase(base64, tituloArchivo, ot.ot_numero)
+      setPdfState({ url })
     } catch (e) {
-      setDriveState({ error: e.message })
+      setPdfState({ error: e.message })
     }
   }
 
@@ -305,34 +261,33 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
         <span style={{ fontSize:13, fontWeight:'bold' }}>{tituloModal}</span>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
 
-          {/* Guardar en Drive */}
-          {driveState === null && (
-            <button onClick={handleGuardarDrive} style={{ ...btnModal, background:'#059669' }}>
-              ☁️ Guardar en Drive
+          {/* Guardar PDF en sistema */}
+          {pdfState === null && (
+            <button onClick={handleGuardarPDF} style={{ ...btnModal, background:'#059669' }}>
+              💾 Guardar PDF
             </button>
           )}
-          {(driveState === 'carpetas' || driveState === 'generando' || driveState === 'subiendo') && (
+          {(pdfState === 'generando' || pdfState === 'subiendo') && (
             <span style={{ fontSize:12, color:'#93C5FD', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⏳</span>
-              {driveState === 'carpetas'  ? 'Creando carpetas Drive...' :
-               driveState === 'generando' ? 'Generando PDF...' : 'Subiendo a Drive...'}
+              {pdfState === 'generando' ? 'Generando PDF...' : 'Guardando PDF...'}
             </span>
           )}
-          {driveState?.url && (
-            <a href={driveState.url} target="_blank" rel="noreferrer"
+          {pdfState?.url && (
+            <a href={pdfState.url} target="_blank" rel="noreferrer"
               style={{ ...btnModal, background:'#059669', textDecoration:'none' }}>
-              ✅ Ver en Drive
+              ✅ Ver / Descargar
             </a>
           )}
-          {driveState?.error && (
-            <span style={{ fontSize:11, color:'#FCA5A5', maxWidth:260 }} title={driveState.error}>
-              ⚠️ {driveState.error.length > 50 ? driveState.error.slice(0,50)+'…' : driveState.error}
-              &nbsp;<button onClick={() => setDriveState(null)} style={{ background:'none', border:'none', color:'#FCA5A5', cursor:'pointer', fontSize:11 }}>Reintentar</button>
+          {pdfState?.error && (
+            <span style={{ fontSize:11, color:'#FCA5A5', maxWidth:260 }} title={pdfState.error}>
+              ⚠️ {pdfState.error.length > 50 ? pdfState.error.slice(0,50)+'…' : pdfState.error}
+              &nbsp;<button onClick={() => setPdfState(null)} style={{ background:'none', border:'none', color:'#FCA5A5', cursor:'pointer', fontSize:11 }}>Reintentar</button>
             </span>
           )}
 
           <button onClick={descargar} style={{ ...btnModal, background:'#2563EB' }}>
-            📥 Descargar PDF
+            📥 Imprimir / PDF
           </button>
           <button onClick={onCerrar} style={{ ...btnModal, background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)' }}>
             ✕ Cerrar
