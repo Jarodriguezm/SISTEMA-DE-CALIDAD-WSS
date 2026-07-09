@@ -7,22 +7,15 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
-// ── Helper: subir archivo a Drive via Vercel Function ────────────────────────
-async function subirArchivoADrive(folderId, file) {
-  const base64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result.split(',')[1])
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-  const res = await fetch('/api/drive/subir-archivo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ folder_id: folderId, file_name: file.name, file_content_base64: base64, mime_type: file.type }),
-  })
-  const data = await res.json()
-  if (!data.ok) throw new Error(data.error || 'Error al subir a Drive')
-  return data
+// ── Helper: subir archivo a Supabase Storage directamente desde el browser ────
+async function subirArchivoAStorage(otNumero, file) {
+  const ruta = `${otNumero}/etapa_09/${Date.now()}_${file.name}`
+  const { error: upErr } = await supabase.storage
+    .from('documentos-ot')
+    .upload(ruta, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+  if (upErr) throw new Error(upErr.message)
+  const { data: urlData } = supabase.storage.from('documentos-ot').getPublicUrl(ruta)
+  return { file_url: urlData?.publicUrl || null, ruta }
 }
 
 const AREAS = [
@@ -316,19 +309,17 @@ function SeccionCargaInforme({ ot }) {
 
   async function subirInformes() {
     if (archivos.length === 0) { setError('Selecciona al menos un archivo'); return }
-    if (!carpeta09Id) { setError('Esta OT no tiene carpeta Drive configurada (09 - Informes)'); return }
     setSubiendo(true); setError(''); setResultados([])
     try {
       const nuevosResultados = []
       for (const file of archivos) {
-        const driveData = await subirArchivoADrive(carpeta09Id, file)
-        // Guardar en DB
+        const { file_url } = await subirArchivoAStorage(ot.ot_numero, file)
         await supabase.from('documentos_ot').insert({
           ot_numero: ot.ot_numero, tipo: 'informe',
-          nombre_archivo: file.name, drive_file_id: driveData.file_id,
-          drive_url: driveData.file_url, subido_por: usuario?.email || '',
+          nombre_archivo: file.name,
+          drive_url: file_url, subido_por: usuario?.email || '',
         })
-        nuevosResultados.push({ nombre: file.name, url: driveData.file_url })
+        nuevosResultados.push({ nombre: file.name, url: file_url })
       }
       setResultados(nuevosResultados)
       setArchivos([])
@@ -385,7 +376,7 @@ function SeccionCargaInforme({ ot }) {
           )}
         </div>
         <button className="btn btn-primary" onClick={subirInformes} disabled={subiendo || archivos.length === 0} style={{ marginBottom: 16, background: '#059669', borderColor: '#059669' }}>
-          {subiendo ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Subiendo...</> : `📤 Subir ${archivos.length > 0 ? archivos.length + ' archivo' + (archivos.length > 1 ? 's' : '') : 'informes'} a Drive`}
+          {subiendo ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Subiendo...</> : `📤 Subir ${archivos.length > 0 ? archivos.length + ' archivo' + (archivos.length > 1 ? 's' : '') : 'informes'}`}
         </button>
 
         {/* Documentos ya subidos */}
