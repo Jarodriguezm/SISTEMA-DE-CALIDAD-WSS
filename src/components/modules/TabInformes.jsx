@@ -297,7 +297,8 @@ function SeccionCargaInforme({ ot }) {
   const [mensajeObs, setMensajeObs] = useState('')
   const [resultados, setResultados] = useState([])
   const [error, setError] = useState('')
-  const [exito, setExito] = useState(null)  // null | { waUrl, emailUrl, supNombre }
+  const [exitoUpload, setExitoUpload] = useState('')   // mensaje upload
+  const [exito, setExito] = useState(null)             // null | { waUrl, emailEnviado, emailError, supNombre, supEmail }
 
   // Lista de supervisores/admins para seleccionar a quién notificar
   const [supervisores, setSupervisores] = useState([])
@@ -372,7 +373,8 @@ function SeccionCargaInforme({ ot }) {
       setResultados(nuevosResultados)
       setArchivos([])
       if (fileRef.current) fileRef.current.value = ''
-      setExito(`✓ ${nuevosResultados.length} archivo${nuevosResultados.length > 1 ? 's subidos' : ' subido'} correctamente`)
+      setExitoUpload(`✓ ${nuevosResultados.length} archivo${nuevosResultados.length > 1 ? 's subidos' : ' subido'} correctamente`)
+      setTimeout(() => setExitoUpload(''), 4000)
       cargarDocs()
     } catch (e) { setError(e.message) } finally { setSubiendo(false) }
   }
@@ -508,19 +510,31 @@ function SeccionCargaInforme({ ot }) {
             </div>
           )}
         </div>
-        <button className="btn btn-primary" onClick={subirInformes} disabled={subiendo || archivos.length === 0} style={{ marginBottom: 16, background: '#059669', borderColor: '#059669' }}>
+        <button className="btn btn-primary" onClick={subirInformes} disabled={subiendo || archivos.length === 0} style={{ marginBottom: 8, background: '#059669', borderColor: '#059669' }}>
           {subiendo ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Subiendo...</> : `📤 Subir ${archivos.length > 0 ? archivos.length + ' archivo' + (archivos.length > 1 ? 's' : '') : 'informes'}`}
         </button>
+        {exitoUpload && (
+          <div style={{ fontSize: 12, color: '#065F46', background: '#D1FAE5', padding: '6px 10px', borderRadius: 6, marginBottom: 10 }}>{exitoUpload}</div>
+        )}
 
         {/* Documentos ya subidos */}
         {docsSubidos.length > 0 && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Archivos subidos ({docsSubidos.length})</div>
             {docsSubidos.map(d => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12 }}>
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12 }}>
                 <span style={{ color: '#22C55E' }}>✓</span>
                 <a href={d.drive_url} target="_blank" rel="noreferrer" style={{ color: '#185FA5', flex: 1 }}>{d.nombre_archivo}</a>
                 <span style={{ color: '#94A3B8' }}>{new Date(d.created_at).toLocaleDateString('es-CL')}</span>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`¿Eliminar "${d.nombre_archivo}"?`)) return
+                    await supabase.from('documentos_ot').delete().eq('id', d.id)
+                    cargarDocs()
+                  }}
+                  title="Eliminar archivo"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 14, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}
+                >✕</button>
               </div>
             ))}
           </div>
