@@ -4,19 +4,20 @@ import { useAuth } from '../../lib/AuthContext'
 
 // Iconos simples SVG inline
 const iconos = {
-  dashboard:    '▣',
-  ots:          '📋',
-  documentos:   '📄',
-  asignaciones: '👥',
-  actas:        '✍️',
-  reservas:     '🔢',
-  calendario:   '📅',
-  clientes:     '🏢',
-  auditoria:    '🔍',
-  admin:        '⚙️',
-  usuarios:     '👤',
-  menu:         '☰',
-  salir:        '⏻',
+  dashboard:       '▣',
+  ots:             '📋',
+  documentos:      '📄',
+  asignaciones:    '👥',
+  actas:           '✍️',
+  reservas:        '🔢',
+  calendario:      '📅',
+  clientes:        '🏢',
+  auditoria:       '🔍',
+  admin:           '⚙️',
+  usuarios:        '👤',
+  procedimientos:  '📐',
+  menu:            '☰',
+  salir:           '⏻',
 }
 
 const RUTAS_MENU = {
@@ -170,6 +171,14 @@ export default function Layout({ children }) {
             activo={esRutaActiva('/clientes')}
             abierto={sidebarAbierto}
             onClick={() => navigate('/clientes')}
+          />
+          <NavItem
+            icono={iconos.procedimientos}
+            label="Procedimientos"
+            ruta="/procedimientos"
+            activo={esRutaActiva('/procedimientos')}
+            abierto={sidebarAbierto}
+            onClick={() => navigate('/procedimientos')}
           />
           <NavItem
             icono={iconos.auditoria}
