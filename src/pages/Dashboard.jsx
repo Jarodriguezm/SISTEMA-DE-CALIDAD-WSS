@@ -4,16 +4,16 @@ import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const CARDS = [
-  { key: 'total_ots',              label: 'Total OTs',              color: 'var(--azul)' },
-  { key: 'ots_pendientes',         label: 'OTs Pendientes',         color: 'var(--rojo)' },
-  { key: 'ots_asignadas',          label: 'OTs Asignadas',          color: 'var(--ambar)' },
-  { key: 'ots_cerradas',           label: 'OTs Cerradas',           color: 'var(--verde)' },
-  { key: 'documentos_pendientes',  label: 'Docs Pendientes',        color: '#7C3AED' },
-  { key: 'documentos_cargados',    label: 'Docs Cargados',          color: '#0891B2' },
-  { key: 'total_asignaciones',     label: 'Asignaciones',           color: 'var(--azul)' },
-  { key: 'total_actas',            label: 'Actas',                  color: 'var(--verde)' },
-  { key: 'total_reservas',         label: 'Reservas Informes',      color: 'var(--dorado)' },
-  { key: 'total_auditoria',        label: 'Registros Auditoría',    color: 'var(--gris)' },
+  { key: 'total_ots',             label: 'Total OTs',           color: 'var(--azul)',   to: '/ots' },
+  { key: 'ots_pendientes',        label: 'OTs Pendientes',      color: 'var(--rojo)',   to: '/ots?estado=Pendiente' },
+  { key: 'ots_asignadas',         label: 'OTs Asignadas',       color: 'var(--ambar)',  to: '/ots?estado=Asignado' },
+  { key: 'ots_cerradas',          label: 'OTs Cerradas',        color: 'var(--verde)',  to: '/ots?estado=Cerrada documentalmente' },
+  { key: 'documentos_pendientes', label: 'Docs Pendientes',     color: '#7C3AED',       to: '/ots?estado=En proceso' },
+  { key: 'documentos_cargados',   label: 'Docs Cargados',       color: '#0891B2',       to: '/ots?estado=Informe cargado' },
+  { key: 'total_asignaciones',    label: 'Asignaciones',        color: 'var(--azul)',   to: '/asignaciones' },
+  { key: 'total_actas',           label: 'Actas',               color: 'var(--verde)',  to: '/actas' },
+  { key: 'total_reservas',        label: 'Reservas Informes',   color: 'var(--dorado)', to: '/reservas' },
+  { key: 'total_auditoria',       label: 'Registros Auditoría', color: 'var(--gris)',   to: '/auditoria' },
 ]
 
 const ROLES_ADMIN = ['administrador', 'admin', 'jefe', 'supervisor', 'gerente', 'coordinador']
@@ -54,6 +54,7 @@ export default function Dashboard() {
       const d   = await res.json()
       if (!res.ok) throw new Error(d.error || `Error ${res.status}`)
       setSyncState({ loading: false, resultado: d, error: null })
+      // Recargar KPIs para reflejar el nuevo progreso
       cargarDashboard()
     } catch (err) {
       setSyncState({ loading: false, resultado: null, error: err.message })
@@ -81,6 +82,7 @@ export default function Dashboard() {
             label={card.label}
             valor={data?.[card.key] ?? 0}
             color={card.color}
+            to={card.to}
           />
         ))}
       </div>
@@ -104,7 +106,7 @@ export default function Dashboard() {
             <div>
               <h3 style={{ margin: 0, marginBottom: 4 }}>Sincronización Drive</h3>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--gris)' }}>
-                Escanea todas las OTs, registra carpetas y documentos desde Google Drive.
+                Escanea todas las OTs activas, registra carpetas y documentos desde Google Drive.
               </p>
             </div>
             <button
@@ -117,15 +119,16 @@ export default function Dashboard() {
             </button>
           </div>
 
+          {/* Resultado */}
           {syncState.resultado && (
             <div style={{ marginTop: 16, padding: '12px 16px', background: '#F0FDF4', borderRadius: 8, fontSize: 13 }}>
               <strong style={{ color: '#166534' }}>
-                Completado: {syncState.resultado.total_ots} OTs procesadas,{' '}
+                Sincronización completada: {syncState.resultado.total_ots} OTs procesadas,{' '}
                 {syncState.resultado.ots_con_documentos_nuevos} con documentos nuevos detectados.
               </strong>
               {syncState.resultado.ots_con_error > 0 && (
                 <span style={{ color: '#B45309', marginLeft: 8 }}>
-                  ({syncState.resultado.ots_con_error} con errores)
+                  ({syncState.resultado.ots_con_error} con errores — revisa consola)
                 </span>
               )}
             </div>
@@ -141,9 +144,19 @@ export default function Dashboard() {
   )
 }
 
-function KPICard({ label, valor, color }) {
-  return (
-    <div className="card" style={{ borderTop: `4px solid ${color}` }}>
+function KPICard({ label, valor, color, to }) {
+  const inner = (
+    <div
+      className="card"
+      style={{
+        borderTop: `4px solid ${color}`,
+        cursor: to ? 'pointer' : 'default',
+        transition: 'box-shadow .15s, transform .15s',
+        userSelect: 'none',
+      }}
+      onMouseEnter={e => { if (to) { e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,.12)'; e.currentTarget.style.transform = 'translateY(-2px)' }}}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = '' }}
+    >
       <div style={{ fontSize: 32, fontWeight: 800, color, lineHeight: 1, marginBottom: 6 }}>
         {Number(valor).toLocaleString('es-CL')}
       </div>
@@ -152,6 +165,9 @@ function KPICard({ label, valor, color }) {
       </div>
     </div>
   )
+  return to
+    ? <Link to={to} style={{ textDecoration: 'none' }}>{inner}</Link>
+    : inner
 }
 
 function AccionCard({ titulo, desc, icono, to }) {
@@ -206,7 +222,6 @@ const styles = {
   },
   accionCard: {
     cursor: 'pointer',
-    transition: 'transform 0.15s',
-    padding: 20,
-  },
-      }
+    transition: 'box-shadow .15s, transform .15s',
+  }
+}
