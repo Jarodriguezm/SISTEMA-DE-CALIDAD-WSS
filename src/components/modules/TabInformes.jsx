@@ -4,6 +4,7 @@
 // Santiago → ESI/IVS | Antofagasta → EAI/IVA
 // ============================================================
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
@@ -590,6 +591,7 @@ function SeccionCargaInforme({ ot }) {
 }
 
 export default function TabInformes({ ot, onInformeCreado }) {
+  const navigate = useNavigate()
   const [pantalla, setPantalla] = useState('lista')
   const [informes, setInformes] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -638,9 +640,19 @@ export default function TabInformes({ ot, onInformeCreado }) {
     <div>
       {/* Botón principal */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <button className="btn btn-primary" onClick={() => setPantalla('reservar')}>
-          🔢 Reservar números de informe
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={() => setPantalla('reservar')}>
+            🔢 Reservar números de informe
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate(`/informes/nuevo?ot=${ot.ot_numero}`)}
+            style={{ borderColor: '#7C3AED', color: '#7C3AED' }}
+            title="Crear informe técnico de inspección con asistencia IA"
+          >
+            📋 Crear Informe DII
+          </button>
+        </div>
         {/* Resumen rápido */}
         {informes.length > 0 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
