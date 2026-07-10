@@ -139,6 +139,18 @@ export default function NuevoInforme() {
     }
   }, [])
 
+  // Auto-seleccionar tipo_equipo según el código END (cuando viene desde la cola de trabajo)
+  const TIPO_POR_COD = {
+    PL: 'IZAJE', GM: 'IZAJE', PG: 'IZAJE',   // Izaje y Levante
+    CTK: 'TANQUE',                              // Tanques
+  }
+  useEffect(() => {
+    if (codEnd && !tipo) {
+      const autoTipo = TIPO_POR_COD[codEnd]
+      if (autoTipo) setTipo(autoTipo)
+    }
+  }, [codEnd])
+
   // ── Buscar OT + asignación ───────────────────────────────────────────────
 
   async function buscarOT(numero) {
@@ -188,14 +200,26 @@ export default function NuevoInforme() {
       // Pre-mapear tipos_inspeccion → métodos END
       if (asigData?.tipos_inspeccion) {
         const mapa = {
+          // Visual
           'VT': 'IV', 'VISUAL': 'IV', 'IV': 'IV',
+          // Líquidos penetrantes
           'PT': 'LP', 'LP': 'LP', 'LIQUIDOS': 'LP',
+          // Partículas magnéticas
           'MT': 'PM', 'PM': 'PM', 'MAGNETICAS': 'PM',
-          'UT': 'UT_E', 'UTT': 'UT_E', 'ESPESORES': 'UT_E',
+          // UT espesores
+          'UTT': 'UT_E', 'ESPESORES': 'UT_E',
+          // UT fallas
+          'UT': 'UT_F',
+          // Phased Array
           'UTPA': 'UTPA', 'PAUT': 'UTPA',
+          // Termografía
           'T': 'TERMO', 'IRT': 'TERMO', 'TERMOGRAFIA': 'TERMO',
+          // Prueba hidrostática / hermeticidad
           'PH': 'HIDRO', 'HIDROSTATICA': 'HIDRO',
-          'CARGA': 'CARGA', 'CG': 'CARGA',
+          // Prueba de carga / Izaje
+          'PL': 'CARGA', 'CG': 'CARGA', 'CARGA': 'CARGA',
+          'GM': 'IV',    // Grúas Móviles → incluye visual
+          'PG': 'IV',    // Puentes Grúa  → incluye visual
         }
         const mapped = (asigData.tipos_inspeccion || '').toUpperCase().split(/[\s,/]+/)
           .map(t => mapa[t.trim()]).filter(Boolean)
