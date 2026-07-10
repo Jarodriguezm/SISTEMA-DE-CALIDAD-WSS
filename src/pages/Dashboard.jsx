@@ -5,7 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 
 const CARDS = [
   { key: 'total_ots',             label: 'Total OTs',           color: 'var(--azul)',   to: '/ots' },
-  { key: 'ots_pendientes',        label: 'OTs Pendientes',      color: 'var(--rojo)',   to: '/ots?estado=Pendiente' },
+  { key: 'ots_pendientes',        label: 'OTs Pendientes',      color: 'var(--rojo)',   to: '/ots?estado=Sin inspector' },
   { key: 'ots_asignadas',         label: 'OTs Asignadas',       color: 'var(--ambar)',  to: '/ots?estado=Asignado' },
   { key: 'ots_cerradas',          label: 'OTs Cerradas',        color: 'var(--verde)',  to: '/ots?estado=Cerrada documentalmente' },
   { key: 'documentos_pendientes', label: 'Docs Pendientes',     color: '#7C3AED',       to: '/ots?docs=pendientes' },
