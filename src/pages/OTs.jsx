@@ -34,7 +34,10 @@ export default function OTs() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroSede, setFiltroSede] = useState(searchParams.get('sede') || '')
   const [filtroEstado, setFiltroEstado] = useState(searchParams.get('estado') || '')
-  const filtroDocs = searchParams.get('docs') // 'pendientes' | 'cargados' | null
+  const filtroDocs    = searchParams.get('docs')    // 'pendientes' | 'cargados' | null
+  const estadosParam  = searchParams.get('estados') // lista separada por comas desde Dashboard
+  const labelParam    = searchParams.get('label')   // etiqueta para mostrar en header
+  const filtroEstadosMulti = estadosParam ? estadosParam.split(',').map(s => s.trim()) : null
   const [pagina, setPagina] = useState(0)
   const [mostrarModalCrear, setMostrarModalCrear] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
@@ -99,7 +102,9 @@ export default function OTs() {
     const matchBusqueda = !q || [o.ot_numero, o.cliente, o.supervisor, o.inspector, o.comercial]
       .some(v => String(v || '').toLowerCase().includes(q))
     const matchSede = !filtroSede || o.sede === filtroSede
-    const matchEstado = !filtroEstado || (o.estado || '').toLowerCase().includes(filtroEstado.toLowerCase())
+    const matchEstado = (!filtroEstado && !filtroEstadosMulti)
+      || (filtroEstadosMulti ? filtroEstadosMulti.includes(o.estado) : false)
+      || (filtroEstado ? (o.estado || '').toLowerCase().includes(filtroEstado.toLowerCase()) : false)
     const matchDocs = !filtroDocs
       || (filtroDocs === 'pendientes' && progreso < 100 && o.estado !== 'Cerrada documentalmente')
       || (filtroDocs === 'cargados'   && progreso === 100)
@@ -123,14 +128,19 @@ export default function OTs() {
       <div className="flex-between" style={{ marginBottom: 20 }}>
         <div>
           <h1>Órdenes de Trabajo
+            {labelParam && (
+              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: 'var(--azul)', background: '#EFF6FF', padding: '2px 10px', borderRadius: 20 }}>
+                {labelParam}
+              </span>
+            )}
             {filtroDocs === 'pendientes' && (
               <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: '#7C3AED', background: '#EDE9FE', padding: '2px 10px', borderRadius: 20 }}>
-                Documentos Pendientes
+                Docs Pendientes
               </span>
             )}
             {filtroDocs === 'cargados' && (
               <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: '#0891B2', background: '#E0F2FE', padding: '2px 10px', borderRadius: 20 }}>
-                Documentos Cargados
+                Docs Cargados
               </span>
             )}
           </h1>
