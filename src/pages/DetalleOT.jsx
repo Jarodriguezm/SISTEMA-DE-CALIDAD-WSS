@@ -15,7 +15,7 @@ const TABS = [
   { id: 'documentos',   label: 'Documentos' },
   { id: 'asignaciones', label: 'Asignaciones' },
   { id: 'actas',        label: 'Actas' },
-  { id: 'informes',     label: 'Informes ESI/EAI' },
+  { id: 'informes',     label: 'Informes DII' },
   { id: 'facturacion',  label: 'Facturación' },
 ]
 
