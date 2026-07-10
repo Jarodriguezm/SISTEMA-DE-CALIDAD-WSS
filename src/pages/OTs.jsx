@@ -97,7 +97,7 @@ export default function OTs() {
     const matchBusqueda = !q || [o.ot_numero, o.cliente, o.supervisor, o.inspector, o.comercial]
       .some(v => String(v || '').toLowerCase().includes(q))
     const matchSede = !filtroSede || o.sede === filtroSede
-    const matchEstado = !filtroEstado || o.estado === filtroEstado
+    const matchEstado = !filtroEstado || (o.estado || '').toLowerCase().includes(filtroEstado.toLowerCase())
     const matchDocs = !filtroDocs
       || (filtroDocs === 'pendientes' && progreso < 100 && o.estado !== 'Cerrada documentalmente')
       || (filtroDocs === 'cargados'   && progreso === 100)
