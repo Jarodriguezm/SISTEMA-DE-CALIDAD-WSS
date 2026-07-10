@@ -88,6 +88,10 @@ export default function NuevoInforme() {
   const { usuario } = useAuth()
   const fileRef = useRef()
 
+  // ── Parámetros desde la cola de trabajo ──────────────────────────────────
+  const regDii = searchParams.get('reg') || ''    // e.g. 'REG-DII-004'
+  const codEnd = searchParams.get('cod') || ''    // e.g. 'PT'
+
   // ── Estado OT / carga ────────────────────────────────────────────────────
   const [otInput, setOtInput]       = useState(searchParams.get('ot') || '')
   const [cargandoOT, setCargandoOT] = useState(false)
@@ -288,7 +292,7 @@ export default function NuevoInforme() {
       fecha_inspeccion:  general.fecha_inspeccion,
       supervisor_nombre: general.supervisor_nombre,
       inspector_id:      usuario?.id,
-      inspector_nombre:  usuario?.nombre || usuario?.email,
+      inspector_nombre:  usuario?.nombre_completo || usuario?.nombre || usuario?.email,
       datos_equipo:      equipo,
       end_aplicados:     endAplicados,
       mediciones,
@@ -296,6 +300,8 @@ export default function NuevoInforme() {
       resultado,
       texto_ia:          textoIA,
       estado,
+      reg_dii_numero:    regDii || null,
+      metodo_end_cod:    codEnd || null,
     }).select('id').single()
     setGuardando(false)
     if (error) return setErrorGuardar(error.message)
@@ -325,6 +331,12 @@ export default function NuevoInforme() {
             ← Volver a Informes
           </button>
           <h1>📋 Nuevo Informe de Inspección</h1>
+          {regDii && (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:6, padding:'6px 14px', background:'rgba(124,58,237,0.08)', borderRadius:8, border:'1.5px solid #7C3AED', fontSize:13 }}>
+              <span style={{ fontWeight:800, color:'#7C3AED', fontFamily:'monospace' }}>{regDii}</span>
+              {codEnd && <span style={{ fontSize:11, background:'#7C3AED', color:'#fff', padding:'2px 8px', borderRadius:20, fontWeight:700 }}>{codEnd}</span>}
+            </div>
+          )}
         </div>
       </div>
 
