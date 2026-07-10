@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, rpc, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import ModalCrearOT from '../components/modules/ModalCrearOT'
@@ -24,13 +24,14 @@ function badgeEstado(estado) {
 export default function OTs() {
   const { usuario, esAdmin, esComercial, esSupervisor } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [ots, setOTs] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
-  const [filtroSede, setFiltroSede] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroSede, setFiltroSede] = useState(searchParams.get('sede') || '')
+  const [filtroEstado, setFiltroEstado] = useState(searchParams.get('estado') || '')
   const [pagina, setPagina] = useState(0)
   const [mostrarModalCrear, setMostrarModalCrear] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
