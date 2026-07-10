@@ -32,6 +32,7 @@ export default function OTs() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroSede, setFiltroSede] = useState(searchParams.get('sede') || '')
   const [filtroEstado, setFiltroEstado] = useState(searchParams.get('estado') || '')
+  const filtroDocs = searchParams.get('docs') // 'pendientes' | 'cargados' | null
   const [pagina, setPagina] = useState(0)
   const [mostrarModalCrear, setMostrarModalCrear] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
@@ -92,11 +93,15 @@ export default function OTs() {
   // Filtrado local
   const otsFiltradas = ots.filter(o => {
     const q = busqueda.toLowerCase()
+    const progreso = Number(o.progreso || 0)
     const matchBusqueda = !q || [o.ot_numero, o.cliente, o.supervisor, o.inspector, o.comercial]
       .some(v => String(v || '').toLowerCase().includes(q))
     const matchSede = !filtroSede || o.sede === filtroSede
     const matchEstado = !filtroEstado || o.estado === filtroEstado
-    return matchBusqueda && matchSede && matchEstado
+    const matchDocs = !filtroDocs
+      || (filtroDocs === 'pendientes' && progreso < 100 && o.estado !== 'Cerrada documentalmente')
+      || (filtroDocs === 'cargados'   && progreso === 100)
+    return matchBusqueda && matchSede && matchEstado && matchDocs
   })
 
   const otsVisibles = otsFiltradas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA)
@@ -115,7 +120,18 @@ export default function OTs() {
       {/* Header */}
       <div className="flex-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1>Órdenes de Trabajo</h1>
+          <h1>Órdenes de Trabajo
+            {filtroDocs === 'pendientes' && (
+              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: '#7C3AED', background: '#EDE9FE', padding: '2px 10px', borderRadius: 20 }}>
+                Documentos Pendientes
+              </span>
+            )}
+            {filtroDocs === 'cargados' && (
+              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: '#0891B2', background: '#E0F2FE', padding: '2px 10px', borderRadius: 20 }}>
+                Documentos Cargados
+              </span>
+            )}
+          </h1>
           <p className="text-sm" style={{ marginTop: 4 }}>
             {otsFiltradas.length} OT{otsFiltradas.length !== 1 ? 's' : ''} encontradas
           </p>
