@@ -4,17 +4,19 @@ import { supabase, rpc, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import ModalCrearOT from '../components/modules/ModalCrearOT'
 
-const ESTADOS = ['', 'Pendiente', 'Sin inspector', 'Asignado', 'En proceso', 'Acta cargada', 'Informe cargado', 'Cerrada documentalmente']
+const ESTADOS = ['', 'Pendiente de asignación', 'Sin inspector', 'Asignado', 'Asignada', 'Acta cargada', 'Informe cargado', 'Informe enviado', 'Factura cargada', 'Cerrada documentalmente']
 const SEDES = ['', 'ANF', 'SCL', 'CCP']
 
 function badgeEstado(estado) {
   const mapa = {
-    'Pendiente': 'badge-red',
+    'Pendiente de asignación': 'badge-red',
     'Sin inspector': 'badge-red',
     'Asignado': 'badge-amber',
+    'Asignada': 'badge-amber',
     'En proceso': 'badge-blue',
     'Acta cargada': 'badge-blue',
     'Informe cargado': 'badge-green',
+    'Informe enviado': 'badge-green',
     'Factura cargada': 'badge-green',
     'Cerrada documentalmente': 'badge-green',
   }
