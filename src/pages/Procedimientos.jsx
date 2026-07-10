@@ -14,15 +14,10 @@ function iconoArchivo(mimeType, nombre) {
   return '📄'
 }
 
-// URL de preview embebida para cualquier archivo Drive
+// URL de preview: usamos nuestro proxy para evitar restricciones de iframe de Google
 function previewUrl(file) {
   if (!file?.id) return null
-  // Google Docs/Sheets/Slides tienen su propio viewer
-  if (file.mimeType?.includes('google-apps')) {
-    return (file.webViewLink || '').replace('/edit', '/preview').replace('/view', '/preview')
-  }
-  // PDF, Word, etc. → Google Drive file preview
-  return `https://drive.google.com/file/d/${file.id}/preview`
+  return `/api/drive/proxy-pdf?fileId=${file.id}`
 }
 
 export default function Procedimientos() {
