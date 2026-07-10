@@ -16,6 +16,7 @@ const iconos = {
   admin:           '⚙️',
   usuarios:        '👤',
   procedimientos:  '📐',
+  acreditaciones:  '🏆',
   menu:            '☰',
   salir:           '⏻',
 }
@@ -179,6 +180,14 @@ export default function Layout({ children }) {
             activo={esRutaActiva('/procedimientos')}
             abierto={sidebarAbierto}
             onClick={() => navigate('/procedimientos')}
+          />
+          <NavItem
+            icono={iconos.acreditaciones}
+            label="Acreditaciones"
+            ruta="/acreditaciones"
+            activo={esRutaActiva('/acreditaciones')}
+            abierto={sidebarAbierto}
+            onClick={() => navigate('/acreditaciones')}
           />
           <NavItem
             icono={iconos.auditoria}
