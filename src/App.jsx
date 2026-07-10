@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
-import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import OTs from './pages/OTs'
 import DetalleOT from './pages/DetalleOT'
@@ -12,6 +11,7 @@ import Asignaciones from './pages/Asignaciones'
 import Actas from './pages/Actas'
 import ReservaInformes from './pages/ReservaInformes'
 import Calendario from './pages/Calendario'
+import Clientes from './pages/Clientes'
 import './styles/global.css'
 
 // Ruta protegida
@@ -47,16 +47,13 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Rutas públicas — sin autenticación */}
       <Route
         path="/login"
         element={usuario ? <Navigate to="/dashboard" replace /> : <Login />}
       />
-      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-      {/* Rutas protegidas */}
       <Route path="/dashboard" element={
         <RutaPrivada><Dashboard /></RutaPrivada>
       } />
@@ -69,9 +66,11 @@ function AppRoutes() {
       <Route path="/actas" element={<RutaPrivada><Actas /></RutaPrivada>} />
       <Route path="/reservas" element={<RutaPrivada><ReservaInformes /></RutaPrivada>} />
       <Route path="/reservas-informes" element={<RutaPrivada><ReservaInformes /></RutaPrivada>} />
-      <Route path="/calendario" element={<RutaPrivada><Calendario /></RutaPrivada>} />
 
       <Route path="/usuarios" element={<RutaPrivada><Usuarios /></RutaPrivada>} />
+      <Route path="/calendario" element={<RutaPrivada><Calendario /></RutaPrivada>} />
+      <Route path="/clientes" element={<RutaPrivada><Clientes /></RutaPrivada>} />
+
       <Route path="/auditoria" element={<RutaPrivada><Auditoria /></RutaPrivada>} />
       <Route path="/catalogos" element={<RutaPrivada><Navigate to="/dashboard" replace /></RutaPrivada>} />
       <Route path="/admin" element={<RutaPrivada><Navigate to="/dashboard" replace /></RutaPrivada>} />
