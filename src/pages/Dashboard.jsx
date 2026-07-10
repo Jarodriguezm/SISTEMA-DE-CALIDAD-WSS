@@ -18,18 +18,41 @@ const CARDS = [
 
 const ROLES_ADMIN = ['administrador', 'admin', 'jefe', 'supervisor', 'gerente', 'coordinador']
 
+const SYNC_INTERVAL_MS = 10 * 60 * 1000  // Auto-sync cada 10 minutos
+
 export default function Dashboard() {
   const { usuario } = useAuth()
   const [data, setData] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [syncState, setSyncState] = useState({ loading: false, resultado: null, error: null })
+  const [ultimaSync, setUltimaSync] = useState(null)       // Date de la última sync
+  const [proxSync, setProxSync] = useState(null)            // segundos para próxima sync
+  const esAdmin = ROLES_ADMIN.includes((usuario?.rol || '').toLowerCase())
 
   useEffect(() => {
     cargarDashboard()
     const interval = setInterval(cargarDashboard, 60000)
     return () => clearInterval(interval)
   }, [])
+
+  // Auto-sync Drive cada 10 minutos (solo para admins/supervisores)
+  useEffect(() => {
+    if (!esAdmin) return
+    sincronizarDrive()  // sync inmediata al cargar
+    const autoSync = setInterval(sincronizarDrive, SYNC_INTERVAL_MS)
+    return () => clearInterval(autoSync)
+  }, [esAdmin])
+
+  // Contador regresivo para próxima sync
+  useEffect(() => {
+    if (!ultimaSync) return
+    const tick = setInterval(() => {
+      const segsRestantes = Math.max(0, Math.round((SYNC_INTERVAL_MS - (Date.now() - ultimaSync.getTime())) / 1000))
+      setProxSync(segsRestantes)
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [ultimaSync])
 
   async function cargarDashboard() {
     try {
@@ -50,13 +73,14 @@ export default function Dashboard() {
   }
 
   async function sincronizarDrive() {
-    setSyncState({ loading: true, resultado: null, error: null })
+    setSyncState(s => ({ ...s, loading: true, error: null }))
     try {
       const res = await fetch('/api/drive/sincronizar-todas', { method: 'POST' })
       const d   = await res.json()
       if (!res.ok) throw new Error(d.error || `Error ${res.status}`)
       setSyncState({ loading: false, resultado: d, error: null })
-      // Recargar KPIs para reflejar el nuevo progreso
+      setUltimaSync(new Date())
+      setProxSync(SYNC_INTERVAL_MS / 1000)
       cargarDashboard()
     } catch (err) {
       setSyncState({ loading: false, resultado: null, error: err.message })
@@ -102,42 +126,51 @@ export default function Dashboard() {
       </div>
 
       {/* Panel Sincronización Drive — solo roles admin/supervisor */}
-      {ROLES_ADMIN.includes((usuario?.rol || '').toLowerCase()) && (
+      {esAdmin && (
         <div className="card" style={{ marginTop: 32, borderLeft: '4px solid var(--azul)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <h3 style={{ margin: 0, marginBottom: 4 }}>Sincronización Drive</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <h3 style={{ margin: 0 }}>Sincronización Drive</h3>
+                <span style={{ fontSize: 11, fontWeight: 700, background: '#DBEAFE', color: '#1D4ED8', padding: '2px 8px', borderRadius: 20 }}>
+                  🔄 AUTO · cada 10 min
+                </span>
+              </div>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--gris)' }}>
-                Escanea todas las OTs activas, registra carpetas y documentos desde Google Drive.
+                {ultimaSync
+                  ? <>Última sync: <strong>{ultimaSync.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</strong>
+                    {proxSync !== null && proxSync > 0 && <> · Próxima en <strong>{Math.floor(proxSync / 60)}:{String(proxSync % 60).padStart(2, '0')} min</strong></>}
+                  </>
+                  : syncState.loading ? 'Sincronizando por primera vez...' : 'Esperando primera sincronización...'
+                }
               </p>
             </div>
             <button
-              className="btn btn-primary"
+              className="btn btn-secondary btn-sm"
               onClick={sincronizarDrive}
               disabled={syncState.loading}
               style={{ whiteSpace: 'nowrap' }}
             >
-              {syncState.loading ? 'Sincronizando...' : 'Sincronizar todas las OTs'}
+              {syncState.loading ? '⏳ Sincronizando...' : '↻ Sync manual'}
             </button>
           </div>
 
           {/* Resultado */}
           {syncState.resultado && (
-            <div style={{ marginTop: 16, padding: '12px 16px', background: '#F0FDF4', borderRadius: 8, fontSize: 13 }}>
+            <div style={{ marginTop: 12, padding: '10px 14px', background: '#F0FDF4', borderRadius: 8, fontSize: 13 }}>
               <strong style={{ color: '#166534' }}>
-                Sincronización completada: {syncState.resultado.total_ots} OTs procesadas,{' '}
-                {syncState.resultado.ots_con_documentos_nuevos} con documentos nuevos detectados.
+                ✓ {syncState.resultado.total_ots} OTs procesadas · {syncState.resultado.ots_con_documentos_nuevos} con docs nuevos
               </strong>
               {syncState.resultado.ots_con_error > 0 && (
                 <span style={{ color: '#B45309', marginLeft: 8 }}>
-                  ({syncState.resultado.ots_con_error} con errores — revisa consola)
+                  ({syncState.resultado.ots_con_error} con errores)
                 </span>
               )}
             </div>
           )}
           {syncState.error && (
-            <div style={{ marginTop: 16, padding: '12px 16px', background: '#FEF2F2', borderRadius: 8, fontSize: 13, color: '#991B1B' }}>
-              Error: {syncState.error}
+            <div style={{ marginTop: 12, padding: '10px 14px', background: '#FEF2F2', borderRadius: 8, fontSize: 13, color: '#991B1B' }}>
+              ⚠️ {syncState.error}
             </div>
           )}
         </div>
