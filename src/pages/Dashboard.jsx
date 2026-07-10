@@ -5,9 +5,9 @@ import { useAuth } from '../lib/AuthContext'
 
 const CARDS = [
   { key: 'total_ots',             label: 'Total OTs',           color: 'var(--azul)',   to: '/ots' },
-  { key: 'ots_pendientes',        label: 'OTs Pendientes',      color: 'var(--rojo)',   to: '/ots?estado=Sin inspector' },
-  { key: 'ots_asignadas',         label: 'OTs Asignadas',       color: 'var(--ambar)',  to: '/ots?estado=Asignado' },
-  { key: 'ots_cerradas',          label: 'OTs Cerradas',        color: 'var(--verde)',  to: '/ots?estado=Cerrada documentalmente' },
+  { key: 'ots_pendientes',        label: 'OTs Pendientes',      color: 'var(--rojo)',   to: '/ots?estados=Pendiente de asignación,Sin inspector&label=Pendientes' },
+  { key: 'ots_asignadas',         label: 'OTs Asignadas',       color: 'var(--ambar)',  to: '/ots?estados=Asignado,Asignada,En proceso,Acta cargada,Informe enviado,Factura cargada&label=Asignadas' },
+  { key: 'ots_cerradas',          label: 'OTs Cerradas',        color: 'var(--verde)',  to: '/ots?estados=Informe cargado,Cerrada documentalmente&label=Cerradas' },
   { key: 'documentos_pendientes', label: 'Docs Pendientes',     color: '#7C3AED',       to: '/ots?docs=pendientes' },
   { key: 'documentos_cargados',   label: 'Docs Cargados',       color: '#0891B2',       to: '/ots?docs=cargados' },
   { key: 'total_asignaciones',    label: 'Asignaciones',        color: 'var(--azul)',   to: '/asignaciones' },
@@ -27,6 +27,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     cargarDashboard()
+    const interval = setInterval(cargarDashboard, 60000)
+    return () => clearInterval(interval)
   }, [])
 
   async function cargarDashboard() {
