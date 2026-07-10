@@ -462,7 +462,9 @@ function SeccionCargaInforme({ ot }) {
               <div style={{ fontSize: 13 }}>
                 {exito.emailEnviado
                   ? <span style={{ color: '#065F46' }}>✉️ Email enviado automáticamente a <strong>{exito.supEmail}</strong></span>
-                  : <span style={{ color: '#92400E' }}>⚠️ Email no enviado: {exito.emailError}</span>
+                  : <span style={{ color: '#92400E' }}>⚠️ Email no enviado: {exito.emailError}
+                      {exito.emailError?.includes('email') && <span style={{ display: 'block', fontSize: 11, color: '#78350F', marginTop: 2 }}>→ Ve a Usuarios, edita al supervisor y agrega su email. Luego presiona ↻ en el selector.</span>}
+                    </span>
                 }
               </div>
               {/* WhatsApp */}
@@ -534,17 +536,25 @@ function SeccionCargaInforme({ ot }) {
             {supervisores.length === 0 ? (
               <div style={{ fontSize: 12, color: '#94A3B8' }}>Cargando supervisores...</div>
             ) : (
-              <select
-                value={supervisorSeleccionado?.email || ''}
-                onChange={e => setSupervisorSeleccionado(supervisores.find(s => s.email === e.target.value) || null)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#fff', marginBottom: 4 }}
-              >
-                {supervisores.map(s => (
-                  <option key={s.email} value={s.email}>
-                    {s.nombre_completo} {s.email ? `— ${s.email}` : '(sin email)'}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <select
+                  value={supervisorSeleccionado?.id || ''}
+                  onChange={e => setSupervisorSeleccionado(supervisores.find(s => s.id === e.target.value) || null)}
+                  style={{ flex: 1, padding: '7px 10px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#fff', marginBottom: 4 }}
+                >
+                  {supervisores.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre_completo} {s.email ? `— ${s.email}` : '⚠ sin email'}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={cargarSupervisores}
+                  title="Recargar lista de supervisores"
+                  style={{ padding: '0 10px', border: '1px solid #CBD5E1', borderRadius: 6, background: '#F8FAFC', cursor: 'pointer', fontSize: 16, color: '#64748B', flexShrink: 0 }}
+                >↻</button>
+              </div>
             )}
             {supervisorSeleccionado && !supervisorSeleccionado.email && (
               <div style={{ fontSize: 11, color: '#DC2626', marginTop: 2 }}>
