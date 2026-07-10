@@ -14,6 +14,8 @@ import Calendario from './pages/Calendario'
 import Clientes from './pages/Clientes'
 import Procedimientos from './pages/Procedimientos'
 import Acreditaciones from './pages/Acreditaciones'
+import Informes from './pages/Informes'
+import NuevoInforme from './pages/NuevoInforme'
 import './styles/global.css'
 
 // Ruta protegida
@@ -74,6 +76,8 @@ function AppRoutes() {
       <Route path="/clientes" element={<RutaPrivada><Clientes /></RutaPrivada>} />
       <Route path="/procedimientos" element={<RutaPrivada><Procedimientos /></RutaPrivada>} />
       <Route path="/acreditaciones" element={<RutaPrivada><Acreditaciones /></RutaPrivada>} />
+      <Route path="/informes" element={<RutaPrivada><Informes /></RutaPrivada>} />
+      <Route path="/informes/nuevo" element={<RutaPrivada><NuevoInforme /></RutaPrivada>} />
 
       <Route path="/auditoria" element={<RutaPrivada><Auditoria /></RutaPrivada>} />
       <Route path="/catalogos" element={<RutaPrivada><Navigate to="/dashboard" replace /></RutaPrivada>} />
