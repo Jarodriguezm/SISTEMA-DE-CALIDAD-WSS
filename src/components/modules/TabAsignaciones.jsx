@@ -11,6 +11,24 @@ function waLink(tel, mensaje) {
   return `https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`
 }
 
+// Métodos END → número de informe REG-DII que debe emitir el inspector
+const END_METHODS = [
+  { cod:'VT',  desc:'Insp. Visual',       reg:'REG-DII-003' },
+  { cod:'PT',  desc:'Líq. Penetrantes',   reg:'REG-DII-004' },
+  { cod:'MT',  desc:'Part. Magnéticas',   reg:'REG-DII-005' },
+  { cod:'UTT', desc:'Med. Espesores',     reg:'REG-DII-006' },
+  { cod:'UT',  desc:'Ultrasonido',        reg:'REG-DII-007' },
+  { cod:'CD',  desc:'Control Dim.',       reg:'REG-DII-009' },
+  { cod:'CG',  desc:'Cert. Izaje',        reg:'REG-DII-011' },
+  { cod:'PH',  desc:'P. Hidrostática',    reg:'REG-DII-026' },
+  { cod:'CTK', desc:'Integ. Tanques',     reg:'REG-DII-049' },
+  { cod:'CS',  desc:'Calif. Soldador',    reg:'REG-DII-054' },
+  { cod:'T',   desc:'Termografía',        reg:'REG-DII-057' },
+  { cod:'PN',  desc:'P. Neumática',       reg:'REG-DII-062' },
+  { cod:'CV',  desc:'Cámara Vacío',       reg:'REG-DII-063' },
+  { cod:'O',   desc:'Otros',             reg:null },
+]
+
 function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion, supervisorNombre, pdfUrl }) {
   return (
     `Hola, te informamos que has sido asignado/a a una actividad de inspección.\n\n` +
@@ -409,7 +427,15 @@ function TarjetaAsignacion({ asig, ot, onVerPDF }) {
       )}
       {asig.tipos_inspeccion && (
         <div style={{ fontSize:11, background:'#F7F8FA', borderRadius:6, padding:'6px 10px', marginBottom:6 }}>
-          <span style={{ color:'#888', fontWeight:'bold' }}>Tipos: </span>{asig.tipos_inspeccion}
+          <span style={{ color:'#888', fontWeight:'bold' }}>Informes a emitir: </span>
+          {asig.tipos_inspeccion.toUpperCase().split(/[,\s]+/).filter(Boolean).map(cod => {
+            const m = END_METHODS.find(e => e.cod === cod)
+            return m ? (
+              <span key={cod} style={{ display:'inline-block', fontSize:9, fontWeight:'bold', padding:'2px 7px', borderRadius:10, background: m.reg ? '#E6F1FB' : '#F1F5F9', color: m.reg ? '#185FA5' : '#888', marginLeft:4, fontFamily:'monospace' }}>
+                {m.reg || cod}
+              </span>
+            ) : <span key={cod} style={{ marginLeft:4, color:'#aaa' }}>{cod}</span>
+          })}
         </div>
       )}
       {asig.descripcion_actividad && (
@@ -457,14 +483,6 @@ export default function TabAsignaciones({ ot }) {
     fechaInspeccion:'', hora:'', tiempoEstimado:'', vehiculo:'',
     normaEjecucion:'', normaEvaluacion:'', descripcionActividad:'',
   })
-
-  const TIPOS = [
-    {cod:'VT', desc:'Insp. visual'},{cod:'CD', desc:'Control dim.'},{cod:'PT', desc:'Líq. penetrantes'},
-    {cod:'MT', desc:'Part. magnéticas'},{cod:'UT', desc:'Ultrasonido'},{cod:'UTT', desc:'Med. espesores'},
-    {cod:'T', desc:'Termografía'},{cod:'CG', desc:'Cert. grúas'},{cod:'CTK', desc:'Cert. tanques'},
-    {cod:'CS', desc:'Calif. soldador'},{cod:'PH', desc:'Prueba hidrost.'},{cod:'PN', desc:'Prueba neumática'},
-    {cod:'CV', desc:'Cámara vacío'},{cod:'O', desc:'Otros'},
-  ]
 
   const cargarAsignaciones = useCallback(async () => {
     setLoading(true); setError(null)
@@ -682,25 +700,38 @@ export default function TabAsignaciones({ ot }) {
             )}
           </div>
 
-          {/* Tipos */}
+          {/* Métodos END / Informes a generar */}
           <div style={{ marginBottom:14 }}>
-            <label style={labelStyle}>Tipos de inspección</label>
+            <label style={labelStyle}>
+              Métodos END aplicados{' '}
+              <span style={{fontSize:10,color:'#185FA5',fontWeight:'normal'}}>→ define los informes REG-DII que emitirá el inspector</span>
+            </label>
             <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
-              {TIPOS.map(t => {
-                const sel = form.tiposInspeccion.includes(t.cod)
+              {END_METHODS.map(m => {
+                const sel = form.tiposInspeccion.includes(m.cod)
                 return (
-                  <button key={t.cod} onClick={()=>toggle('tiposInspeccion',t.cod)} style={{
-                    padding:'6px 10px',borderRadius:8,cursor:'pointer',fontSize:11,
+                  <button key={m.cod} onClick={()=>toggle('tiposInspeccion',m.cod)} style={{
+                    padding:'7px 10px',borderRadius:8,cursor:'pointer',textAlign:'center',minWidth:82,
                     border:`1.5px solid ${sel?'#185FA5':'#ddd'}`,
-                    background:sel?'#E6F1FB':'#fff',fontWeight:sel?'bold':'normal',
+                    background:sel?'#E6F1FB':'#fff',
                     color:sel?'#185FA5':'#555',transition:'all 0.15s',
                   }}>
-                    <span style={{display:'block',fontWeight:900,fontSize:13}}>{t.cod}</span>
-                    <span style={{display:'block',fontSize:9,color:sel?'#185FA5':'#aaa'}}>{t.desc}</span>
+                    <span style={{display:'block',fontWeight:900,fontSize:13}}>{m.cod}</span>
+                    <span style={{display:'block',fontSize:9,color:sel?'#185FA5':'#aaa',marginTop:1}}>{m.desc}</span>
+                    {m.reg && <span style={{display:'block',fontSize:9,fontWeight:'bold',color:sel?'#3B72B5':'#ccc',marginTop:2,fontFamily:'monospace'}}>{m.reg}</span>}
                   </button>
                 )
               })}
             </div>
+            {form.tiposInspeccion.length > 0 && (
+              <div style={{marginTop:8,padding:'8px 12px',background:'#EAF3DE',borderRadius:8,fontSize:12,color:'#3B6D11',border:'1px solid #97C459'}}>
+                📋 <b>El inspector debe emitir:</b>{' '}
+                {form.tiposInspeccion.map(cod => {
+                  const m = END_METHODS.find(e => e.cod === cod)
+                  return m?.reg ? `${m.reg} (${cod})` : cod
+                }).join(' · ')}
+              </div>
+            )}
           </div>
 
           {/* Descripción */}
