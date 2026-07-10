@@ -36,7 +36,8 @@ export default function OTs() {
   const [mensajeExito, setMensajeExito] = useState('')
   const POR_PAGINA = 25
 
-  const puedeCrearOT = esAdmin() || esComercial()
+  const puedeCrearOT  = esAdmin() || esComercial()
+  const puedeEliminar = esAdmin() || esComercial()
 
   const cargarOTs = useCallback(async () => {
     try {
@@ -72,6 +73,19 @@ export default function OTs() {
     setMensajeExito(`✅ OT ${otNumero} creada correctamente`)
     cargarOTs()
     setTimeout(() => setMensajeExito(''), 4000)
+  }
+
+  async function eliminarOT(ot) {
+    if (!window.confirm(`¿Eliminar la OT ${ot.ot_numero}?\n\nEsta acción no se puede deshacer.`)) return
+    try {
+      const { error: err } = await supabase.from('ots').delete().eq('ot_numero', ot.ot_numero)
+      if (err) throw err
+      setMensajeExito(`🗑️ OT ${ot.ot_numero} eliminada`)
+      cargarOTs()
+      setTimeout(() => setMensajeExito(''), 4000)
+    } catch (e) {
+      setError(`Error al eliminar: ${e.message}`)
+    }
   }
 
   // Filtrado local
@@ -195,7 +209,9 @@ export default function OTs() {
                       <FilaOT
                         key={ot.id || ot.ot_numero}
                         ot={ot}
+                        puedeEliminar={puedeEliminar}
                         onVerDetalle={() => navigate(`/ots/${ot.ot_numero}`)}
+                        onEliminar={() => eliminarOT(ot)}
                       />
                     ))}
                   </tbody>
@@ -226,7 +242,7 @@ export default function OTs() {
   )
 }
 
-function FilaOT({ ot, onVerDetalle }) {
+function FilaOT({ ot, puedeEliminar, onVerDetalle, onEliminar }) {
   const progreso = Number(ot.progreso || 0)
 
   return (
@@ -259,9 +275,32 @@ function FilaOT({ ot, onVerDetalle }) {
       <td>{ot.inspector || '—'}</td>
       <td className="text-sm">{ot.fecha_creacion ? new Date(ot.fecha_creacion).toLocaleDateString('es-CL') : '—'}</td>
       <td>
-        <button className="btn btn-secondary btn-sm" onClick={onVerDetalle}>
-          Ver detalle
-        </button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button className="btn btn-secondary btn-sm" onClick={onVerDetalle}>
+            Ver detalle
+          </button>
+          {puedeEliminar && (
+            <button
+              onClick={onEliminar}
+              title="Eliminar OT"
+              style={{
+                background: 'none',
+                border: '1px solid #FCA5A5',
+                borderRadius: 6,
+                color: '#DC2626',
+                cursor: 'pointer',
+                padding: '4px 7px',
+                fontSize: 14,
+                lineHeight: 1,
+                transition: 'all .15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+            >
+              🗑
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   )
