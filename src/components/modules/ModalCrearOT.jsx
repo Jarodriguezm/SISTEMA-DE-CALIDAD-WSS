@@ -316,7 +316,7 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   }
 
   return (
-    <div style={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={styles.overlay}>
       <div style={styles.box}>
 
         {/* Header */}
