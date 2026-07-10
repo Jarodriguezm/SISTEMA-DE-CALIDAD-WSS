@@ -2,16 +2,25 @@ import { useEffect, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-const ROLES = ['ADMIN', 'COMERCIAL', 'SUPERVISOR', 'INSPECTOR', 'FACTURACION']
+const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION']
 const SEDES = ['SCL', 'ANF', 'CCP']
 
+const BADGE_ROL = {
+  ADMIN:       'badge-red',
+  SUPERVISOR:  'badge-amber',
+  COMERCIAL:   'badge-blue',
+  INSPECTOR:   'badge-green',
+  FACTURACION: 'badge-gray',
+}
+
 export default function Usuarios() {
-  const { esAdmin, usuario: usuarioActual } = useAuth()
-  const [usuarios, setUsuarios] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [error, setError] = useState('')
-  const [busqueda, setBusqueda] = useState('')
-  const [modalUsuario, setModalUsuario] = useState(null)
+  const { esAdmin } = useAuth()
+  const [usuarios, setUsuarios]       = useState([])
+  const [cargando, setCargando]       = useState(true)
+  const [error, setError]             = useState('')
+  const [busqueda, setBusqueda]       = useState('')
+  const [editando, setEditando]       = useState(null)   // usuario en edición
+  const [guardando, setGuardando]     = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
 
   useEffect(() => { cargar() }, [])
@@ -19,115 +28,224 @@ export default function Usuarios() {
   async function cargar() {
     try {
       setCargando(true)
+      setError('')
       const { data, error: err } = await supabase
         .from('usuarios')
-        .select('id, nombre, apellido, email, rol, sede, activo, cargo, telefono_whatsapp, created_at')
+        .select('id, nombre, apellido, email, rol, sede, activo, telefono_whatsapp')
         .order('nombre')
       if (err) throw err
       setUsuarios(data || [])
-    } catch (err) {
-      setError(mensajeError(err))
+    } catch (e) {
+      setError(mensajeError(e))
     } finally {
       setCargando(false)
     }
   }
 
+  async function guardar() {
+    if (!editando) return
+    try {
+      setGuardando(true)
+      const { error: err } = await supabase
+        .from('usuarios')
+        .update({
+          nombre:              editando.nombre?.trim(),
+          apellido:            editando.apellido?.trim(),
+          email:               editando.email?.trim().toLowerCase(),
+          rol:                 editando.rol,
+          sede:                editando.sede,
+          activo:              editando.activo,
+          telefono_whatsapp:   editando.telefono_whatsapp?.trim() || null,
+        })
+        .eq('id', editando.id)
+      if (err) throw err
+      setMensajeExito(`✅ ${editando.nombre} actualizado correctamente`)
+      setEditando(null)
+      cargar()
+      setTimeout(() => setMensajeExito(''), 4000)
+    } catch (e) {
+      setError(mensajeError(e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   const filtrados = usuarios.filter(u => {
-    if (!busqueda) return true
     const q = busqueda.toLowerCase()
-    return [u.nombre, u.apellido, u.email, u.rol, u.sede].some(v => String(v || '').toLowerCase().includes(q))
+    return !q || [u.nombre, u.apellido, u.email, u.rol, u.sede]
+      .some(v => String(v || '').toLowerCase().includes(q))
   })
 
-  async function toggleActivo(u) {
-    if (!esAdmin()) return
-    const { error } = await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id)
-    if (!error) {
-      setUsuarios(prev => prev.map(x => x.id === u.id ? { ...x, activo: !x.activo } : x))
-      mostrarExito(`Usuario ${u.activo ? 'desactivado' : 'activado'} correctamente`)
-    }
-  }
-
-  async function enviarAcceso(u) {
-    if (!u.email) return
-    try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(
-        u.email.toLowerCase(),
-        { redirectTo: window.location.origin + '/login' }
-      )
-      if (err) throw err
-      mostrarExito(`Link de acceso enviado a ${u.email}`)
-    } catch (err) {
-      setError(mensajeError(err))
-    }
-  }
-
-  function mostrarExito(msg) {
-    setMensajeExito(msg)
-    setTimeout(() => setMensajeExito(''), 4000)
-  }
-
   if (!esAdmin()) {
-    return <div className="alert alert-error">Solo el administrador puede acceder a esta sección.</div>
+    return (
+      <div className="alert alert-error" style={{ marginTop: 24 }}>
+        No tienes permiso para ver esta sección.
+      </div>
+    )
   }
 
   return (
     <div>
+      {/* Modal edición */}
+      {editando && (
+        <div style={S.overlay}>
+          <div style={S.modal}>
+            <div style={S.modalHeader}>
+              <h2 style={{ margin: 0, color: '#fff', fontSize: 17 }}>Editar Usuario</h2>
+              <button onClick={() => setEditando(null)} style={S.btnX} disabled={guardando}>✕</button>
+            </div>
+            <div style={{ padding: 24 }}>
+
+              <div className="grid">
+                <div className="col-6 field">
+                  <label>Nombre *</label>
+                  <input className="input" value={editando.nombre || ''}
+                    onChange={e => setEditando(u => ({ ...u, nombre: e.target.value }))} />
+                </div>
+                <div className="col-6 field">
+                  <label>Apellido</label>
+                  <input className="input" value={editando.apellido || ''}
+                    onChange={e => setEditando(u => ({ ...u, apellido: e.target.value }))} />
+                </div>
+                <div className="col-6 field">
+                  <label>Email *</label>
+                  <input className="input" type="email" value={editando.email || ''}
+                    onChange={e => setEditando(u => ({ ...u, email: e.target.value }))} />
+                </div>
+                <div className="col-6 field">
+                  <label>WhatsApp</label>
+                  <input className="input" placeholder="+56 9 XXXX XXXX"
+                    value={editando.telefono_whatsapp || ''}
+                    onChange={e => setEditando(u => ({ ...u, telefono_whatsapp: e.target.value }))} />
+                  <span className="text-sm">Formato: +56912345678 (sin espacios)</span>
+                </div>
+                <div className="col-4 field">
+                  <label>Rol *</label>
+                  <select className="select" value={editando.rol || ''}
+                    onChange={e => setEditando(u => ({ ...u, rol: e.target.value }))}>
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div className="col-4 field">
+                  <label>Sede *</label>
+                  <select className="select" value={editando.sede || ''}
+                    onChange={e => setEditando(u => ({ ...u, sede: e.target.value }))}>
+                    {SEDES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="col-4 field">
+                  <label>Estado</label>
+                  <select className="select" value={editando.activo ? 'activo' : 'inactivo'}
+                    onChange={e => setEditando(u => ({ ...u, activo: e.target.value === 'activo' }))}>
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16, borderTop: '1px solid var(--borde)', paddingTop: 16 }}>
+                <button className="btn btn-ghost" onClick={() => setEditando(null)} disabled={guardando}>
+                  Cancelar
+                </button>
+                <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+                  {guardando ? 'Guardando...' : '✓ Guardar cambios'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
       <div className="flex-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1>Gestión de Personal</h1>
-          <p className="text-sm" style={{ marginTop: 4 }}>{filtrados.length} usuario{filtrados.length !== 1 ? 's' : ''} registrado{filtrados.length !== 1 ? 's' : ''}</p>
+          <h1>Usuarios</h1>
+          <p className="text-sm" style={{ marginTop: 4 }}>
+            {filtrados.length} usuario{filtrados.length !== 1 ? 's' : ''} registrados
+          </p>
         </div>
-        <div className="flex gap-8">
-          <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setModalUsuario({})}>+ Nuevo usuario</button>
-        </div>
+        <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
       </div>
 
-      {mensajeExito && <div className="alert alert-ok" style={{ marginBottom: 16 }}>{mensajeExito}</div>}
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {/* Éxito */}
+      {mensajeExito && (
+        <div className="alert alert-ok" style={{ marginBottom: 16 }}>{mensajeExito}</div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16, padding: '12px 18px' }}>
+      {/* Error */}
+      {error && (
+        <div className="alert alert-error" style={{ marginBottom: 16 }}>
+          {error}
+          <button className="btn btn-secondary btn-sm" onClick={cargar} style={{ marginLeft: 12 }}>Reintentar</button>
+        </div>
+      )}
+
+      {/* Filtro */}
+      <div className="card" style={{ marginBottom: 16, padding: '14px 18px' }}>
         <input className="input" placeholder="Buscar por nombre, email, rol, sede..."
-          value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+          value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          style={{ maxWidth: 400 }} />
       </div>
 
+      {/* Loading */}
       {cargando && <div className="loading-bar" style={{ marginBottom: 16 }} />}
 
+      {/* Tabla */}
       {!cargando && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <table className="tabla">
             <thead>
               <tr>
-                <th>Nombre</th><th>Email</th><th>Rol</th><th>Sede</th><th>Cargo</th><th>Estado</th><th>Acciones</th>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>WhatsApp</th>
+                <th>Rol</th>
+                <th>Sede</th>
+                <th>Estado</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filtrados.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--gris)', padding: '32px 0' }}>No se encontraron usuarios</td></tr>
-              )}
-              {filtrados.map(u => (
+              {filtrados.length === 0 ? (
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--gris)', padding: 32 }}>
+                  No hay usuarios
+                </td></tr>
+              ) : filtrados.map(u => (
                 <tr key={u.id}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{u.nombre} {u.apellido}</div>
-                    {u.telefono_whatsapp && <div className="text-sm">📱 {u.telefono_whatsapp}</div>}
                   </td>
-                  <td className="text-sm">{u.email || '—'}</td>
-                  <td><span className="badge badge-blue">{u.rol}</span></td>
-                  <td><span className="badge badge-gray">{u.sede}</span></td>
-                  <td className="text-sm">{u.cargo || '—'}</td>
-                  <td><span className={`badge ${u.activo ? 'badge-green' : 'badge-red'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span></td>
                   <td>
-                    <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setModalUsuario(u)}>✏ Editar</button>
-                      {u.email && (
-                        <button className="btn btn-ghost btn-sm" title="Enviar link de acceso" onClick={() => enviarAcceso(u)}>📧 Acceso</button>
-                      )}
-                      {u.id !== usuarioActual?.id && (
-                        <button className={`btn btn-sm ${u.activo ? 'btn-danger' : 'btn-ghost'}`} onClick={() => toggleActivo(u)}>
-                          {u.activo ? 'Desactivar' : 'Activar'}
-                        </button>
-                      )}
-                    </div>
+                    {u.email
+                      ? <span style={{ fontSize: 13 }}>{u.email}</span>
+                      : <span style={{ color: '#DC2626', fontSize: 12, fontWeight: 600 }}>⚠ Sin email</span>
+                    }
+                  </td>
+                  <td>
+                    {u.telefono_whatsapp
+                      ? <span style={{ fontSize: 13, fontFamily: 'monospace' }}>{u.telefono_whatsapp}</span>
+                      : <span style={{ color: '#DC2626', fontSize: 12, fontWeight: 600 }}>⚠ Sin teléfono</span>
+                    }
+                  </td>
+                  <td>
+                    <span className={`badge ${BADGE_ROL[u.rol] || 'badge-gray'}`}>{u.rol}</span>
+                  </td>
+                  <td>
+                    <span className="badge badge-blue">{u.sede}</span>
+                  </td>
+                  <td>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 12,
+                      background: u.activo ? '#D1FAE5' : '#FEE2E2',
+                      color: u.activo ? '#065F46' : '#991B1B',
+                    }}>
+                      {u.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEditando({ ...u })}>
+                      ✏ Editar
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -135,116 +253,32 @@ export default function Usuarios() {
           </table>
         </div>
       )}
-
-      {modalUsuario !== null && (
-        <ModalUsuario
-          usuario={modalUsuario.id ? modalUsuario : null}
-          onClose={() => setModalUsuario(null)}
-          onGuardado={(msg) => { setModalUsuario(null); cargar(); mostrarExito(msg || 'Usuario guardado correctamente') }}
-        />
-      )}
     </div>
   )
 }
 
-function ModalUsuario({ usuario, onClose, onGuardado }) {
-  const [guardando, setGuardando] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    nombre: usuario?.nombre || '',
-    apellido: usuario?.apellido || '',
-    email: usuario?.email || '',
-    telefono_whatsapp: usuario?.telefono_whatsapp || '',
-    cargo: usuario?.cargo || '',
-    rol: usuario?.rol || 'INSPECTOR',
-    sede: usuario?.sede || 'SCL',
-  })
-
-  function set(campo, valor) { setForm(f => ({ ...f, [campo]: valor })); if (error) setError('') }
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return }
-    if (!form.email.trim()) { setError('El email es obligatorio'); return }
-    try {
-      setGuardando(true)
-      setError('')
-      if (usuario?.id) {
-        const { error: err } = await supabase.from('usuarios').update({
-          nombre: form.nombre.trim(), apellido: form.apellido.trim(),
-          email: form.email.trim().toLowerCase(), telefono_whatsapp: form.telefono_whatsapp.trim() || null,
-          cargo: form.cargo.trim() || null, rol: form.rol, sede: form.sede,
-        }).eq('id', usuario.id)
-        if (err) throw err
-        onGuardado('Usuario actualizado correctamente')
-      } else {
-        const emailNorm = form.email.trim().toLowerCase()
-        const { error: errDB } = await supabase.from('usuarios').insert({
-          nombre: form.nombre.trim(), apellido: form.apellido.trim(), email: emailNorm,
-          telefono_whatsapp: form.telefono_whatsapp.trim() || null,
-          cargo: form.cargo.trim() || null, rol: form.rol, sede: form.sede, activo: true,
-        })
-        if (errDB) throw errDB
-        try {
-          await supabase.auth.resetPasswordForEmail(emailNorm, { redirectTo: window.location.origin + '/login' })
-        } catch { /* no crítico */ }
-        onGuardado(`Usuario ${form.nombre.trim()} creado. Se envió un correo de acceso a ${emailNorm}.`)
-      }
-    } catch (err) {
-      setError(mensajeError(err))
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 600, overflow: 'hidden' }}>
-        <div style={{ background: 'linear-gradient(135deg, #0E2A45, #17395C)', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, color: '#fff', fontSize: 18 }}>{usuario?.id ? '✏ Editar usuario' : '＋ Nuevo usuario'}</h2>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>✕</button>
-        </div>
-        <div style={{ padding: 24 }}>
-          {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>⚠ {error}</div>}
-          <form onSubmit={handleSubmit}>
-            <div className="grid">
-              <div className="col-6 field"><label>Nombre *</label>
-                <input className="input" value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={guardando} /></div>
-              <div className="col-6 field"><label>Apellido</label>
-                <input className="input" value={form.apellido} onChange={e => set('apellido', e.target.value)} disabled={guardando} /></div>
-              <div className="col-6 field"><label>Email *</label>
-                <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)}
-                  disabled={guardando || !!usuario?.id}
-                  style={usuario?.id ? { background: 'var(--fondo)', color: 'var(--gris)' } : {}} />
-                {usuario?.id && <p style={{ fontSize: 11, color: 'var(--gris)', marginTop: 4 }}>El email no se puede cambiar</p>}
-              </div>
-              <div className="col-6 field"><label>Teléfono WhatsApp</label>
-                <input className="input" placeholder="+56 9 XXXX XXXX" value={form.telefono_whatsapp} onChange={e => set('telefono_whatsapp', e.target.value)} disabled={guardando} /></div>
-              <div className="col-6 field"><label>Cargo</label>
-                <input className="input" placeholder="Ej: Inspector END" value={form.cargo} onChange={e => set('cargo', e.target.value)} disabled={guardando} /></div>
-              <div className="col-3 field"><label>Rol</label>
-                <select className="select" value={form.rol} onChange={e => set('rol', e.target.value)} disabled={guardando}>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select></div>
-              <div className="col-3 field"><label>Sede</label>
-                <select className="select" value={form.sede} onChange={e => set('sede', e.target.value)} disabled={guardando}>
-                  {SEDES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select></div>
-            </div>
-            {!usuario?.id && (
-              <div className="alert alert-info" style={{ margin: '16px 0', fontSize: 13 }}>
-                📧 Al crear el usuario se le enviará un correo con su link de acceso para establecer su contraseña.
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTop: '1px solid var(--borde)', marginTop: 8 }}>
-              <button type="button" className="btn btn-ghost" onClick={onClose} disabled={guardando}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={guardando}>
-                {guardando ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Guardando...</> : usuario?.id ? '✓ Guardar cambios' : '✓ Crear usuario'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  )
-        }
+const S = {
+  overlay: {
+    position: 'fixed', inset: 0,
+    background: 'rgba(15,23,42,.6)',
+    zIndex: 300,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 24,
+  },
+  modal: {
+    width: '100%', maxWidth: 620,
+    background: '#fff', borderRadius: 16,
+    boxShadow: '0 24px 80px rgba(0,0,0,.3)',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    background: 'linear-gradient(135deg, #0E2A45, #17395C)',
+    padding: '16px 24px',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  },
+  btnX: {
+    background: 'rgba(255,255,255,.15)', border: 'none',
+    color: '#fff', width: 32, height: 32,
+    borderRadius: 8, fontSize: 14, cursor: 'pointer',
+  },
+}
