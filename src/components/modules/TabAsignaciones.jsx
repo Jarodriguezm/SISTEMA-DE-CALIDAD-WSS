@@ -12,21 +12,29 @@ function waLink(tel, mensaje) {
 }
 
 // Métodos END → número de informe REG-DII que debe emitir el inspector
+// Fuente: carpeta Drive 1S38DuO2oXU5L92vjlcksLnxhkSuh4ADH (verificado 10-Jul-2026)
 const END_METHODS = [
-  { cod:'VT',  desc:'Insp. Visual',       reg:'REG-DII-003' },
-  { cod:'PT',  desc:'Líq. Penetrantes',   reg:'REG-DII-004' },
-  { cod:'MT',  desc:'Part. Magnéticas',   reg:'REG-DII-005' },
-  { cod:'UTT', desc:'Med. Espesores',     reg:'REG-DII-006' },
-  { cod:'UT',  desc:'Ultrasonido',        reg:'REG-DII-007' },
-  { cod:'CD',  desc:'Control Dim.',       reg:'REG-DII-009' },
-  { cod:'CG',  desc:'Cert. Izaje',        reg:'REG-DII-011' },
-  { cod:'PH',  desc:'P. Hidrostática',    reg:'REG-DII-026' },
-  { cod:'CTK', desc:'Integ. Tanques',     reg:'REG-DII-049' },
-  { cod:'CS',  desc:'Calif. Soldador',    reg:'REG-DII-054' },
-  { cod:'T',   desc:'Termografía',        reg:'REG-DII-057' },
-  { cod:'PN',  desc:'P. Neumática',       reg:'REG-DII-062' },
-  { cod:'CV',  desc:'Cámara Vacío',       reg:'REG-DII-063' },
-  { cod:'O',   desc:'Otros',             reg:null },
+  // ── END clásicos (OI-376) ──────────────────────────────────────────────
+  { cod:'VT',   desc:'Insp. Visual',       reg:'REG-DII-003' },
+  { cod:'PT',   desc:'Líq. Penetrantes',   reg:'REG-DII-004' },
+  { cod:'MT',   desc:'Part. Magnéticas',   reg:'REG-DII-005' },
+  { cod:'UTT',  desc:'Med. Espesores',     reg:'REG-DII-006' },
+  { cod:'UT',   desc:'Ultrasonido',        reg:'REG-DII-007' },
+  { cod:'UTPA', desc:'Phased Array',       reg:'REG-DII-039' },
+  { cod:'T',    desc:'Termografía',        reg:'REG-DII-057' },
+  // ── Dimensional / Recubrimiento ────────────────────────────────────────
+  { cod:'CD',   desc:'Control Dim.',       reg:'REG-DII-002' },
+  { cod:'RC',   desc:'Med. Recubrimiento', reg:'REG-DII-008' },
+  // ── Pruebas ────────────────────────────────────────────────────────────
+  { cod:'PH',   desc:'P. Hermeticidad',    reg:'REG-DII-026' },
+  // ── Izaje y Levante (OI-377) ───────────────────────────────────────────
+  { cod:'PL',   desc:'Prueba de Carga',    reg:'REG-DII-011' },
+  { cod:'GM',   desc:'Grúas Móviles',      reg:'REG-DII-032' },
+  { cod:'PG',   desc:'Puentes Grúa',       reg:'REG-DII-059' },
+  // ── Soldadura / Tanques / Otros ────────────────────────────────────────
+  { cod:'CTK',  desc:'Integ. Tanques',     reg:'REG-DII-049' },
+  { cod:'CS',   desc:'Calif. Soldador',    reg:'REG-DII-019' },
+  { cod:'O',    desc:'Otros',             reg:null },
 ]
 
 function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion, supervisorNombre, pdfUrl }) {
