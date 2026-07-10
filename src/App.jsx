@@ -12,6 +12,7 @@ import Actas from './pages/Actas'
 import ReservaInformes from './pages/ReservaInformes'
 import Calendario from './pages/Calendario'
 import Clientes from './pages/Clientes'
+import Procedimientos from './pages/Procedimientos'
 import './styles/global.css'
 
 // Ruta protegida
@@ -70,6 +71,7 @@ function AppRoutes() {
       <Route path="/usuarios" element={<RutaPrivada><Usuarios /></RutaPrivada>} />
       <Route path="/calendario" element={<RutaPrivada><Calendario /></RutaPrivada>} />
       <Route path="/clientes" element={<RutaPrivada><Clientes /></RutaPrivada>} />
+      <Route path="/procedimientos" element={<RutaPrivada><Procedimientos /></RutaPrivada>} />
 
       <Route path="/auditoria" element={<RutaPrivada><Auditoria /></RutaPrivada>} />
       <Route path="/catalogos" element={<RutaPrivada><Navigate to="/dashboard" replace /></RutaPrivada>} />
