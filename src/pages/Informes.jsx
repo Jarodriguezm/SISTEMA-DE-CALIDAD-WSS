@@ -3,21 +3,29 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
 
-// Mapeo método END → REG-DII (debe coincidir con TabAsignaciones y NuevoInforme)
+// Mapeo método END → REG-DII (sincronizado con TabAsignaciones y NuevoInforme)
+// Fuente: carpeta Drive 1S38DuO2oXU5L92vjlcksLnxhkSuh4ADH (verificado 10-Jul-2026)
 const END_MAP = {
-  VT:  { reg: 'REG-DII-003', desc: 'Inspección Visual' },
-  PT:  { reg: 'REG-DII-004', desc: 'Líquidos Penetrantes' },
-  MT:  { reg: 'REG-DII-005', desc: 'Partículas Magnéticas' },
-  UTT: { reg: 'REG-DII-006', desc: 'UT — Medición Espesores' },
-  UT:  { reg: 'REG-DII-007', desc: 'Ultrasonido (Def. Fallas)' },
-  CD:  { reg: 'REG-DII-009', desc: 'Control Dimensional' },
-  CG:  { reg: 'REG-DII-011', desc: 'Cert. Equipo de Izaje' },
-  PH:  { reg: 'REG-DII-026', desc: 'Prueba Hidrostática' },
-  CTK: { reg: 'REG-DII-049', desc: 'Integridad de Tanques' },
-  CS:  { reg: 'REG-DII-054', desc: 'Calificación de Soldador' },
-  T:   { reg: 'REG-DII-057', desc: 'Termografía' },
-  PN:  { reg: 'REG-DII-062', desc: 'Prueba Neumática' },
-  CV:  { reg: 'REG-DII-063', desc: 'Cámara de Vacío' },
+  // END clásicos (OI-376)
+  VT:   { reg: 'REG-DII-003', desc: 'Inspección Visual' },
+  PT:   { reg: 'REG-DII-004', desc: 'Líquidos Penetrantes' },
+  MT:   { reg: 'REG-DII-005', desc: 'Partículas Magnéticas' },
+  UTT:  { reg: 'REG-DII-006', desc: 'UT — Medición Espesores' },
+  UT:   { reg: 'REG-DII-007', desc: 'Ultrasonido (Def. Fallas)' },
+  UTPA: { reg: 'REG-DII-039', desc: 'Ultrasonido Phased Array' },
+  T:    { reg: 'REG-DII-057', desc: 'Termografía' },
+  // Dimensional / Recubrimiento
+  CD:   { reg: 'REG-DII-002', desc: 'Control Dimensional' },
+  RC:   { reg: 'REG-DII-008', desc: 'Medición de Recubrimiento' },
+  // Pruebas
+  PH:   { reg: 'REG-DII-026', desc: 'Prueba de Hermeticidad' },
+  // Izaje y Levante (OI-377)
+  PL:   { reg: 'REG-DII-011', desc: 'Inspección / Prueba de Carga' },
+  GM:   { reg: 'REG-DII-032', desc: 'Cert. Operacional Grúas Móviles' },
+  PG:   { reg: 'REG-DII-059', desc: 'Cert. Evaluación Puentes Grúa' },
+  // Soldadura / Tanques
+  CTK:  { reg: 'REG-DII-049', desc: 'Evaluación Integridad de Tanque' },
+  CS:   { reg: 'REG-DII-019', desc: 'Calificación de Soldadores' },
 }
 
 const ESTADO_BADGE = {
