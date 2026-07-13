@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 // Mapeo método END → REG-DII (sincronizado con TabAsignaciones y NuevoInforme)
