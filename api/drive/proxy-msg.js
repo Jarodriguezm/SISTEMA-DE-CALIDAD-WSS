@@ -91,11 +91,12 @@ function parseMsgCfbf(buf) {
   }
 
   const secSize    = 1 << buf.readUInt16LE(30) // 512 (v3) o 4096 (v4)
-  const miniSecSz  = 64
-  const miniCutoff = buf.readUInt32LE(60)
+  const miniSecSz  = 1 << buf.readUInt16LE(32) // siempre 64 (2^6)
   const fatCount   = buf.readUInt32LE(44)
   const firstDirS  = buf.readUInt32LE(48)
-  const firstMiniF = buf.readUInt32LE(64)
+  const miniCutoff = buf.readUInt32LE(56)       // offset 56: mini stream cutoff (4096)
+  const firstMiniF = buf.readUInt32LE(60)       // offset 60: primer sector mini FAT
+  // offset 64 = numMiniFATSectors (no usado directamente)
 
   const offset = n => 512 + n * secSize
 
