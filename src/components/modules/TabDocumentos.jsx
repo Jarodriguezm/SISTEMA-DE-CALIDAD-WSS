@@ -35,8 +35,14 @@ function getExt(nombre) {
   return (nombre || '').split('.').pop().toLowerCase()
 }
 
-// Tipos que se pueden mostrar en iframe
-const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt'])
+// Tipos que se pueden mostrar directamente en iframe (PDF, imagen, HTML de proxy-msg)
+const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt', 'msg'])
+
+// Detecta si el archivo es un correo .msg (incluso con extensión doble como .msg.jpg)
+function esMsgFile(nombre) {
+  const n = (nombre || '').toLowerCase()
+  return n.endsWith('.msg') || /\.msg\./i.test(n)
+}
 
 // URL directa al archivo en Drive (para "Abrir en Drive")
 function getDriveOpenUrl(doc) {
@@ -46,9 +52,14 @@ function getDriveOpenUrl(doc) {
 }
 
 // URL proxy para servir el archivo via backend (OAuth2)
+// Archivos .msg → proxy-msg (parsea CFBF y devuelve HTML)
+// Resto → proxy-pdf (sirve el binario directamente)
 function getProxyUrl(doc) {
   const fileId = getDriveFileId(doc)
-  if (fileId) return `/api/drive/proxy-pdf?fileId=${fileId}`
+  if (fileId) {
+    const endpoint = esMsgFile(doc.nombre_archivo) ? 'proxy-msg' : 'proxy-pdf'
+    return `/api/drive/${endpoint}?fileId=${fileId}`
+  }
   // Supabase Storage u otra URL → servir directa
   return doc.drive_url || null
 }
