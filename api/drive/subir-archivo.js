@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'Parámetros requeridos: folder_id, file_name, file_content_base64' })
     }
 
-    const token = await getGoogleToken()
+    const token = await getUploadToken()
 
     // Resolver MIME type por extensión si el cliente no lo envió
     const mimeType = resolverMime(mime_type, file_name)
@@ -121,7 +121,39 @@ function resolverMime(clientMime, fileName) {
   return mimes[ext] || 'application/octet-stream'
 }
 
-// ── Google Auth (mismo patrón que crear-carpetas) ─────────────────────────────
+// ── Auth: OAuth2 (Gmail) con fallback a Service Account ──────────────────────
+// Subir archivos requiere OAuth2 porque las service accounts no tienen cuota
+// de almacenamiento en My Drive. Se usa un refresh token de la cuenta Gmail
+// propietaria del Drive (vars: GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN).
+
+async function getUploadToken() {
+  const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN
+
+  if (clientId && clientSecret && refreshToken) {
+    // OAuth2 con cuenta Gmail propietaria del Drive
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id:     clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type:    'refresh_token',
+      }).toString(),
+    })
+    const data = await res.json()
+    if (data.access_token) return data.access_token
+    throw new Error('OAuth2 token fallido: ' + JSON.stringify(data))
+  }
+
+  // Fallback: service account (solo funciona en Shared Drives)
+  console.warn('[subir-archivo] Usando service account — puede fallar por cuota')
+  return getGoogleToken()
+}
+
+// ── Google Auth Service Account ───────────────────────────────────────────────
 
 async function getGoogleToken() {
   const email  = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
