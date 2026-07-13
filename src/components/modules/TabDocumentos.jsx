@@ -51,6 +51,18 @@ function getDriveOpenUrl(doc) {
   return doc.drive_url || null
 }
 
+// Determina si el doc tiene un archivo real viewable (no es carpeta de Drive)
+function tieneArchivoViewable(doc) {
+  if (doc.drive_file_id) return true
+  const url = doc.drive_url || ''
+  if (!url) return false
+  if (url.includes('/drive/folders/')) return false    // URL de carpeta → no viewable
+  if (url.includes('/file/d/')) return true            // URL de archivo Drive
+  if (url.includes('.supabase.co/storage/')) return true // Supabase Storage
+  if (/\/(document|spreadsheets|presentation)\/d\//.test(url)) return true
+  return false
+}
+
 // URL proxy para servir el archivo via backend (OAuth2)
 // Archivos .msg → proxy-msg (parsea CFBF y devuelve HTML)
 // Resto → proxy-pdf (sirve el binario directamente)
@@ -60,8 +72,10 @@ function getProxyUrl(doc) {
     const endpoint = esMsgFile(doc.nombre_archivo) ? 'proxy-msg' : 'proxy-pdf'
     return `/api/drive/${endpoint}?fileId=${fileId}`
   }
-  // Supabase Storage u otra URL → servir directa
-  return doc.drive_url || null
+  // Supabase Storage u otra URL directa → servir sin proxy
+  const url = doc.drive_url || ''
+  if (url.includes('.supabase.co/storage/')) return url
+  return null
 }
 
 // ── Definición de las 12 etapas ───────────────────────────────────────────────
@@ -440,7 +454,7 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
                   {new Date(doc.created_at).toLocaleDateString('es-CL')}
                 </span>
               )}
-              {(doc.drive_url || doc.drive_file_id) && (
+              {tieneArchivoViewable(doc) && (
                 <button
                   style={S.btnMini}
                   onClick={() => onVerDoc?.(doc)}
