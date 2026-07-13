@@ -14,14 +14,19 @@ import { useAuth } from '../../lib/AuthContext'
 
 // ── Helpers para visor de documentos ─────────────────────────────────────────
 
-// Extrae el fileId de Drive desde drive_file_id o desde la URL
+// Extrae el fileId de Drive desde drive_file_id o desde cualquier URL de Google
 function getDriveFileId(doc) {
   if (doc.drive_file_id) return doc.drive_file_id
   const url = doc.drive_url || ''
+  // /file/d/ID  (Drive)
   const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
   if (m1) return m1[1]
-  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
-  if (m2) return m2[1]
+  // /document/d/ID, /spreadsheets/d/ID, /presentation/d/ID, /drawings/d/ID (Google Workspace)
+  const m2 = url.match(/\/(document|spreadsheets|presentation|forms|drawings)\/d\/([a-zA-Z0-9_-]+)/)
+  if (m2) return m2[2]
+  // ?id=ID  (enlace compartido antiguo)
+  const m3 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if (m3) return m3[1]
   return null
 }
 
