@@ -12,19 +12,40 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
-// ── Helper: construye URL de previsualización de Drive ────────────────────────
-function getPreviewUrl(doc) {
+// ── Helpers para visor de documentos ─────────────────────────────────────────
+
+// Extrae el fileId de Drive desde drive_file_id o desde la URL
+function getDriveFileId(doc) {
+  if (doc.drive_file_id) return doc.drive_file_id
   const url = doc.drive_url || ''
-  // Google Drive /file/d/ID/view  →  /file/d/ID/preview
   const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
-  if (m1) return `https://drive.google.com/file/d/${m1[1]}/preview`
-  // Google Drive ?id=ID
+  if (m1) return m1[1]
   const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
-  if (m2) return `https://drive.google.com/file/d/${m2[1]}/preview`
-  // drive_file_id directo
-  if (doc.drive_file_id) return `https://drive.google.com/file/d/${doc.drive_file_id}/preview`
-  // Supabase Storage u otra URL — usar directamente
-  return url || null
+  if (m2) return m2[1]
+  return null
+}
+
+// Extensión del archivo (sin punto, minúsculas)
+function getExt(nombre) {
+  return (nombre || '').split('.').pop().toLowerCase()
+}
+
+// Tipos que se pueden mostrar en iframe
+const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt'])
+
+// URL directa al archivo en Drive (para "Abrir en Drive")
+function getDriveOpenUrl(doc) {
+  const fileId = getDriveFileId(doc)
+  if (fileId) return `https://drive.google.com/file/d/${fileId}/view`
+  return doc.drive_url || null
+}
+
+// URL proxy para servir el archivo via backend (OAuth2)
+function getProxyUrl(doc) {
+  const fileId = getDriveFileId(doc)
+  if (fileId) return `/api/drive/proxy-pdf?fileId=${fileId}`
+  // Supabase Storage u otra URL → servir directa
+  return doc.drive_url || null
 }
 
 // ── Definición de las 12 etapas ───────────────────────────────────────────────
@@ -53,7 +74,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const [sincronizando, setSincronizando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
   const [error, setError] = useState('')
-  const [visorDoc, setVisorDoc] = useState(null)   // { nombre, previewUrl }
+  const [visorDoc, setVisorDoc] = useState(null)   // { nombre, proxyUrl, driveUrl, ext }
 
   // Mapa de docs por tipo (clave real de documentos_ot)
   const docsPorTipo = {}
@@ -223,23 +244,64 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
             background: '#fff', borderRadius: 12, width: '90vw', maxWidth: 960,
             height: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #E5E7EB' }}>
-              <span style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
+
+            {/* Barra superior */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #E5E7EB', gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                 📄 {visorDoc.nombre}
               </span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <a href={visorDoc.previewUrl?.replace('/preview', '/view')} target="_blank" rel="noopener noreferrer">
-                  <button style={{ ...S.btnDrive, fontSize: 12 }}>↗ Abrir en Drive</button>
-                </a>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {visorDoc.proxyUrl && (
+                  <a href={visorDoc.proxyUrl} download={visorDoc.nombre} rel="noopener noreferrer">
+                    <button style={{ ...S.btnDrive, fontSize: 12 }}>⬇ Descargar</button>
+                  </a>
+                )}
+                {visorDoc.driveUrl && (
+                  <a href={visorDoc.driveUrl} target="_blank" rel="noopener noreferrer">
+                    <button style={{ ...S.btnDrive, fontSize: 12 }}>↗ Abrir en Drive</button>
+                  </a>
+                )}
                 <button onClick={() => setVisorDoc(null)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
               </div>
             </div>
-            <iframe
-              src={visorDoc.previewUrl}
-              title={visorDoc.nombre}
-              style={{ flex: 1, border: 'none', width: '100%' }}
-              allow="autoplay"
-            />
+
+            {/* Cuerpo del visor */}
+            {EXT_PREVIEW.has(visorDoc.ext) ? (
+              // PDF e imágenes: iframe via proxy
+              <iframe
+                src={visorDoc.proxyUrl}
+                title={visorDoc.nombre}
+                style={{ flex: 1, border: 'none', width: '100%' }}
+                allow="autoplay"
+              />
+            ) : (
+              // DOCX, XLSX, MSG, etc. → no hay preview en navegador
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center', color: 'var(--gris)' }}>
+                <div style={{ fontSize: 64 }}>📎</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--texto)' }}>
+                  Este formato (.{visorDoc.ext}) no tiene previsualización en el navegador
+                </div>
+                <div style={{ fontSize: 13 }}>
+                  Descarga el archivo o ábrelo directamente en Drive.
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {visorDoc.proxyUrl && (
+                    <a href={visorDoc.proxyUrl} download={visorDoc.nombre}>
+                      <button style={{ ...S.btnUpload, fontSize: 14, padding: '10px 20px' }}>
+                        ⬇ Descargar archivo
+                      </button>
+                    </a>
+                  )}
+                  {visorDoc.driveUrl && (
+                    <a href={visorDoc.driveUrl} target="_blank" rel="noopener noreferrer">
+                      <button style={{ ...S.btnDrive, fontSize: 14, padding: '10px 20px' }}>
+                        ↗ Abrir en Google Drive
+                      </button>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -261,8 +323,10 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               subiendo={subiendo === etapa.tipo}
               onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo)}
               onVerDoc={(doc) => {
-                const previewUrl = getPreviewUrl(doc)
-                if (previewUrl) setVisorDoc({ nombre: doc.nombre_archivo, previewUrl })
+                const proxyUrl  = getProxyUrl(doc)
+                const driveUrl  = getDriveOpenUrl(doc)
+                const ext       = getExt(doc.nombre_archivo)
+                if (proxyUrl || driveUrl) setVisorDoc({ nombre: doc.nombre_archivo, proxyUrl, driveUrl, ext })
               }}
             />
           )
