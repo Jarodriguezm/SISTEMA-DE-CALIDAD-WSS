@@ -12,6 +12,7 @@ const CARDS = [
   { key: 'documentos_cargados',   label: 'Docs Cargados',       color: '#0891B2',       to: '/ots?docs=cargados' },
   { key: 'total_asignaciones',    label: 'Asignaciones',        color: 'var(--azul)',   to: '/asignaciones' },
   { key: 'total_actas',           label: 'Actas',               color: 'var(--verde)',  to: '/actas' },
+  { key: 'total_informes',        label: 'Informes DII',        color: '#7C3AED',       to: '/informes' },
   { key: 'total_reservas',        label: 'Reservas Informes',   color: 'var(--dorado)', to: '/reservas' },
   { key: 'total_auditoria',       label: 'Registros Auditoría', color: 'var(--gris)',   to: '/auditoria' },
 ]
