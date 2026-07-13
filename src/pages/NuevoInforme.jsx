@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 // ── Configuración por tipo de equipo ──────────────────────────────────────────
