@@ -132,6 +132,7 @@ function parseMsgCfbf(buf) {
     for (const s of sectorChain(firstMiniF)) {
       const base = offset(s)
       for (let j = 0; j * 4 < secSize; j++) {
+        if (base + j * 4 + 3 >= buf.length) break  // bounds check
         miniFat.push(buf.readUInt32LE(base + j * 4))
       }
     }
@@ -180,7 +181,33 @@ function parseMsgCfbf(buf) {
     return readFromSectors(entry.start, entry.size)
   }
 
-  const uStr = n => { const d = readStream(n); return d ? d.toString('utf16le').replace(/\0+$/, '') : null }
+  // Detección automática de encoding para strings MAPI
+  // - PT_UNICODE (001F) debería ser UTF-16 LE, pero algunos clientes guardan UTF-8
+  // - Si los bytes impares son mayormente 0x00 → UTF-16 LE; si no → intentar UTF-8 → latin1
+  function smartStr(buf) {
+    if (!buf || buf.length === 0) return null
+    let data = buf
+    // Strip BOM UTF-16 LE (FF FE)
+    if (data.length >= 2 && data[0] === 0xFF && data[1] === 0xFE) data = data.slice(2)
+    // BOM UTF-8 (EF BB BF)
+    else if (data.length >= 3 && data[0] === 0xEF && data[1] === 0xBB && data[2] === 0xBF) {
+      return data.slice(3).toString('utf8').replace(/\0+$/, '')
+    }
+    // Detectar UTF-16 LE: bytes en posición impar son 0x00 para texto ASCII/Latin
+    const checkLen = Math.min(data.length, 20)
+    let nullOdd = 0, totalOdd = 0
+    for (let i = 1; i < checkLen; i += 2) { totalOdd++; if (data[i] === 0) nullOdd++ }
+    if (totalOdd > 0 && nullOdd / totalOdd >= 0.7) {
+      return data.toString('utf16le').replace(/\0+$/, '')
+    }
+    // Intentar UTF-8 (si no hay replacement chars, es válido)
+    const utf8 = data.toString('utf8').replace(/\0+$/, '')
+    if (!utf8.includes('�')) return utf8
+    // Fallback latin1
+    return data.toString('latin1').replace(/\0+$/, '')
+  }
+
+  const uStr = n => { const d = readStream(n); return d ? smartStr(d) : null }
   const aStr = n => { const d = readStream(n); return d ? d.toString('latin1').replace(/\0+$/, '') : null }
 
   const prop = (tag, type) => uStr(`__substg1.0_${tag}${type}`)
