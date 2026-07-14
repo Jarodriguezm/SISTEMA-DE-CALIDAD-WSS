@@ -44,18 +44,26 @@ export default function ReservaInformes() {
   const [errorForm,      setErrorForm]      = useState('')
   const [otsDisponibles, setOTsDisponibles] = useState([])
 
+  const AREAS_FORM = [
+    { cod: 'END', label: 'END',              desc: 'Ensayos No Destructivos' },
+    { cod: 'IZL', label: 'Izaje y Levante',  desc: 'Informes de izaje y levante' },
+    { cod: 'TRZ', label: 'Trazabilidad',     desc: 'Informes de trazabilidad' },
+    { cod: 'VER', label: 'Verificación',     desc: 'Inspección de verificación' },
+  ]
+
   const [form, setForm] = useState({
-    ot_numero:           '',
-    sede:                '',          // auto-cargado desde OT
-    cantidad:            1,
-    area:                '',
-    producto:            '',
-    acta:                '',
-    fecha_inspeccion:    '',
-    fecha_entrega:       '',
-    inspector:           '',
-    observacion:         '',
+    ot_numero:        '',
+    sede:             '',   // auto-cargado desde OT
+    cantidades:       { END: 0, IZL: 0, TRZ: 0, VER: 0 },
+    producto:         '',
+    acta:             '',
+    fecha_inspeccion: '',
+    fecha_entrega:    '',
+    inspector:        '',
+    observacion:      '',
   })
+
+  const totalReservar = Object.values(form.cantidades).reduce((s, n) => s + n, 0)
 
   // ── carga del listado ────────────────────────────────────────
   const cargar = useCallback(async () => {
@@ -111,17 +119,26 @@ export default function ReservaInformes() {
     setErrorForm('')
   }
 
+  function setCantidadArea(area, delta) {
+    setForm(f => ({
+      ...f,
+      cantidades: { ...f.cantidades, [area]: Math.max(0, Math.min(50, (f.cantidades[area] || 0) + delta)) }
+    }))
+    setErrorForm('')
+  }
+
   // ── reservar números ─────────────────────────────────────────
   async function handleReservar(e) {
     e.preventDefault()
-    if (!form.ot_numero) { setErrorForm('Selecciona una OT'); return }
-    if (!form.sede)       { setErrorForm('La OT no tiene sede asignada'); return }
-    if (form.cantidad < 1 || form.cantidad > 50) { setErrorForm('Cantidad entre 1 y 50'); return }
+    if (!form.ot_numero)    { setErrorForm('Selecciona una OT'); return }
+    if (!form.sede)          { setErrorForm('La OT no tiene sede asignada'); return }
+    if (totalReservar === 0) { setErrorForm('Ingresa al menos 1 número en algún área'); return }
+    if (totalReservar > 50)  { setErrorForm('Máximo 50 números por reserva'); return }
 
     setGuardando(true)
     setErrorForm('')
     try {
-      // Obtener siguiente correlativo DII
+      // Un solo llamado al RPC — obtiene el número de inicio de la secuencia atómica
       const { data: nextNum, error: rpcErr } = await supabase
         .rpc('siguiente_numero_informe', { p_serie: 'DII' })
       if (rpcErr) throw rpcErr
@@ -131,38 +148,49 @@ export default function ReservaInformes() {
       const reservadoPor = ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim()
         || usuario?.email || 'Sistema'
 
-      const records = Array.from({ length: Number(form.cantidad) }, (_, i) => {
-        const num = nextNum + i
-        return {
-          reserva_id:            reservaId,
-          ot_numero:             form.ot_numero,
-          sede:                  form.sede,
-          serie:                 'DII',
-          numero_correlativo:    num,
-          codigo_informe:        `DII-${num}`,
-          area:                  form.area             || null,
-          producto:              form.producto          || null,
-          acta_asociada:         form.acta             || null,
-          fecha_inspeccion:      form.fecha_inspeccion || null,
-          fecha_entrega_informe: form.fecha_entrega    || null,
-          inspector:             form.inspector         || null,
-          observacion:           form.observacion       || null,
-          estado:                'Reservado',
-          created_by:            reservadoPor,
+      // Construir records: primero todos los END, luego IZL, etc.
+      const records = []
+      let offset = 0
+      for (const { cod } of AREAS_FORM) {
+        const cant = form.cantidades[cod] || 0
+        for (let i = 0; i < cant; i++) {
+          const num = nextNum + offset
+          records.push({
+            reserva_id:            reservaId,
+            ot_numero:             form.ot_numero,
+            sede:                  form.sede,
+            serie:                 'DII',
+            numero_correlativo:    num,
+            codigo_informe:        `DII-${num}`,
+            area:                  cod,
+            producto:              form.producto          || null,
+            acta_asociada:         form.acta             || null,
+            fecha_inspeccion:      form.fecha_inspeccion || null,
+            fecha_entrega_informe: form.fecha_entrega    || null,
+            inspector:             form.inspector         || null,
+            observacion:           form.observacion       || null,
+            estado:                'Reservado',
+            created_by:            reservadoPor,
+          })
+          offset++
         }
-      })
+      }
 
       const { error: insErr } = await supabase.from('numeros_informe').insert(records)
       if (insErr) throw insErr
 
       const desde = `DII-${nextNum}`
-      const hasta = Number(form.cantidad) > 1 ? ` a DII-${nextNum + Number(form.cantidad) - 1}` : ''
-      setMensajeExito(`✅ ${form.cantidad} número${form.cantidad > 1 ? 's' : ''} reservados: ${desde}${hasta} · ${NOMBRE_SEDE[form.sede] || form.sede}`)
-      setTimeout(() => setMensajeExito(''), 6000)
+      const hasta = totalReservar > 1 ? ` a DII-${nextNum + totalReservar - 1}` : ''
+      const resumenAreas = AREAS_FORM
+        .filter(a => form.cantidades[a.cod] > 0)
+        .map(a => `${form.cantidades[a.cod]} ${a.label}`)
+        .join(', ')
+      setMensajeExito(`✅ ${totalReservar} número${totalReservar > 1 ? 's' : ''} reservados: ${desde}${hasta} (${resumenAreas}) · ${NOMBRE_SEDE[form.sede] || form.sede}`)
+      setTimeout(() => setMensajeExito(''), 8000)
 
       setMostrarForm(false)
-      setForm({ ot_numero: '', sede: '', cantidad: 1, area: '', producto: '',
-                acta: '', fecha_inspeccion: '', fecha_entrega: '', inspector: '', observacion: '' })
+      setForm({ ot_numero: '', sede: '', cantidades: { END: 0, IZL: 0, TRZ: 0, VER: 0 },
+                producto: '', acta: '', fecha_inspeccion: '', fecha_entrega: '', inspector: '', observacion: '' })
       cargar()
     } catch (e) {
       setErrorForm(mensajeError(e))
@@ -220,7 +248,7 @@ export default function ReservaInformes() {
                       ))}
                     </select>
                   </div>
-                  <div className="col-2 field">
+                  <div className="col-3 field">
                     <label>Sede</label>
                     <div style={{
                       padding: '8px 12px', border: '1.5px solid var(--borde)', borderRadius: 8,
@@ -230,36 +258,54 @@ export default function ReservaInformes() {
                       {form.sede ? `${form.sede} · ${NOMBRE_SEDE[form.sede] || form.sede}` : '—'}
                     </div>
                   </div>
-                  <div className="col-3 field">
-                    <label>Cantidad *</label>
-                    <input className="input" type="number" min="1" max="50"
-                      value={form.cantidad}
-                      onChange={e => setField('cantidad', parseInt(e.target.value) || 1)}
-                      disabled={guardando} />
-                    <span className="text-sm">Números consecutivos</span>
-                  </div>
                 </div>
+              </Seccion>
 
-                {/* Preview serie */}
-                {form.ot_numero && (
-                  <div style={S.previewBox}>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 15, color: '#1A3A5C' }}>
-                      DII-11650
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--gris)', marginLeft: 8 }}>
-                      (el número exacto se asigna al guardar)
-                    </span>
-                    {form.sede && (
+              {/* ── Distribución por área ── */}
+              <Seccion titulo="Distribución por área — cantidad de informes a reservar">
+                {AREAS_FORM.map(({ cod, label, desc }) => (
+                  <div key={cod} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', border: '1.5px solid var(--borde)', borderRadius: 10,
+                    marginBottom: 8, background: form.cantidades[cod] > 0 ? '#EEF5FF' : '#fff',
+                    transition: 'background .15s',
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#1A3A5C' }}>{label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--gris)', marginTop: 2 }}>{desc}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <button type="button" disabled={guardando}
+                        onClick={() => setCantidadArea(cod, -1)}
+                        style={{
+                          width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--borde)',
+                          background: '#fff', fontSize: 18, cursor: 'pointer', fontWeight: 700,
+                          color: form.cantidades[cod] === 0 ? 'var(--gris)' : '#1A3A5C',
+                        }}>−</button>
                       <span style={{
-                        marginLeft: 12, fontSize: 12, fontWeight: 700, padding: '2px 8px',
-                        borderRadius: 99, background: (COLOR_SEDE[form.sede] || '#185FA5') + '20',
-                        color: COLOR_SEDE[form.sede] || '#185FA5',
-                      }}>
-                        {form.sede} · {NOMBRE_SEDE[form.sede]}
-                      </span>
-                    )}
+                        fontFamily: 'monospace', fontWeight: 800, fontSize: 20,
+                        minWidth: 28, textAlign: 'center',
+                        color: form.cantidades[cod] > 0 ? '#1A3A5C' : 'var(--gris)',
+                      }}>{form.cantidades[cod]}</span>
+                      <button type="button" disabled={guardando}
+                        onClick={() => setCantidadArea(cod, +1)}
+                        style={{
+                          width: 32, height: 32, borderRadius: 8, border: '1.5px solid #85B7EB',
+                          background: '#EEF5FF', fontSize: 18, cursor: 'pointer', fontWeight: 700, color: '#1A3A5C',
+                        }}>+</button>
+                    </div>
                   </div>
-                )}
+                ))}
+
+                {/* Total */}
+                <div style={{
+                  background: '#0E2A45', color: '#fff', borderRadius: 10,
+                  padding: '10px 16px', fontWeight: 700, fontSize: 14, marginTop: 4,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <span>Total a reservar</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: 18 }}>{totalReservar} número{totalReservar !== 1 ? 's' : ''}</span>
+                </div>
               </Seccion>
 
               <Seccion titulo="Datos del informe">
@@ -269,14 +315,7 @@ export default function ReservaInformes() {
                     <input className="input" placeholder="Ej: Inspección VT a 8 ejes de ferrocarril"
                       value={form.producto} onChange={e => setField('producto', e.target.value)} disabled={guardando} />
                   </div>
-                  <div className="col-3 field">
-                    <label>Área</label>
-                    <select className="select" value={form.area}
-                      onChange={e => setField('area', e.target.value)} disabled={guardando}>
-                      {AREAS.map(a => <option key={a} value={a}>{a || '— Sin área —'}</option>)}
-                    </select>
-                  </div>
-                  <div className="col-3 field">
+                  <div className="col-6 field">
                     <label>Acta asociada</label>
                     <input className="input" placeholder="Ej: D-3852"
                       value={form.acta} onChange={e => setField('acta', e.target.value)} disabled={guardando} />
@@ -292,7 +331,7 @@ export default function ReservaInformes() {
                       value={form.fecha_inspeccion} onChange={e => setField('fecha_inspeccion', e.target.value)} disabled={guardando} />
                   </div>
                   <div className="col-3 field">
-                    <label>Fecha entrega informe</label>
+                    <label>Fecha entrega</label>
                     <input className="input" type="date"
                       value={form.fecha_entrega} onChange={e => setField('fecha_entrega', e.target.value)} disabled={guardando} />
                   </div>
@@ -310,10 +349,10 @@ export default function ReservaInformes() {
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-primary btn-lg"
-                  disabled={guardando || !form.ot_numero}>
+                  disabled={guardando || !form.ot_numero || totalReservar === 0}>
                   {guardando
                     ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Reservando...</>
-                    : `✓ Reservar ${form.cantidad} número${form.cantidad > 1 ? 's' : ''} DII`}
+                    : `✓ Reservar ${totalReservar} número${totalReservar !== 1 ? 's' : ''} DII`}
                 </button>
               </div>
             </form>
