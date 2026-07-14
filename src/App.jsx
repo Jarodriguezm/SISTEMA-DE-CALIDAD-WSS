@@ -24,7 +24,9 @@ import './styles/global.css'
 function RutaPrivada({ children }) {
   const { usuario, cargando } = useAuth()
 
-  if (cargando) {
+  // Carga inicial (aún no sabemos si hay sesión) → mostrar spinner
+  // Si YA hay usuario y solo está recargando datos (ej: token refresh) → NO desmontar
+  if (cargando && !usuario) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -49,7 +51,8 @@ function RutaPrivada({ children }) {
 function AppRoutes() {
   const { usuario, cargando } = useAuth()
 
-  if (cargando) return null
+  // Solo bloquear en carga inicial — si ya hay usuario, seguir mostrando la app
+  if (cargando && !usuario) return null
 
   return (
     <Routes>
