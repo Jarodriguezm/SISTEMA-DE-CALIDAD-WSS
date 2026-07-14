@@ -1,13 +1,19 @@
+// ============================================================
+// AuthContext.jsx — Autenticación WSS
+// SEGURIDAD: Requiere sesión Supabase Auth válida.
+// No existe fallback sin contraseña. Cualquier fallo
+// de auth.signInWithPassword es un error de login.
+// ============================================================
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, mensajeError } from './supabase'
+import { supabase, rpc, mensajeError } from './supabase'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [usuario, setUsuario] = useState(null)
-  const [menu, setMenu] = useState([])
+  const [usuario, setUsuario]   = useState(null)
+  const [menu, setMenu]         = useState([])
   const [cargando, setCargando] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError]       = useState(null)
 
   useEffect(() => {
     // Verificar sesión al cargar
@@ -19,11 +25,15 @@ export function AuthProvider({ children }) {
       }
     })
 
-    // Escuchar cambios de sesión
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Escuchar cambios de sesión (login / logout / expiración)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // TOKEN_REFRESHED ocurre al volver a la pestaña — no recargamos datos
+      // porque eso pone cargando:true y desmonta los modales abiertos
+      if (event === 'TOKEN_REFRESHED') return
       if (session?.user) {
         cargarDatosUsuario(session.user.email)
       } else {
+        // Sesión cerrada o expirada → limpiar estado
         setUsuario(null)
         setMenu([])
         setCargando(false)
@@ -36,25 +46,23 @@ export function AuthProvider({ children }) {
   async function cargarDatosUsuario(email) {
     try {
       setCargando(true)
-      setError(null)
 
-      const { data: userData, error: userError } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle()
+      // Obtener perfil del usuario desde tabla usuarios
+      const perfil = await rpc('obtener_usuario_por_email', { p_email: email })
 
-      if (userError) {
-        throw new Error('Error al cargar perfil de usuario: ' + (userError.message || userError.code))
-      }
-
-      if (!userData) {
+      if (!perfil || perfil.length === 0) {
+        // Usuario autenticado en Auth pero no registrado en el sistema → cerrar sesión
         await supabase.auth.signOut()
-        throw new Error('Tu cuenta no tiene acceso al sistema. Contacta al administrador.')
+        throw new Error('Usuario no encontrado en el sistema. Contacte al administrador.')
       }
+
+      const userData = perfil[0] || perfil
+
+      // Obtener menú según rol
+      const menuData = await rpc('obtener_menu_por_email', { p_email: email })
 
       setUsuario(userData)
-      setMenu([])
+      setMenu(menuData || [])
       setError(null)
     } catch (err) {
       setError(mensajeError(err))
@@ -65,19 +73,25 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ── Login ─────────────────────────────────────────────────────────────────
+  // SEGURIDAD: Solo acepta credenciales válidas de Supabase Auth.
+  // No existe fallback sin contraseña.
   async function login(email, password) {
     try {
+      setCargando(true)
       setError(null)
 
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
       if (authError) {
-        throw new Error('Usuario o contraseña incorrectos')
+        // Credenciales inválidas → error inmediato, sin bypass
+        throw new Error('Correo o contraseña incorrectos.')
       }
 
-      // No tocar cargando aquí: onAuthStateChange ya disparó cargarDatosUsuario
-      // que gestiona cargando=true/false por su cuenta
+      // Si llegamos aquí, signInWithPassword fue exitoso.
+      // onAuthStateChange disparará cargarDatosUsuario automáticamente.
       return { ok: true }
+
     } catch (err) {
       const msg = mensajeError(err)
       setError(msg)
@@ -86,36 +100,35 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ── Logout ────────────────────────────────────────────────────────────────
   async function logout() {
-    await supabase.auth.signOut()
+    // Limpiar estado local primero para UI inmediata
     setUsuario(null)
     setMenu([])
+    // Luego cerrar sesión en Supabase (invalida el token)
+    await supabase.auth.signOut()
   }
 
+  // ── Verificación de permisos ──────────────────────────────────────────────
   async function verificarPermiso(modulo, accion) {
     if (!usuario?.email) return false
     try {
-      const { data } = await supabase
-        .from('permisos_roles')
-        .select('permitido')
-        .eq('rol', usuario.rol)
-        .eq('modulo', modulo)
-        .eq('accion', accion)
-        .maybeSingle()
-      return data?.permitido === true
+      const resultado = await rpc('usuario_tiene_permiso', {
+        p_email:  usuario.email,
+        p_modulo: modulo,
+        p_accion: accion,
+      })
+      return !!resultado
     } catch {
       return false
     }
   }
 
-  const esAdmin = () => {
-    const rol = (usuario?.rol || '').toUpperCase()
-    return rol === 'ADMIN' || rol === 'ADMINISTRADOR'
-  }
-
-  const esSupervisor = () => (usuario?.rol || '').toUpperCase() === 'SUPERVISOR'
-  const esComercial = () => (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
-  const esInspector = () => (usuario?.rol || '').toUpperCase() === 'INSPECTOR'
+  // ── Helpers de rol ────────────────────────────────────────────────────────
+  const esAdmin       = () => { const r = (usuario?.rol || '').toUpperCase(); return r === 'ADMIN' || r === 'ADMINISTRADOR' }
+  const esSupervisor  = () => (usuario?.rol || '').toUpperCase() === 'SUPERVISOR'
+  const esComercial   = () => (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
+  const esInspector   = () => (usuario?.rol || '').toUpperCase() === 'INSPECTOR'
   const esFacturacion = () => (usuario?.rol || '').toUpperCase() === 'FACTURACION'
 
   return (
@@ -131,7 +144,7 @@ export function AuthProvider({ children }) {
       esSupervisor,
       esComercial,
       esInspector,
-      esFacturacion
+      esFacturacion,
     }}>
       {children}
     </AuthContext.Provider>
