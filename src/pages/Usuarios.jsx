@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION']
+const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION', 'AUDITOR']
 const SEDES = ['SCL', 'ANF', 'CCP']
 
 const BADGE_ROL = {
@@ -11,6 +11,7 @@ const BADGE_ROL = {
   COMERCIAL:   'badge-blue',
   INSPECTOR:   'badge-green',
   FACTURACION: 'badge-gray',
+  AUDITOR:     'badge-purple',
 }
 
 export default function Usuarios() {
