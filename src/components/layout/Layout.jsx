@@ -18,6 +18,7 @@ const iconos = {
   procedimientos:  '📐',
   acreditaciones:  '🏆',
   informes:        '📋',
+  supervisor:      '🔍',
   menu:            '☰',
   salir:           '⏻',
 }
@@ -35,7 +36,7 @@ const RUTAS_MENU = {
 }
 
 export default function Layout({ children }) {
-  const { usuario, menu, logout, esAdmin } = useAuth()
+  const { usuario, menu, logout, esAdmin, esSupervisor } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarAbierto, setSidebarAbierto] = useState(true)
@@ -198,6 +199,16 @@ export default function Layout({ children }) {
             abierto={sidebarAbierto}
             onClick={() => navigate('/informes')}
           />
+          {(esAdmin() || esSupervisor()) && (
+            <NavItem
+              icono={iconos.supervisor}
+              label="Panel Supervisor"
+              ruta="/supervisor"
+              activo={esRutaActiva('/supervisor')}
+              abierto={sidebarAbierto}
+              onClick={() => navigate('/supervisor')}
+            />
+          )}
           <NavItem
             icono={iconos.auditoria}
             label="Auditoría"
