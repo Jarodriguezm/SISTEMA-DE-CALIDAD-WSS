@@ -41,6 +41,7 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   const [error, setError] = useState('')
   const [supervisores, setSupervisores] = useState([])
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
+  const [clienteOptions, setClienteOptions] = useState([])
   const [exito, setExito] = useState(null)   // { otNumero, waUrl, emailUrl, supervisorNombre }
 
   const [form, setForm] = useState({
@@ -62,6 +63,18 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   })
 
   useEffect(() => { cargarSupervisores() }, [])
+
+  useEffect(() => {
+    supabase
+      .from('ots')
+      .select('cliente')
+      .not('cliente', 'is', null)
+      .order('cliente')
+      .then(({ data }) => {
+        const unicos = [...new Set((data || []).map(r => r.cliente).filter(Boolean))]
+        setClienteOptions(unicos)
+      })
+  }, [])
 
   async function cargarSupervisores() {
     try {
@@ -374,8 +387,17 @@ export default function ModalCrearOT({ onClose, onCreada }) {
               <div className="grid">
                 <div className="col-6 field">
                   <label>Cliente *</label>
-                  <input className="input" placeholder="Razón social"
-                    value={form.cliente} onChange={e => set('cliente', e.target.value)} disabled={guardando} />
+                  <input
+                    list="clientes-list"
+                    className="input"
+                    placeholder="Razón social"
+                    value={form.cliente}
+                    onChange={e => set('cliente', e.target.value)}
+                    disabled={guardando}
+                  />
+                  <datalist id="clientes-list">
+                    {clienteOptions.map(c => <option key={c} value={c} />)}
+                  </datalist>
                 </div>
                 <div className="col-6 field">
                   <label>Contacto</label>
