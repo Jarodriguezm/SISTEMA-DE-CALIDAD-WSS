@@ -35,8 +35,9 @@ function getExt(nombre) {
   return (nombre || '').split('.').pop().toLowerCase()
 }
 
-// Tipos que se pueden mostrar directamente en iframe (PDF, imagen, HTML de proxy-msg)
-const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt', 'msg'])
+// Tipos que se pueden mostrar directamente en iframe (PDF, imagen)
+// NOTA: .msg NO se incluye — se abre en Google Drive (visor nativo) en nueva pestaña
+const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt'])
 
 // Detecta si el archivo es un correo .msg (incluso con extensión doble como .msg.jpg)
 function esMsgFile(nombre) {
@@ -353,9 +354,15 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               subiendo={subiendo === etapa.tipo}
               onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo)}
               onVerDoc={(doc) => {
-                const proxyUrl  = getProxyUrl(doc)
-                const driveUrl  = getDriveOpenUrl(doc)
-                const ext       = getExt(doc.nombre_archivo)
+                // Archivos .msg → abrir en Google Drive (visor nativo, sin parsear)
+                if (esMsgFile(doc.nombre_archivo)) {
+                  const driveUrl = getDriveOpenUrl(doc)
+                  if (driveUrl) window.open(driveUrl, '_blank', 'noopener,noreferrer')
+                  return
+                }
+                const proxyUrl = getProxyUrl(doc)
+                const driveUrl = getDriveOpenUrl(doc)
+                const ext      = getExt(doc.nombre_archivo)
                 if (proxyUrl || driveUrl) setVisorDoc({ nombre: doc.nombre_archivo, proxyUrl, driveUrl, ext })
               }}
             />
@@ -458,9 +465,9 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
                 <button
                   style={S.btnMini}
                   onClick={() => onVerDoc?.(doc)}
-                  title={`Ver ${doc.nombre_archivo}`}
+                  title={esMsgFile(doc.nombre_archivo) ? 'Abrir en Google Drive' : `Ver ${doc.nombre_archivo}`}
                 >
-                  Ver
+                  {esMsgFile(doc.nombre_archivo) ? 'Abrir' : 'Ver'}
                 </button>
               )}
             </div>
