@@ -1,8 +1,12 @@
 // api/drive/proxy-msg.js
 // Extrae y renderiza archivos .msg (Outlook) como HTML para el iframe del visor
-// Parser CFBF/OLE2 inline — sin dependencias externas
+// Usa el paquete 'cfb' de SheetJS para parsear CFBF/OLE2 correctamente
 
 import { createSign } from 'node:crypto'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const CFB = require('cfb')
 
 export const config = { maxDuration: 30 }
 
@@ -28,14 +32,10 @@ export default async function handler(req, res) {
     const nombre = meta.name || 'correo.msg'
 
     // 2. Descargar binario
-    let downloadUrl
     const isGoogleDoc = meta.mimeType?.startsWith('application/vnd.google-apps')
-    if (isGoogleDoc) {
-      // Drive convirtió el archivo a Google Docs — exportar como texto plano
-      downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`
-    } else {
-      downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
-    }
+    const downloadUrl = isGoogleDoc
+      ? `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`
+      : `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
 
     const fileRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${token}` } })
     if (!fileRes.ok) throw new Error(`Drive descarga ${fileRes.status}`)
@@ -56,17 +56,14 @@ export default async function handler(req, res) {
       )
     }
 
-    // 4. Intentar parsear como CFBF/MSG
+    // 4. Parsear como CFBF/MSG usando librería cfb
     let emailHtml
     try {
       const email = parseMsgCfbf(buf)
       emailHtml = renderEmailHtml(email, nombre)
     } catch (parseErr) {
-      // Si no es CFBF válido, mostrar texto extraído
-      const texto = extraerTextoLegible(buf)
-      emailHtml = texto
-        ? htmlTextoPlano(nombre, texto)
-        : htmlAviso(nombre, `No se pudo parsear el archivo. (${parseErr.message})`)
+      console.error('[proxy-msg] parse error:', parseErr.message)
+      emailHtml = htmlAviso(nombre, `No se pudo leer el archivo MSG. (${parseErr.message})`)
     }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -80,138 +77,56 @@ export default async function handler(req, res) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CFBF / OLE2 Parser minimal para archivos .msg de Outlook
+// Parser MSG usando librería 'cfb' (SheetJS) — maneja todos los casos edge de CFBF
 // ══════════════════════════════════════════════════════════════════════════════
 
 function parseMsgCfbf(buf) {
-  // Magic: D0 CF 11 E0 A1 B1 1A E1
-  const MAGIC = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]
-  for (let i = 0; i < 8; i++) {
-    if (buf[i] !== MAGIC[i]) throw new Error('No es CFBF válido')
+  let cfb
+  try {
+    cfb = CFB.read(buf, { type: 'buffer' })
+  } catch (e) {
+    throw new Error(`CFBF inválido: ${e.message}`)
   }
 
-  const secSize    = 1 << buf.readUInt16LE(30) // 512 (v3) o 4096 (v4)
-  const miniSecSz  = 1 << buf.readUInt16LE(32) // siempre 64 (2^6)
-  const fatCount   = buf.readUInt32LE(44)
-  const firstDirS  = buf.readUInt32LE(48)
-  const miniCutoff = buf.readUInt32LE(56)       // offset 56: mini stream cutoff (4096)
-  const firstMiniF = buf.readUInt32LE(60)       // offset 60: primer sector mini FAT
-  // offset 64 = numMiniFATSectors (no usado directamente)
-
-  const offset = n => 512 + n * secSize
-
-  // FAT desde DIFAT
-  const fat = []
-  for (let i = 0; i < Math.min(fatCount, 109); i++) {
-    const difSec = buf.readUInt32LE(76 + i * 4)
-    if (difSec >= 0xFFFFFFFE) break
-    const base = offset(difSec)
-    for (let j = 0; j * 4 < secSize && base + j * 4 + 3 < buf.length; j++) {
-      fat.push(buf.readUInt32LE(base + j * 4))
-    }
-  }
-
-  function sectorChain(start) {
-    const out = []; let cur = start
-    while (cur < 0xFFFFFFFE && cur < fat.length && out.length < 8000) {
-      out.push(cur); cur = fat[cur] ?? 0xFFFFFFFE
-    }
-    return out
-  }
-
-  function readFromSectors(start, size) {
-    const chunks = sectorChain(start).map(s => {
-      const off = offset(s)
-      return buf.slice(off, Math.min(off + secSize, buf.length))
-    })
-    return Buffer.concat(chunks).slice(0, size)
-  }
-
-  // Mini FAT
-  const miniFat = []
-  if (firstMiniF < 0xFFFFFFFE) {
-    for (const s of sectorChain(firstMiniF)) {
-      const base = offset(s)
-      for (let j = 0; j * 4 < secSize; j++) {
-        if (base + j * 4 + 3 >= buf.length) break  // bounds check
-        miniFat.push(buf.readUInt32LE(base + j * 4))
-      }
-    }
-  }
-
-  function miniChain(start) {
-    const out = []; let cur = start
-    while (cur < 0xFFFFFFFE && cur < miniFat.length && out.length < 8000) {
-      out.push(cur); cur = miniFat[cur] ?? 0xFFFFFFFE
-    }
-    return out
-  }
-
-  // Leer directorio
-  const dir = []
-  for (const s of sectorChain(firstDirS)) {
-    const base = offset(s)
-    for (let i = 0; i * 128 < secSize; i++) {
-      const e    = base + i * 128
-      if (e + 128 > buf.length) continue
-      const nLen = buf.readUInt16LE(e + 64)
-      const type = buf[e + 66]
-      if (!nLen || nLen > 64 || type === 0) continue
-      const name  = buf.slice(e, e + nLen - 2).toString('utf16le')
-      const start = buf.readUInt32LE(e + 116)
-      const size  = buf.readUInt32LE(e + 120)
-      dir.push({ name, type, start, size })
-    }
-  }
-
-  // Root → mini stream
-  const root = dir.find(e => e.type === 5)
-  const miniStream = root && root.start < 0xFFFFFFFE
-    ? readFromSectors(root.start, root.size)
-    : null
-
+  // Buscar stream MAPI por nombre en el FileIndex del CFB
   function readStream(name) {
-    const entry = dir.find(e => e.name === name)
-    if (!entry || entry.start >= 0xFFFFFFFE) return null
-    if (entry.size < miniCutoff && miniStream) {
-      const chunks = miniChain(entry.start).map(s =>
-        miniStream.slice(s * miniSecSz, s * miniSecSz + miniSecSz)
-      )
-      return Buffer.concat(chunks).slice(0, entry.size)
-    }
-    return readFromSectors(entry.start, entry.size)
+    // Los streams MAPI están directamente bajo Root Entry (type=2)
+    const entry = cfb.FileIndex.find(f =>
+      f.name === name && (f.type === 2 || f.type === undefined)
+    )
+    if (!entry || !entry.content || entry.content.length === 0) return null
+    return Buffer.from(entry.content)
   }
 
   // Detección automática de encoding para strings MAPI
-  // - PT_UNICODE (001F) debería ser UTF-16 LE, pero algunos clientes guardan UTF-8
-  // - Si los bytes impares son mayormente 0x00 → UTF-16 LE; si no → intentar UTF-8 → latin1
-  function smartStr(buf) {
-    if (!buf || buf.length === 0) return null
-    let data = buf
+  // PT_UNICODE (001F) = UTF-16 LE, pero algunos clientes guardan UTF-8
+  function smartStr(data) {
+    if (!data || data.length === 0) return null
+    let d = data
     // Strip BOM UTF-16 LE (FF FE)
-    if (data.length >= 2 && data[0] === 0xFF && data[1] === 0xFE) data = data.slice(2)
-    // BOM UTF-8 (EF BB BF)
-    else if (data.length >= 3 && data[0] === 0xEF && data[1] === 0xBB && data[2] === 0xBF) {
-      return data.slice(3).toString('utf8').replace(/\0+$/, '')
+    if (d.length >= 2 && d[0] === 0xFF && d[1] === 0xFE) d = d.slice(2)
+    // Strip BOM UTF-8 (EF BB BF)
+    else if (d.length >= 3 && d[0] === 0xEF && d[1] === 0xBB && d[2] === 0xBF) {
+      return d.slice(3).toString('utf8').replace(/\0+$/, '')
     }
-    // Detectar UTF-16 LE: bytes en posición impar son 0x00 para texto ASCII/Latin
-    const checkLen = Math.min(data.length, 20)
+    // Detectar UTF-16 LE: bytes impares son 0x00 para texto ASCII/Latin
+    const checkLen = Math.min(d.length, 20)
     let nullOdd = 0, totalOdd = 0
-    for (let i = 1; i < checkLen; i += 2) { totalOdd++; if (data[i] === 0) nullOdd++ }
+    for (let i = 1; i < checkLen; i += 2) { totalOdd++; if (d[i] === 0) nullOdd++ }
     if (totalOdd > 0 && nullOdd / totalOdd >= 0.7) {
-      return data.toString('utf16le').replace(/\0+$/, '')
+      return d.toString('utf16le').replace(/\0+$/, '')
     }
-    // Intentar UTF-8 (si no hay replacement chars, es válido)
-    const utf8 = data.toString('utf8').replace(/\0+$/, '')
+    // Intentar UTF-8
+    const utf8 = d.toString('utf8').replace(/\0+$/, '')
     if (!utf8.includes('�')) return utf8
     // Fallback latin1
-    return data.toString('latin1').replace(/\0+$/, '')
+    return d.toString('latin1').replace(/\0+$/, '')
   }
 
   const uStr = n => { const d = readStream(n); return d ? smartStr(d) : null }
   const aStr = n => { const d = readStream(n); return d ? d.toString('latin1').replace(/\0+$/, '') : null }
 
-  const prop = (tag, type) => uStr(`__substg1.0_${tag}${type}`)
+  const prop  = (tag, type) => uStr(`__substg1.0_${tag}${type}`)
   const propA = (tag, type) => aStr(`__substg1.0_${tag}${type}`)
 
   function getFiletime(name) {
@@ -229,15 +144,28 @@ function parseMsgCfbf(buf) {
     // HTML body (property 0x1013, type 0102 = binary)
     const htmlBuf = readStream('__substg1.0_10130102')
     if (htmlBuf && htmlBuf.length > 0) {
-      // Puede ser UTF-8, UTF-16 LE, o latin1
-      const s = htmlBuf.toString('utf8')
-      if (/<html|<body|<div/i.test(s)) return { tipo: 'html', content: s }
+      // Detectar encoding: UTF-8, UTF-16 LE, o latin1
+      const s8 = htmlBuf.toString('utf8')
+      if (/<html|<body|<div/i.test(s8)) return { tipo: 'html', content: s8 }
       const s16 = htmlBuf.toString('utf16le').replace(/\0+$/, '')
       if (/<html|<body|<div/i.test(s16)) return { tipo: 'html', content: s16 }
       const sL = htmlBuf.toString('latin1')
       if (/<html|<body|<div/i.test(sL)) return { tipo: 'html', content: sL }
     }
-    // Texto plano
+    // RTF body (property 0x1009, type 0102) - quitar RTF markup y mostrar texto
+    const rtfBuf = readStream('__substg1.0_10090102')
+    if (rtfBuf && rtfBuf.length > 0) {
+      const rtf = rtfBuf.toString('latin1')
+      // Extraer texto plano desde RTF básico
+      const texto = rtf
+        .replace(/\{[^{}]*\}/g, '')     // quitar grupos RTF anidados
+        .replace(/\\[a-z]+[-\d]* ?/g, '') // quitar comandos RTF
+        .replace(/[{}\\]/g, '')          // quitar delimitadores restantes
+        .replace(/\r\n|\r|\n/g, '\n')
+        .trim()
+      if (texto.length > 10) return { tipo: 'text', content: texto }
+    }
+    // Texto plano (property 0x1000)
     const textU = prop('1000', '001F') || propA('1000', '001E')
     if (textU) return { tipo: 'text', content: textU }
     return { tipo: 'text', content: '(sin cuerpo)' }
@@ -254,25 +182,6 @@ function parseMsgCfbf(buf) {
   }
 }
 
-// ── Extractor de strings legibles (fallback para binarios no-CFBF) ──────────
-
-function extraerTextoLegible(buf) {
-  const lineas = []
-  let i = 0
-  while (i < buf.length - 1) {
-    const lo = buf[i], hi = buf[i + 1]
-    // UTF-16 LE printable
-    if (hi === 0 && lo >= 0x20 && lo < 0x7F) {
-      let s = ''
-      while (i < buf.length - 1 && buf[i + 1] === 0 && (buf[i] >= 0x09)) {
-        s += String.fromCharCode(buf[i]); i += 2
-      }
-      if (s.trim().length > 15) lineas.push(s.trim())
-    } else { i++ }
-  }
-  return lineas.length > 0 ? lineas.join('\n') : ''
-}
-
 // ── HTML renderers ─────────────────────────────────────────────────────────────
 
 function renderEmailHtml(email, filename) {
@@ -280,7 +189,6 @@ function renderEmailHtml(email, filename) {
 
   let bodyHtml
   if (email.body.tipo === 'html') {
-    // Sanitizar HTML básico (quitar scripts y event handlers)
     bodyHtml = email.body.content
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
@@ -304,7 +212,7 @@ function renderEmailHtml(email, filename) {
   table.campos{border-collapse:collapse;font-size:12.5px;width:100%}
   table.campos td{padding:2px 8px 2px 0;vertical-align:top}
   table.campos td.lbl{color:#6B7280;font-weight:600;width:60px;white-space:nowrap}
-  .body-wrap{background:#fff;padding:20px;margin-top:2px}
+  .body-wrap{background:#fff;padding:20px;margin-top:2px;min-height:200px}
 </style>
 </head>
 <body>
@@ -356,7 +264,7 @@ function htmlError(msg) {
 <body><h3>⚠️ Error</h3><p style="margin-top:10px;font-size:13px">${msg}</p></body></html>`
 }
 
-// ── Auth OAuth2 + Service Account (igual que proxy-pdf.js) ────────────────────
+// ── Auth OAuth2 + Service Account ─────────────────────────────────────────────
 
 async function getToken() {
   const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID
