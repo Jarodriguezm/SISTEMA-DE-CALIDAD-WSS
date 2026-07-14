@@ -522,9 +522,9 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
       <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {/* Indicador/botón Drive */}
         {carpetaInfo?.url ? (
-          <span style={{ ...S.btnDrive, cursor: 'default', userSelect: 'none' }}>
+          <a href={carpetaInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...S.btnDrive, textDecoration: 'none', display: 'inline-block' }}>
             📁 Drive vinculado
-          </span>
+          </a>
         ) : !esAuto && (
           mostrarVincular ? (
             <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
