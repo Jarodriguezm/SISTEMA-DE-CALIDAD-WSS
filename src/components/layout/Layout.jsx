@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
+import { supabase } from '../../lib/supabase'
 
 // Iconos simples SVG inline
 const iconos = {
@@ -42,6 +43,28 @@ export default function Layout({ children }) {
   const [sidebarAbierto, setSidebarAbierto] = useState(true)
   const [cargandoLogout, setCargandoLogout] = useState(false)
 
+  // Modal cambiar contraseña
+  const [mostrarClave, setMostrarClave]     = useState(false)
+  const [nuevaClave, setNuevaClave]         = useState('')
+  const [confirmarClave, setConfirmarClave] = useState('')
+  const [guardandoClave, setGuardandoClave] = useState(false)
+  const [msgClave, setMsgClave]             = useState('')
+
+  async function handleCambiarClave() {
+    if (nuevaClave.length < 8) { setMsgClave('❌ Mínimo 8 caracteres'); return }
+    if (nuevaClave !== confirmarClave) { setMsgClave('❌ Las contraseñas no coinciden'); return }
+    setGuardandoClave(true)
+    setMsgClave('')
+    const { error } = await supabase.auth.updateUser({ password: nuevaClave })
+    if (error) {
+      setMsgClave('❌ Error: ' + error.message)
+    } else {
+      setMsgClave('✅ Contraseña actualizada correctamente')
+      setTimeout(() => { setMostrarClave(false); setNuevaClave(''); setConfirmarClave(''); setMsgClave('') }, 2000)
+    }
+    setGuardandoClave(false)
+  }
+
   async function handleLogout() {
     if (!confirm('¿Cerrar sesión?')) return
     setCargandoLogout(true)
@@ -60,6 +83,7 @@ export default function Layout({ children }) {
     'COMERCIAL':    'badge-green',
     'INSPECTOR':    'badge-amber',
     'FACTURACION':  'badge-gray',
+    'AUDITOR':      'badge-purple',
   }
 
   const rol      = (usuario?.rol || '').toUpperCase()
@@ -67,6 +91,41 @@ export default function Layout({ children }) {
 
   return (
     <div style={styles.shell}>
+
+      {/* ─── Modal Cambiar Contraseña ────────────────────────────────── */}
+      {mostrarClave && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:12, padding:'28px 32px', width:340, boxShadow:'0 8px 32px rgba(0,0,0,.2)' }}>
+            <h3 style={{ margin:'0 0 20px', fontSize:17, fontWeight:700, color:'var(--texto)' }}>🔑 Cambiar contraseña</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <div>
+                <label style={{ fontSize:12, color:'var(--gris)', display:'block', marginBottom:4 }}>Nueva contraseña</label>
+                <input type="password" value={nuevaClave} onChange={e => setNuevaClave(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  style={{ width:'100%', padding:'8px 10px', border:'1px solid #D0D5DD', borderRadius:6, fontSize:13, boxSizing:'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'var(--gris)', display:'block', marginBottom:4 }}>Confirmar contraseña</label>
+                <input type="password" value={confirmarClave} onChange={e => setConfirmarClave(e.target.value)}
+                  placeholder="Repite la contraseña"
+                  style={{ width:'100%', padding:'8px 10px', border:'1px solid #D0D5DD', borderRadius:6, fontSize:13, boxSizing:'border-box' }}
+                  onKeyDown={e => e.key === 'Enter' && handleCambiarClave()} />
+              </div>
+              {msgClave && <p style={{ margin:0, fontSize:12, color: msgClave.startsWith('✅') ? '#16A34A' : '#DC2626' }}>{msgClave}</p>}
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:20 }}>
+              <button onClick={() => { setMostrarClave(false); setNuevaClave(''); setConfirmarClave(''); setMsgClave('') }}
+                style={{ flex:1, padding:'8px', border:'1px solid #D0D5DD', borderRadius:6, background:'#fff', cursor:'pointer', fontSize:13 }}>
+                Cancelar
+              </button>
+              <button onClick={handleCambiarClave} disabled={guardandoClave}
+                style={{ flex:1, padding:'8px', border:'none', borderRadius:6, background:'var(--azul)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                {guardandoClave ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Sidebar ─────────────────────────────────────────────────── */}
       <aside style={{ ...styles.sidebar, width: sidebarAbierto ? 240 : 64, minWidth: sidebarAbierto ? 240 : 64 }}>
@@ -242,6 +301,16 @@ export default function Layout({ children }) {
             </>
           )}
         </nav>
+
+        {/* Cambiar contraseña */}
+        <button
+          onClick={() => setMostrarClave(true)}
+          style={{ ...styles.logoutBtn, background:'rgba(255,255,255,.08)', color:'rgba(255,255,255,.7)', borderTop:'none' }}
+          title="Cambiar contraseña"
+        >
+          <span>🔑</span>
+          {sidebarAbierto && <span>Cambiar contraseña</span>}
+        </button>
 
         {/* Logout */}
         <button
