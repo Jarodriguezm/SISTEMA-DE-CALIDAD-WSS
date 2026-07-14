@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { rpc, supabase, mensajeError } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 
@@ -44,6 +44,7 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   const [clienteOptions, setClienteOptions] = useState([])
   const [clienteSugerencias, setClienteSugerencias] = useState([])
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
+  const clienteMapaRef = useRef({})
   const [exito, setExito] = useState(null)   // { otNumero, waUrl, emailUrl, supervisorNombre }
 
   const [form, setForm] = useState({
@@ -69,12 +70,26 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   useEffect(() => {
     supabase
       .from('ots')
-      .select('cliente')
+      .select('cliente, contacto, email_cliente, telefono_cliente, rut_empresa')
       .not('cliente', 'is', null)
-      .order('cliente')
+      .order('created_at', { ascending: false })
+      .limit(500)
       .then(({ data }) => {
-        const unicos = [...new Set((data || []).map(r => r.cliente).filter(Boolean))]
-        setClienteOptions(unicos)
+        // Guardar el registro más reciente por cliente (para autocompletar datos)
+        const mapaClientes = {}
+        ;(data || []).forEach(r => {
+          if (r.cliente && !mapaClientes[r.cliente]) {
+            mapaClientes[r.cliente] = {
+              contacto:         r.contacto         || '',
+              email_cliente:    r.email_cliente     || '',
+              telefono_cliente: r.telefono_cliente  || '',
+              rut_empresa:      r.rut_empresa       || '',
+            }
+          }
+        })
+        setClienteOptions(Object.keys(mapaClientes).sort())
+        // Guardar el mapa en ref para usarlo al seleccionar
+        clienteMapaRef.current = mapaClientes
       })
   }, [])
 
@@ -422,7 +437,15 @@ export default function ModalCrearOT({ onClose, onCreada }) {
                       {clienteSugerencias.map(c => (
                         <li key={c}
                           onMouseDown={() => {
-                            set('cliente', c)
+                            const datos = clienteMapaRef.current[c] || {}
+                            setForm(f => ({
+                              ...f,
+                              cliente:          c,
+                              contacto:         datos.contacto         || f.contacto,
+                              email_cliente:    datos.email_cliente     || f.email_cliente,
+                              telefono_cliente: datos.telefono_cliente  || f.telefono_cliente,
+                              rut_empresa:      datos.rut_empresa       || f.rut_empresa,
+                            }))
                             setMostrarSugerencias(false)
                           }}
                           style={{
