@@ -24,7 +24,7 @@ const COLOR_SEDE = {
 
 export default function ReservaInformes() {
   const navigate    = useNavigate()
-  const { usuario } = useAuth()
+  const { usuario, esAuditor } = useAuth()
 
   // ── listado ──────────────────────────────────────────────────
   const [datos,        setDatos]        = useState([])
@@ -370,9 +370,11 @@ export default function ReservaInformes() {
         </div>
         <div className="flex gap-8">
           <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setMostrarForm(true); setErrorForm('') }}>
-            + Nueva Reserva
-          </button>
+          {!esAuditor() && (
+            <button className="btn btn-primary btn-sm" onClick={() => { setMostrarForm(true); setErrorForm('') }}>
+              + Nueva Reserva
+            </button>
+          )}
         </div>
       </div>
 
