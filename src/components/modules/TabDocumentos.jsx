@@ -175,7 +175,11 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
       } else {
         // ── Ruta Supabase Storage (OT sin carpeta Drive configurada)
-        const ruta = `${ot.ot_numero}/etapa_${etapa.num}/${Date.now()}_${archivo.name}`
+        // Sanitizar nombre: quitar tildes, reemplazar espacios y caracteres especiales
+        const nombreLimpio = archivo.name
+          .normalize('NFD').replace(/[̀-ͯ]/g, '')
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+        const ruta = `${ot.ot_numero}/etapa_${etapa.num}/${Date.now()}_${nombreLimpio}`
         const { error: uploadErr } = await supabase.storage
           .from('documentos-ot')
           .upload(ruta, archivo, { upsert: false })
@@ -231,6 +235,28 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
       setError(`Error sincronizando desde Drive: ${e.message}`)
     } finally {
       setSincronizando(false)
+    }
+  }
+
+  // Vincula manualmente una carpeta Drive a una etapa (OTs sin carpetas_drive configuradas)
+  async function handleVincularDrive(etapa, driveUrl) {
+    const url = (driveUrl || '').trim()
+    if (!url || !ot?.ot_numero) return
+    if (!url.includes('drive.google.com')) {
+      setError('URL inválida — debe ser un enlace de Google Drive (drive.google.com)')
+      return
+    }
+    const nuevasCarpetas = { ...carpetas, [etapa.num]: { url } }
+    const { error: updErr } = await supabase
+      .from('ots')
+      .update({ carpetas_drive: nuevasCarpetas })
+      .eq('ot_numero', ot.ot_numero)
+    if (updErr) {
+      setError('Error al vincular carpeta: ' + updErr.message)
+    } else {
+      setMensajeExito(`✅ Carpeta Drive vinculada para "${etapa.nombre}"`)
+      setTimeout(() => setMensajeExito(''), 4000)
+      onActualizar?.()
     }
   }
 
@@ -372,6 +398,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               etapaDocs={etapaDocs}
               subiendo={subiendo === etapa.tipo}
               onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo, carpetaInfo?.url)}
+              onVincularDrive={(url) => handleVincularDrive(etapa, url)}
               onVerDoc={(doc) => {
                 const proxyUrl = getProxyUrl(doc)
                 const driveUrl = getDriveOpenUrl(doc)
@@ -395,7 +422,10 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
 // ── Tarjeta por etapa ─────────────────────────────────────────────────────────
 
-function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArchivo, onVerDoc }) {
+function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArchivo, onVincularDrive, onVerDoc }) {
+  const [mostrarVincular, setMostrarVincular] = useState(false)
+  const [vincularUrl, setVincularUrl] = useState('')
+
   const colorEstado = {
     completa:  { borde: '#16A34A', fondo: '#F0FDF4', badge: '#DCFCE7', texto: '#15803D' },
     pendiente: { borde: '#E5E7EB', fondo: '#fff',    badge: '#F3F4F6', texto: '#6B7280' },
@@ -490,15 +520,34 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
 
       {/* Acciones */}
       <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Indicador de Drive configurada (sin link directo para evitar solicitud de permisos) */}
-        <span style={{
-          ...S.btnDrive,
-          opacity: carpetaInfo?.url ? 1 : 0.45,
-          cursor: 'default',
-          userSelect: 'none',
-        }}>
-          {carpetaInfo?.url ? '📁 Drive vinculado' : '📁 Sin carpeta Drive'}
-        </span>
+        {/* Indicador/botón Drive */}
+        {carpetaInfo?.url ? (
+          <span style={{ ...S.btnDrive, cursor: 'default', userSelect: 'none' }}>
+            📁 Drive vinculado
+          </span>
+        ) : !esAuto && (
+          mostrarVincular ? (
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={vincularUrl}
+                onChange={e => setVincularUrl(e.target.value)}
+                placeholder="Pega URL de carpeta Drive..."
+                autoFocus
+                style={{ fontSize: 11, padding: '4px 8px', border: '1px solid #85B7EB', borderRadius: 4, width: 200 }}
+              />
+              <button
+                style={{ ...S.btnDrive, background: '#0f9d58', borderColor: '#0f9d58', color: '#fff' }}
+                onClick={() => { onVincularDrive?.(vincularUrl); setMostrarVincular(false); setVincularUrl('') }}
+              >✓ Vincular</button>
+              <button style={S.btnMini} onClick={() => { setMostrarVincular(false); setVincularUrl('') }}>✕</button>
+            </div>
+          ) : (
+            <button style={{ ...S.btnDrive, opacity: 0.7 }} onClick={() => setMostrarVincular(true)}>
+              🔗 Vincular carpeta Drive
+            </button>
+          )
+        )}
 
         {/* Botón subir — siempre file picker, sube via API (no requiere permisos en Drive) */}
         {!esAuto && (
