@@ -75,6 +75,23 @@ export default async function handler(req, res) {
       throw new Error(`Drive error ${code}: ${msg}`)
     }
 
+    // Compartir el archivo con cualquiera que tenga el link (reader)
+    // Esto evita que los usuarios necesiten permisos individuales en Drive
+    try {
+      const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+      })
+      if (!permRes.ok) {
+        const permData = await permRes.json().catch(() => ({}))
+        console.warn('[subir-archivo] No se pudo compartir el archivo:', JSON.stringify(permData))
+      }
+    } catch (permErr) {
+      // No es fatal — el archivo sube igual, solo que no será público
+      console.warn('[subir-archivo] Error al compartir (no crítico):', permErr.message)
+    }
+
     return res.status(200).json({
       ok:        true,
       file_id:   data.id,
