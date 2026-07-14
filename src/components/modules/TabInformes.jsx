@@ -46,12 +46,11 @@ const inpRO = { ...inp, background: '#F8FAFC', color: '#475569', fontWeight: 600
 function isAntofagasta(sede) {
   return (sede || '').toLowerCase().includes('antofagasta')
 }
-function getSerie(area, sede) {
-  if (area === 'VER') return isAntofagasta(sede) ? 'IVA' : 'IVS'
-  return isAntofagasta(sede) ? 'EAI' : 'ESI'
+function getSerie() {
+  return 'DII'   // Serie única para todos los informes
 }
 function formatCodigo(serie, num) {
-  return `${serie}-${String(num).padStart(4, '0')}`
+  return `${serie}-${num}`
 }
 
 function Lbl({ children }) {
@@ -103,16 +102,18 @@ function FormReserva({ ot, onReservada, onCancel }) {
     if (total === 0) { setError('Debes indicar al menos 1 informe a reservar'); return }
     setGuardando(true); setError('')
     try {
+      const serie = 'DII'
+      // Una sola llamada al RPC — obtiene el número de inicio de la secuencia atómica
+      const { data: numInicio, error: numErr } = await supabase.rpc('siguiente_numero_informe', { p_serie: serie })
+      if (numErr) throw numErr
+
       const registros = []
+      let offset = 0
       for (const area of ['END', 'IZL', 'TRZ', 'VER']) {
         const qty = cantidades[area]
         if (qty === 0) continue
-        const serie = getSerie(area, sede)
-        // Obtener número inicial para esta serie
-        const { data: numInicio, error: numErr } = await supabase.rpc('siguiente_numero_informe', { p_serie: serie })
-        if (numErr) throw numErr
         for (let i = 0; i < qty; i++) {
-          const num = numInicio + i
+          const num = numInicio + offset
           registros.push({
             serie,
             numero_correlativo: num,
@@ -129,6 +130,7 @@ function FormReserva({ ot, onReservada, onCancel }) {
             observacion: observacion || null,
             created_by: usuario?.email || '',
           })
+          offset++
         }
       }
       const { error: insErr } = await supabase.from('numeros_informe').insert(registros)
@@ -139,7 +141,7 @@ function FormReserva({ ot, onReservada, onCancel }) {
     } finally { setGuardando(false) }
   }
 
-  const serieLabel = isAntofagasta(sede) ? 'EAI / IVA' : 'ESI / IVS'
+  const serieLabel = 'DII'
 
   return (
     <div>
