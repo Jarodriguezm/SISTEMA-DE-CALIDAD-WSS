@@ -130,6 +130,7 @@ export function AuthProvider({ children }) {
   const esComercial   = () => (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
   const esInspector   = () => (usuario?.rol || '').toUpperCase() === 'INSPECTOR'
   const esFacturacion = () => (usuario?.rol || '').toUpperCase() === 'FACTURACION'
+  const esAuditor     = () => (usuario?.rol || '').toUpperCase() === 'AUDITOR'
 
   return (
     <AuthContext.Provider value={{
@@ -145,6 +146,7 @@ export function AuthProvider({ children }) {
       esComercial,
       esInspector,
       esFacturacion,
+      esAuditor,
     }}>
       {children}
     </AuthContext.Provider>
