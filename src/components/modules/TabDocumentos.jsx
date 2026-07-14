@@ -131,35 +131,70 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const completadas = ETAPAS.filter(e => estadoEtapa(e) === 'completa').length
   const progreso = Math.round((completadas / 12) * 100)
 
-  async function handleSubirArchivo(etapa, archivo) {
+  async function handleSubirArchivo(etapa, archivo, driveFolderUrl = null) {
     if (!archivo || !ot || !etapa.tipo) return
 
     setSubiendo(etapa.tipo)
     setError('')
 
     try {
-      // Subir a Supabase Storage
-      const ruta = `${ot.ot_numero}/etapa_${etapa.num}/${Date.now()}_${archivo.name}`
-      const { error: uploadErr } = await supabase.storage
-        .from('documentos-ot')
-        .upload(ruta, archivo, { upsert: false })
+      let fileUrl    = null
+      let driveFileId = null
 
-      if (uploadErr) throw uploadErr
+      if (driveFolderUrl) {
+        // ── Ruta Drive: subir via API (no requiere que el usuario tenga permisos en Drive)
+        const folderId = driveFolderUrl.match(/folders\/([a-zA-Z0-9_-]+)/)?.[1]
+        if (!folderId) throw new Error('No se pudo obtener el ID de la carpeta Drive desde la URL')
 
-      // Obtener URL pública
-      const { data: urlData } = supabase.storage
-        .from('documentos-ot')
-        .getPublicUrl(ruta)
+        // Convertir archivo a base64 en trozos para no romper la pila con archivos grandes
+        const arrayBuffer = await archivo.arrayBuffer()
+        const bytes = new Uint8Array(arrayBuffer)
+        const CHUNK = 8192
+        let binary = ''
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+        }
+        const base64 = btoa(binary)
 
-      const fileUrl = urlData?.publicUrl || null
+        const resp = await fetch('/api/drive/subir-archivo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            folder_id:           folderId,
+            file_name:           archivo.name,
+            file_content_base64: base64,
+            mime_type:           archivo.type || '',
+          }),
+        })
+
+        const data = await resp.json()
+        if (!data.ok) throw new Error(data.error || `Error HTTP ${resp.status} al subir a Drive`)
+
+        fileUrl     = data.file_url
+        driveFileId = data.file_id
+
+      } else {
+        // ── Ruta Supabase Storage (OT sin carpeta Drive configurada)
+        const ruta = `${ot.ot_numero}/etapa_${etapa.num}/${Date.now()}_${archivo.name}`
+        const { error: uploadErr } = await supabase.storage
+          .from('documentos-ot')
+          .upload(ruta, archivo, { upsert: false })
+        if (uploadErr) throw uploadErr
+
+        const { data: urlData } = supabase.storage
+          .from('documentos-ot')
+          .getPublicUrl(ruta)
+        fileUrl = urlData?.publicUrl || null
+      }
 
       // Registrar en documentos_ot con los campos reales de la tabla
       const { error: upsertErr } = await supabase.from('documentos_ot').upsert({
-        ot_numero:     ot.ot_numero,
-        tipo:          etapa.tipo,
+        ot_numero:      ot.ot_numero,
+        tipo:           etapa.tipo,
         nombre_archivo: archivo.name,
-        drive_url:     fileUrl,
-        subido_por:    ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim(),
+        drive_url:      fileUrl,
+        drive_file_id:  driveFileId || null,
+        subido_por:     ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim(),
       }, { onConflict: 'ot_numero,tipo' })
 
       if (upsertErr) throw upsertErr
@@ -283,11 +318,6 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
                     <button style={{ ...S.btnDrive, fontSize: 12 }}>⬇ Descargar</button>
                   </a>
                 )}
-                {visorDoc.driveUrl && (
-                  <a href={visorDoc.driveUrl} target="_blank" rel="noopener noreferrer">
-                    <button style={{ ...S.btnDrive, fontSize: 12 }}>↗ Abrir en Drive</button>
-                  </a>
-                )}
                 <button onClick={() => setVisorDoc(null)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
               </div>
             </div>
@@ -309,20 +339,13 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
                   Este formato (.{visorDoc.ext}) no tiene previsualización en el navegador
                 </div>
                 <div style={{ fontSize: 13 }}>
-                  Descarga el archivo o ábrelo directamente en Drive.
+                  Descarga el archivo para abrirlo en tu equipo.
                 </div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {visorDoc.proxyUrl && (
                     <a href={visorDoc.proxyUrl} download={visorDoc.nombre}>
                       <button style={{ ...S.btnUpload, fontSize: 14, padding: '10px 20px' }}>
                         ⬇ Descargar archivo
-                      </button>
-                    </a>
-                  )}
-                  {visorDoc.driveUrl && (
-                    <a href={visorDoc.driveUrl} target="_blank" rel="noopener noreferrer">
-                      <button style={{ ...S.btnDrive, fontSize: 14, padding: '10px 20px' }}>
-                        ↗ Abrir en Google Drive
                       </button>
                     </a>
                   )}
@@ -348,7 +371,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               carpetaInfo={carpetaInfo}
               etapaDocs={etapaDocs}
               subiendo={subiendo === etapa.tipo}
-              onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo)}
+              onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo, carpetaInfo?.url)}
               onVerDoc={(doc) => {
                 const proxyUrl = getProxyUrl(doc)
                 const driveUrl = getDriveOpenUrl(doc)
@@ -467,53 +490,37 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
 
       {/* Acciones */}
       <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Link carpeta Drive */}
-        {carpetaInfo?.url ? (
-          <a href={carpetaInfo.url} target="_blank" rel="noopener noreferrer">
-            <button style={{ ...S.btnDrive }}>
-              📁 Carpeta Drive
-            </button>
-          </a>
-        ) : (
-          <button style={{ ...S.btnDrive, opacity: 0.45, cursor: 'not-allowed' }} disabled>
-            📁 Sin carpeta Drive
-          </button>
-        )}
+        {/* Indicador de Drive configurada (sin link directo para evitar solicitud de permisos) */}
+        <span style={{
+          ...S.btnDrive,
+          opacity: carpetaInfo?.url ? 1 : 0.45,
+          cursor: 'default',
+          userSelect: 'none',
+        }}>
+          {carpetaInfo?.url ? '📁 Drive vinculado' : '📁 Sin carpeta Drive'}
+        </span>
 
-        {/* Botón subir (excepto etapa auto) */}
+        {/* Botón subir — siempre file picker, sube via API (no requiere permisos en Drive) */}
         {!esAuto && (
-          carpetaInfo?.url ? (
-            // Si hay carpeta Drive configurada: abrir esa carpeta específica
-            <button
-              style={{ ...S.btnUpload, opacity: subiendo ? 0.6 : 1 }}
-              onClick={() => window.open(carpetaInfo.url, '_blank')}
+          <label style={{ cursor: subiendo ? 'not-allowed' : 'pointer' }}>
+            <input
+              type="file"
+              style={{ display: 'none' }}
               disabled={subiendo}
-              title="Sube el documento en Drive, luego usa Sincronizar Drive para actualizar el avance"
-            >
-              ⬆ Subir en Drive
-            </button>
-          ) : (
-            // Sin Drive: file picker local → Supabase Storage
-            <label style={{ cursor: subiendo ? 'not-allowed' : 'pointer' }}>
-              <input
-                type="file"
-                style={{ display: 'none' }}
-                disabled={subiendo}
-                onChange={e => {
-                  const f = e.target.files?.[0]
-                  if (f) onSubirArchivo(f)
-                  e.target.value = ''
-                }}
-              />
-              <span style={{
-                ...S.btnUpload,
-                opacity: subiendo ? 0.6 : 1,
-                display: 'inline-block',
-              }}>
-                {subiendo ? '⏳ Subiendo...' : '⬆ Subir documento'}
-              </span>
-            </label>
-          )
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) onSubirArchivo(f)
+                e.target.value = ''
+              }}
+            />
+            <span style={{
+              ...S.btnUpload,
+              opacity: subiendo ? 0.6 : 1,
+              display: 'inline-block',
+            }}>
+              {subiendo ? '⏳ Subiendo...' : '⬆ Subir documento'}
+            </span>
+          </label>
         )}
       </div>
     </div>
