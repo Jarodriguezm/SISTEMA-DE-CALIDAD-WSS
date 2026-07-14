@@ -43,7 +43,7 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
   const { usuario } = useAuth()
   const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
 
-  const SUPABASE_URL = 'https://labxvesmcfbrdtftkwtg.supabase.co'
+  const SUPABASE_URL = 'https://ixqadaanxkwdoqvtpbkw.supabase.co'
   const SUPABASE_ANON_KEY = typeof import.meta !== 'undefined'
     ? (import.meta.env?.VITE_SUPABASE_ANON_KEY || '')
     : ''
@@ -191,7 +191,7 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
       let emailsEnviados = 0
       let emailError = null
       try {
-        const supabaseUrl = 'https://labxvesmcfbrdtftkwtg.supabase.co'
+        const supabaseUrl = 'https://ixqadaanxkwdoqvtpbkw.supabase.co'
         const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || ''
         const edgeRes = await fetch(
           `${supabaseUrl}/functions/v1/send-assignment-email`,
@@ -247,7 +247,7 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
   if (!ot) return null
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.box}>
         {/* ── Header ── */}
         <div style={S.header}>
