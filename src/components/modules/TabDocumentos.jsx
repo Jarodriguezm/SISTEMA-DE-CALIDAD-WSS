@@ -37,9 +37,8 @@ function getExt(nombre) {
   return (nombre || '').split('.').pop().toLowerCase()
 }
 
-// Tipos que se pueden mostrar directamente en iframe (PDF, imagen)
-// NOTA: .msg NO se incluye — se abre en Google Drive (visor nativo) en nueva pestaña
-const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt'])
+// Tipos que se pueden mostrar en iframe (PDF, imágenes, y .msg via proxy-msg que devuelve HTML)
+const EXT_PREVIEW = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt', 'msg'])
 
 // Detecta si el archivo es un correo .msg (incluso con extensión doble como .msg.jpg)
 function esMsgFile(nombre) {
@@ -67,11 +66,14 @@ function tieneArchivoViewable(doc) {
 }
 
 // URL proxy para servir el archivo via backend (OAuth2)
-// Todos los archivos pasan por proxy-pdf que maneja cualquier MIME
-// Los .msg se sirven como descarga (Content-Disposition: attachment)
+// .msg → proxy-msg (devuelve HTML con el email renderizado)
+// resto → proxy-pdf (sirve el binario directamente)
 function getProxyUrl(doc) {
   const fileId = getDriveFileId(doc)
-  if (fileId) return `/api/drive/proxy-pdf?fileId=${fileId}`
+  if (fileId) {
+    const endpoint = esMsgFile(doc.nombre_archivo) ? 'proxy-msg' : 'proxy-pdf'
+    return `/api/drive/${endpoint}?fileId=${fileId}`
+  }
   const url = doc.drive_url || ''
   if (url.includes('.supabase.co/storage/')) return url
   return null
