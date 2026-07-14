@@ -42,6 +42,8 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   const [supervisores, setSupervisores] = useState([])
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
   const [clienteOptions, setClienteOptions] = useState([])
+  const [clienteSugerencias, setClienteSugerencias] = useState([])
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
   const [exito, setExito] = useState(null)   // { otNumero, waUrl, emailUrl, supervisorNombre }
 
   const [form, setForm] = useState({
@@ -385,19 +387,56 @@ export default function ModalCrearOT({ onClose, onCreada }) {
             {/* Sección 2 — Cliente */}
             <Seccion titulo="Datos del cliente">
               <div className="grid">
-                <div className="col-6 field">
+                <div className="col-6 field" style={{ position: 'relative' }}>
                   <label>Cliente *</label>
                   <input
-                    list="clientes-list"
                     className="input"
                     placeholder="Razón social"
                     value={form.cliente}
-                    onChange={e => set('cliente', e.target.value)}
+                    autoComplete="off"
+                    onChange={e => {
+                      const val = e.target.value
+                      set('cliente', val)
+                      if (val.length >= 2) {
+                        const q = val.toLowerCase()
+                        setClienteSugerencias(clienteOptions.filter(c => c.toLowerCase().includes(q)).slice(0, 8))
+                        setMostrarSugerencias(true)
+                      } else {
+                        setMostrarSugerencias(false)
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setMostrarSugerencias(false), 150)}
+                    onFocus={() => {
+                      if (form.cliente.length >= 2 && clienteSugerencias.length > 0)
+                        setMostrarSugerencias(true)
+                    }}
                     disabled={guardando}
                   />
-                  <datalist id="clientes-list">
-                    {clienteOptions.map(c => <option key={c} value={c} />)}
-                  </datalist>
+                  {mostrarSugerencias && clienteSugerencias.length > 0 && (
+                    <ul style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
+                      background: '#fff', border: '1.5px solid #85B7EB', borderRadius: 8,
+                      boxShadow: '0 8px 24px rgba(0,0,0,.15)', margin: '2px 0 0',
+                      padding: 0, listStyle: 'none', maxHeight: 220, overflowY: 'auto',
+                    }}>
+                      {clienteSugerencias.map(c => (
+                        <li key={c}
+                          onMouseDown={() => {
+                            set('cliente', c)
+                            setMostrarSugerencias(false)
+                          }}
+                          style={{
+                            padding: '9px 14px', cursor: 'pointer', fontSize: 14,
+                            borderBottom: '1px solid #F1F5F9',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#EEF5FF'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                        >
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div className="col-6 field">
                   <label>Contacto</label>
