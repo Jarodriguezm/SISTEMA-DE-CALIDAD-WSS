@@ -96,7 +96,7 @@ const ETAPAS = [
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function TabDocumentos({ docs = [], ot, onActualizar }) {
-  const { usuario } = useAuth()
+  const { usuario, esAuditor } = useAuth()
   const [subiendo, setSubiendo] = useState(null)   // tipo de etapa subiendo
   const [sincronizando, setSincronizando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
@@ -399,6 +399,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               subiendo={subiendo === etapa.tipo}
               onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo, carpetaInfo?.url)}
               onVincularDrive={(url) => handleVincularDrive(etapa, url)}
+              soloLectura={esAuditor()}
               onVerDoc={(doc) => {
                 const proxyUrl = getProxyUrl(doc)
                 const driveUrl = getDriveOpenUrl(doc)
@@ -422,7 +423,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
 // ── Tarjeta por etapa ─────────────────────────────────────────────────────────
 
-function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArchivo, onVincularDrive, onVerDoc }) {
+function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArchivo, onVincularDrive, onVerDoc, soloLectura }) {
   const [mostrarVincular, setMostrarVincular] = useState(false)
   const [vincularUrl, setVincularUrl] = useState('')
 
@@ -525,7 +526,7 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
           <a href={carpetaInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...S.btnDrive, textDecoration: 'none', display: 'inline-block' }}>
             📁 Drive vinculado
           </a>
-        ) : !esAuto && (
+        ) : !esAuto && !soloLectura && (
           mostrarVincular ? (
             <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
               <input
@@ -550,7 +551,7 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
         )}
 
         {/* Botón subir — siempre file picker, sube via API (no requiere permisos en Drive) */}
-        {!esAuto && (
+        {!esAuto && !soloLectura && (
           <label style={{ cursor: subiendo ? 'not-allowed' : 'pointer' }}>
             <input
               type="file"
