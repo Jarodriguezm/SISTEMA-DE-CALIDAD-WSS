@@ -31,7 +31,9 @@ function getDriveFileId(doc) {
 }
 
 // Extensión del archivo (sin punto, minúsculas)
+// Para archivos .msg.jpg (doble extensión), devuelve 'msg' para que no se intente preview de imagen
 function getExt(nombre) {
+  if (esMsgFile(nombre)) return 'msg'
   return (nombre || '').split('.').pop().toLowerCase()
 }
 
@@ -65,15 +67,11 @@ function tieneArchivoViewable(doc) {
 }
 
 // URL proxy para servir el archivo via backend (OAuth2)
-// Archivos .msg → proxy-msg (parsea CFBF y devuelve HTML)
-// Resto → proxy-pdf (sirve el binario directamente)
+// Todos los archivos pasan por proxy-pdf que maneja cualquier MIME
+// Los .msg se sirven como descarga (Content-Disposition: attachment)
 function getProxyUrl(doc) {
   const fileId = getDriveFileId(doc)
-  if (fileId) {
-    const endpoint = esMsgFile(doc.nombre_archivo) ? 'proxy-msg' : 'proxy-pdf'
-    return `/api/drive/${endpoint}?fileId=${fileId}`
-  }
-  // Supabase Storage u otra URL directa → servir sin proxy
+  if (fileId) return `/api/drive/proxy-pdf?fileId=${fileId}`
   const url = doc.drive_url || ''
   if (url.includes('.supabase.co/storage/')) return url
   return null
@@ -354,12 +352,6 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               subiendo={subiendo === etapa.tipo}
               onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo)}
               onVerDoc={(doc) => {
-                // Archivos .msg → abrir en Google Drive (visor nativo, sin parsear)
-                if (esMsgFile(doc.nombre_archivo)) {
-                  const driveUrl = getDriveOpenUrl(doc)
-                  if (driveUrl) window.open(driveUrl, '_blank', 'noopener,noreferrer')
-                  return
-                }
                 const proxyUrl = getProxyUrl(doc)
                 const driveUrl = getDriveOpenUrl(doc)
                 const ext      = getExt(doc.nombre_archivo)
@@ -465,9 +457,9 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
                 <button
                   style={S.btnMini}
                   onClick={() => onVerDoc?.(doc)}
-                  title={esMsgFile(doc.nombre_archivo) ? 'Abrir en Google Drive' : `Ver ${doc.nombre_archivo}`}
+                  title={`Ver ${doc.nombre_archivo}`}
                 >
-                  {esMsgFile(doc.nombre_archivo) ? 'Abrir' : 'Ver'}
+                  Ver
                 </button>
               )}
             </div>
