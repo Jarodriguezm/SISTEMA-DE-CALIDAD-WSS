@@ -3,21 +3,9 @@
 // Usa la librería 'cfb' (SheetJS) cargada con dynamic import ESM-compatible
 
 import { createSign } from 'node:crypto'
+import CFB from 'cfb'
 
 export const config = { maxDuration: 30 }
-
-// Cache del módulo cfb para no importarlo en cada request
-let _CFB = null
-async function getCFB() {
-  if (_CFB) return _CFB
-  try {
-    const mod = await import('cfb')
-    _CFB = mod.default ?? mod
-    return _CFB
-  } catch (e) {
-    throw new Error(`No se pudo cargar parser MSG (cfb): ${e.message}`)
-  }
-}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -62,7 +50,6 @@ export default async function handler(req, res) {
     // 4. Parsear como MSG
     let emailHtml
     try {
-      const CFB   = await getCFB()
       const email = parseMsgCfbf(buf, CFB)
       emailHtml   = renderEmailHtml(email, nombre)
     } catch (parseErr) {
@@ -248,7 +235,7 @@ async function getServiceAccountToken() {
   const now = Math.floor(Date.now() / 1000)
   const h = b64url(JSON.stringify({ alg:'RS256', typ:'JWT' }))
   const p = b64url(JSON.stringify({ iss:email, scope:'https://www.googleapis.com/auth/drive.readonly', aud:'https://oauth2.googleapis.com/token', iat:now, exp:now+3600 }))
-  const sig = (await import('node:crypto')).createSign('RSA-SHA256').update(`${h}.${p}`).sign(pk, 'base64url')
+  const sig = createSign('RSA-SHA256').update(`${h}.${p}`).sign(pk, 'base64url')
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
     body:`grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${h}.${p}.${sig}`,
