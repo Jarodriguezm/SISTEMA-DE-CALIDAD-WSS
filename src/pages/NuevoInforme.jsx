@@ -130,6 +130,14 @@ export default function NuevoInforme() {
   const [hallazgoForm, setHallazgoForm] = useState({ descripcion: '', ubicacion: '', norma: '', criticidad: 'Menor' })
   const [subiendoFoto, setSubiendoFoto] = useState(false)
 
+  // Tabla de elementos IZAJE
+  const [elementosIzaje, setElementosIzaje] = useState([])
+  // Fotos de inspección generales
+  const [fotosInspeccion, setFotosInspeccion] = useState([])
+  const [subiendoFotoGeneral, setSubiendoFotoGeneral] = useState(false)
+  // Equipo de medición END utilizado
+  const [equipoMedicion, setEquipoMedicion] = useState({ tipo:'', marca:'', modelo:'', numero_serie:'', cert_calibracion:'' })
+
   // Auto-cargar si hay ?ot= en la URL
   useEffect(() => {
     const ot = searchParams.get('ot')
@@ -161,7 +169,7 @@ export default function NuevoInforme() {
       // Cargar OT
       const { data: otData, error: otErr } = await supabase
         .from('ots')
-        .select('ot_numero,cliente,direccion_faena,tipo_servicio,descripcion,supervisor,sede,email_cliente,contacto')
+        .select('ot_numero,cliente,direccion_faena,descripcion,supervisor,sede,email_cliente,contacto')
         .eq('ot_numero', n)
         .maybeSingle()
 
@@ -181,6 +189,19 @@ export default function NuevoInforme() {
 
       setAsignacion(asigData || null)
 
+      // Intentar obtener normas desde acta de terreno como respaldo
+      let actaNormas = null
+      try {
+        const { data: actaData } = await supabase
+          .from('actas_terreno')
+          .select('norma_ejecucion,norma_evaluacion,procedimientos')
+          .eq('ot_numero', n)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        actaNormas = actaData
+      } catch { /* columnas pueden no existir en actas */ }
+
       // Pre-llenar formulario
       setGeneral({
         ot_numero:         otData.ot_numero || '',
@@ -190,11 +211,11 @@ export default function NuevoInforme() {
         supervisor_nombre: asigData?.supervisor || otData.supervisor || '',
       })
 
-      // Pre-llenar normas desde asignación
+      // Pre-llenar normas: prioridad asignación → acta → vacío
       setNormas({
-        norma_ejecucion:  asigData?.norma_ejecucion  || '',
-        norma_evaluacion: asigData?.norma_evaluacion || '',
-        procedimientos:   asigData?.procedimientos   || '',
+        norma_ejecucion:  asigData?.norma_ejecucion  || actaNormas?.norma_ejecucion  || '',
+        norma_evaluacion: asigData?.norma_evaluacion || actaNormas?.norma_evaluacion || '',
+        procedimientos:   asigData?.procedimientos   || actaNormas?.procedimientos   || '',
       })
 
       // Pre-mapear tipos_inspeccion → métodos END
@@ -258,6 +279,33 @@ export default function NuevoInforme() {
     setHallazgos(prev => prev.filter((_, j) => j !== i))
   }
 
+  // ── Elementos IZAJE ──────────────────────────────────────────────────────
+  function addElementoIzaje() {
+    setElementosIzaje(prev => [...prev, { tipo:'', n_sello:'', descripcion:'', resultado:'' }])
+  }
+  function updateElementoIzaje(i, field, val) {
+    setElementosIzaje(prev => prev.map((el, j) => j === i ? { ...el, [field]: val } : el))
+  }
+  function removeElementoIzaje(i) {
+    setElementosIzaje(prev => prev.filter((_, j) => j !== i))
+  }
+
+  // ── Fotos de inspección generales ────────────────────────────────────────
+  async function subirFotoGeneral(file) {
+    setSubiendoFotoGeneral(true)
+    const ext  = file.name.split('.').pop()
+    const path = `general-${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('informes-fotos').upload(path, file)
+    if (!error) {
+      const url = supabase.storage.from('informes-fotos').getPublicUrl(path).data.publicUrl
+      setFotosInspeccion(prev => [...prev, url])
+    }
+    setSubiendoFotoGeneral(false)
+  }
+  function removeFotoGeneral(i) {
+    setFotosInspeccion(prev => prev.filter((_, j) => j !== i))
+  }
+
   async function subirFoto(file, hallazgoIdx) {
     setSubiendoFoto(true)
     const ext  = file.name.split('.').pop()
@@ -316,8 +364,13 @@ export default function NuevoInforme() {
       fecha_inspeccion:  general.fecha_inspeccion,
       supervisor_nombre: general.supervisor_nombre,
       inspector_id:      usuario?.id,
-      inspector_nombre:  usuario?.nombre_completo || usuario?.nombre || usuario?.email,
-      datos_equipo:      equipo,
+      inspector_nombre:  [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.email,
+      datos_equipo:      {
+        ...equipo,
+        elementos_izaje:  elementosIzaje,
+        fotos_inspeccion: fotosInspeccion,
+        equipo_medicion:  equipoMedicion,
+      },
       end_aplicados:     endAplicados,
       mediciones,
       hallazgos,
@@ -478,8 +531,14 @@ export default function NuevoInforme() {
             </div>
             <div>
               <label style={S.label}>Inspector</label>
-              <input className="input" value={usuario?.nombre || usuario?.email || ''} disabled
-                style={{ background: '#F8FAFC', color: '#475569' }} />
+              <input className="input"
+                value={[usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.email || ''}
+                disabled style={{ background: '#F8FAFC', color: '#475569' }} />
+              {usuario?.nivel_snt && (
+                <div style={{ fontSize:11, color:'#7C3AED', marginTop:3, fontWeight:700 }}>
+                  🏅 Nivel {usuario.nivel_snt} SNT-TC-1A
+                </div>
+              )}
             </div>
             <div>
               <label style={S.label}>Supervisor</label>
@@ -541,6 +600,100 @@ export default function NuevoInforme() {
             </div>
           </div>
 
+          {/* ── PASO 5b: Elementos de izaje (solo IZAJE) ── */}
+          {tipo === 'IZAJE' && (
+            <div style={S.seccion}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                <div style={S.seccionTitulo}>⑤b Elementos de Izaje Inspeccionados</div>
+                <button className="btn btn-secondary btn-sm" onClick={addElementoIzaje}>+ Agregar elemento</button>
+              </div>
+              <p style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>
+                Ingresa cada elemento inspeccionado (grillete, eslinga, cáncamo, gancho, etc.) con su N° de sello y resultado individual.
+              </p>
+              {elementosIzaje.length === 0 ? (
+                <div style={{ color:'var(--gris)', fontSize:13, padding:'14px 0', textAlign:'center', borderTop:'1px dashed #E2E8F0' }}>
+                  Sin elementos. Haz clic en "+ Agregar elemento" para ingresar.
+                </div>
+              ) : (
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', minWidth:600 }}>
+                    <thead>
+                      <tr style={{ background:'#F8FAFC' }}>
+                        {['Tipo de elemento','N° Sello / ID','Descripción / Observación','Resultado',''].map(h => (
+                          <th key={h} style={{ padding:'8px 12px', fontSize:11, fontWeight:700, color:'#64748B', textAlign:'left', border:'1px solid #E2E8F0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {elementosIzaje.map((el, i) => (
+                        <tr key={i}>
+                          <td style={S.tdInput}>
+                            <select className="input" value={el.tipo}
+                              onChange={e => updateElementoIzaje(i,'tipo',e.target.value)}
+                              style={{ fontSize:12, minWidth:130 }}>
+                              <option value="">— Tipo —</option>
+                              {['Grillete','Eslinga cadena','Eslinga textil','Eslinga cable de acero','Cáncamo','Gancho','Aparejo diferencial','Esparrago','Otro'].map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={S.tdInput}>
+                            <input className="input" value={el.n_sello}
+                              onChange={e => updateElementoIzaje(i,'n_sello',e.target.value)}
+                              placeholder="Ej: S-0045" style={{ fontSize:12, width:90 }} />
+                          </td>
+                          <td style={S.tdInput}>
+                            <input className="input" value={el.descripcion}
+                              onChange={e => updateElementoIzaje(i,'descripcion',e.target.value)}
+                              placeholder='Ej: 3/4" ancla, 2 ton, Crosby' style={{ fontSize:12 }} />
+                          </td>
+                          <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', minWidth:160 }}>
+                            <div style={{ display:'flex', gap:6 }}>
+                              <button onClick={() => updateElementoIzaje(i,'resultado','CUMPLE')}
+                                style={{ flex:1, padding:'6px 4px', borderRadius:6, border:'2px solid',
+                                  borderColor: el.resultado==='CUMPLE' ? '#16A34A' : '#E2E8F0',
+                                  cursor:'pointer', fontSize:11, fontWeight:700,
+                                  background: el.resultado==='CUMPLE' ? '#D1FAE5' : '#F8FAFC',
+                                  color: el.resultado==='CUMPLE' ? '#065F46' : '#94A3B8' }}>
+                                ✓ CUMPLE
+                              </button>
+                              <button onClick={() => updateElementoIzaje(i,'resultado','NO_CUMPLE')}
+                                style={{ flex:1, padding:'6px 4px', borderRadius:6, border:'2px solid',
+                                  borderColor: el.resultado==='NO_CUMPLE' ? '#DC2626' : '#E2E8F0',
+                                  cursor:'pointer', fontSize:11, fontWeight:700,
+                                  background: el.resultado==='NO_CUMPLE' ? '#FEE2E2' : '#F8FAFC',
+                                  color: el.resultado==='NO_CUMPLE' ? '#991B1B' : '#94A3B8' }}>
+                                ✗ NO CUMPLE
+                              </button>
+                            </div>
+                          </td>
+                          <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
+                            <button onClick={() => removeElementoIzaje(i)}
+                              style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:16 }}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {/* Resumen */}
+              {elementosIzaje.length > 0 && (
+                <div style={{ marginTop:12, display:'flex', gap:16, fontSize:12 }}>
+                  <span style={{ color:'#065F46', fontWeight:700 }}>
+                    ✓ {elementosIzaje.filter(e => e.resultado==='CUMPLE').length} cumplen
+                  </span>
+                  <span style={{ color:'#991B1B', fontWeight:700 }}>
+                    ✗ {elementosIzaje.filter(e => e.resultado==='NO_CUMPLE').length} no cumplen
+                  </span>
+                  <span style={{ color:'#64748B' }}>
+                    ({elementosIzaje.filter(e => !e.resultado).length} sin evaluar)
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── PASO 5: END Aplicados ── */}
           <div style={S.seccion}>
             <div style={S.seccionTitulo}>⑥ Métodos END Aplicados</div>
@@ -558,7 +711,47 @@ export default function NuevoInforme() {
             </div>
           </div>
 
-          {/* ── PASO 6: Mediciones (tanque y tubería) ── */}
+          {/* ── PASO 6b: Equipo de medición END utilizado ── */}
+          <div style={S.seccion}>
+            <div style={S.seccionTitulo}>⑦ Equipo / Instrumento END Utilizado</div>
+            <p style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>
+              Registra el instrumento o equipo de medición con el que se realizó la inspección (marca, modelo, N° serie y calibración).
+            </p>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+              <div>
+                <label style={S.label}>Tipo / Nombre del instrumento</label>
+                <input className="input" value={equipoMedicion.tipo}
+                  onChange={e => setEquipoMedicion(p => ({ ...p, tipo: e.target.value }))}
+                  placeholder="Ej: Medidor UT, Lámpara UV, Yoquillo magnético..." />
+              </div>
+              <div>
+                <label style={S.label}>Marca</label>
+                <input className="input" value={equipoMedicion.marca}
+                  onChange={e => setEquipoMedicion(p => ({ ...p, marca: e.target.value }))}
+                  placeholder="Ej: Olympus, GE, Magnaflux, Sonatest..." />
+              </div>
+              <div>
+                <label style={S.label}>Modelo</label>
+                <input className="input" value={equipoMedicion.modelo}
+                  onChange={e => setEquipoMedicion(p => ({ ...p, modelo: e.target.value }))}
+                  placeholder="Ej: 38DL Plus, Epoch 650, NDT9 UT..." />
+              </div>
+              <div>
+                <label style={S.label}>N° de Serie</label>
+                <input className="input" value={equipoMedicion.numero_serie}
+                  onChange={e => setEquipoMedicion(p => ({ ...p, numero_serie: e.target.value }))}
+                  placeholder="Ej: SN-123456" />
+              </div>
+              <div style={{ gridColumn:'1/-1' }}>
+                <label style={S.label}>N° Certificado de calibración (y vigencia)</label>
+                <input className="input" value={equipoMedicion.cert_calibracion}
+                  onChange={e => setEquipoMedicion(p => ({ ...p, cert_calibracion: e.target.value }))}
+                  placeholder="Ej: CAL-2025-001234, vigente hasta 15/08/2025" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── PASO 7: Mediciones (tanque y tubería) ── */}
           {necesitaMediciones && (
             <div style={S.seccion}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -673,7 +866,43 @@ export default function NuevoInforme() {
             </div>
           </div>
 
-          {/* ── PASO 8: Resultado ── */}
+          {/* ── Fotos de inspección generales ── */}
+          <div style={S.seccion}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+              <div style={S.seccionTitulo}>📷 Fotos de Inspección</div>
+              <label style={{
+                padding:'6px 14px', borderRadius:8, border:'1.5px solid #CBD5E1',
+                background: subiendoFotoGeneral ? '#F1F5F9' : '#fff', color:'#475569',
+                cursor: subiendoFotoGeneral ? 'not-allowed' : 'pointer', fontSize:13, fontWeight:600 }}>
+                {subiendoFotoGeneral ? '⏳ Subiendo...' : '📷 Agregar foto'}
+                <input type="file" accept="image/*" style={{ display:'none' }} disabled={subiendoFotoGeneral}
+                  onChange={e => e.target.files[0] && subirFotoGeneral(e.target.files[0])} />
+              </label>
+            </div>
+            {fotosInspeccion.length === 0 ? (
+              <div style={{ color:'var(--gris)', fontSize:13, textAlign:'center', padding:'20px 0', borderTop:'1px dashed #E2E8F0' }}>
+                Sin fotos. Haz clic en "📷 Agregar foto" para subir imágenes de la inspección.
+              </div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:12 }}>
+                {fotosInspeccion.map((url, i) => (
+                  <div key={i} style={{ position:'relative' }}>
+                    <img src={url} alt={`Foto ${i+1}`}
+                      style={{ width:'100%', height:140, objectFit:'cover', borderRadius:8, border:'1px solid #E2E8F0' }} />
+                    <button onClick={() => removeFotoGeneral(i)}
+                      style={{ position:'absolute', top:4, right:4, background:'rgba(0,0,0,0.65)',
+                        border:'none', color:'#fff', borderRadius:'50%', width:22, height:22,
+                        cursor:'pointer', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      ✕
+                    </button>
+                    <div style={{ fontSize:10, color:'#64748B', textAlign:'center', marginTop:4 }}>Foto {i+1}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Resultado ── */}
           <div style={S.seccion}>
             <div style={S.seccionTitulo}>{necesitaMediciones ? '⑨' : '⑧'} Resultado de la Inspección</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
