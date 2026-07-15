@@ -187,12 +187,11 @@ function FormActaDigital({ ot, asignacion, onGuardada, onCancel }) {
       const sede = form.sede_wss || ot.sede || ''
       const { data: numData, error: numErr } = await supabase.rpc('siguiente_numero_acta', { p_sede: sede })
       if (numErr) throw numErr
-      const numero_acta = numData || (sede.toLowerCase().includes('antofagasta') ? 3852 : 4152)
-      const codigo_acta = `D-${numero_acta}`
+      let numero_acta = numData || (sede.toLowerCase().includes('antofagasta') ? 3852 : 4152)
 
       const payload = {
         numero_acta,
-        codigo_acta,
+        codigo_acta: `D-${numero_acta}`,
         ot_numero:              ot.ot_numero,
         solicitante:            form.solicitante,
         atencion:               form.atencion,
@@ -230,10 +229,18 @@ function FormActaDigital({ ot, asignacion, onGuardada, onCancel }) {
         created_by:             usuario?.email || '',
       }
 
-      const { error: insErr } = await supabase.from('actas_terreno').insert(payload)
+      let insErr = null
+      for (let intento = 0; intento < 5; intento++) {
+        payload.numero_acta = numero_acta
+        payload.codigo_acta = `D-${numero_acta}`
+        const { error: e } = await supabase.from('actas_terreno').insert(payload)
+        if (!e) { insErr = null; break }
+        if (e.code === '23505') { numero_acta++; insErr = e; continue }
+        insErr = e; break
+      }
       if (insErr) throw insErr
 
-      onGuardada(codigo_acta)
+      onGuardada(`D-${numero_acta}`)
     } catch (e) {
       setError(e.message || 'Error al guardar el acta')
     } finally {
@@ -533,7 +540,7 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
     setGuardando(true)
     setError('')
     try {
-      // Subir imagen a Supabase Storage
+      // Subir archivo a Supabase Storage
       const ext = archivo.name.split('.').pop()
       const path = `${ot.ot_numero}/${Date.now()}.${ext}`
       const { error: upErr } = await supabase.storage
@@ -544,24 +551,31 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
       const { data: urlData } = supabase.storage.from('actas-manuales').getPublicUrl(path)
       const imagen_manual_url = urlData.publicUrl
 
-      // Número correlativo por sede
+      // Número correlativo por sede — con reintento si hay colisión
       const sede = ot.sede || ''
       const { data: numData } = await supabase.rpc('siguiente_numero_acta', { p_sede: sede })
-      const numero_acta = numData || (sede.toLowerCase().includes('antofagasta') ? 3852 : 4152)
-      const codigo_acta = `D-${numero_acta}`
+      let numero_acta = numData || (sede.toLowerCase().includes('antofagasta') ? 3852 : 4152)
 
-      const { error: insErr } = await supabase.from('actas_terreno').insert({
-        numero_acta,
-        codigo_acta,
-        ot_numero:       ot.ot_numero,
-        solicitante:     ot.cliente || '',
-        sede_wss:        sede,
-        modo:            'manual',
-        imagen_manual_url,
-        numero_acta_manual: numeroManual || null,
-        estado:          'Emitida',
-        created_by:      usuario?.email || '',
-      })
+      let insErr = null
+      for (let intento = 0; intento < 5; intento++) {
+        const codigo_acta = `D-${numero_acta}`
+        const { error: e } = await supabase.from('actas_terreno').insert({
+          numero_acta,
+          codigo_acta,
+          ot_numero:          ot.ot_numero,
+          solicitante:        ot.cliente || '',
+          sede_wss:           sede,
+          modo:               'manual',
+          imagen_manual_url,
+          numero_acta_manual: numeroManual || null,
+          estado:             'Emitida',
+          created_by:         usuario?.email || '',
+        })
+        if (!e) { insErr = null; break }
+        // Si es colisión de clave, probar con el siguiente número
+        if (e.code === '23505') { numero_acta++; insErr = e; continue }
+        insErr = e; break
+      }
       if (insErr) throw insErr
 
       onGuardada(codigo_acta)
