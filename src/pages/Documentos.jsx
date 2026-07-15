@@ -37,7 +37,7 @@ export default function Documentos() {
     try {
       setCargando(true)
       const [{ data: otsData, error: e1 }, { data: docsData, error: e2 }] = await Promise.all([
-        supabase.from('ots').select('ot_numero, empresa, estado').order('created_at', { ascending: false }),
+        supabase.from('ots').select('ot_numero, cliente, estado').order('created_at', { ascending: false }),
         supabase.from('documentos_ot').select('ot_numero, tipo'),
       ])
       if (e1) throw e1
@@ -80,7 +80,7 @@ export default function Documentos() {
     const q = busqueda.toLowerCase()
     otsFiltradas = otsFiltradas.filter(ot =>
       ot.ot_numero?.toLowerCase().includes(q) ||
-      ot.empresa?.toLowerCase().includes(q)
+      ot.cliente?.toLowerCase().includes(q)
     )
   }
 
@@ -194,7 +194,7 @@ export default function Documentos() {
                       <Link to={`/ots/${ot.ot_numero}`} style={{ color: 'var(--azul)', fontWeight: 700, textDecoration: 'none' }}>
                         {ot.ot_numero}
                       </Link>
-                      <div style={{ fontSize: 11, color: 'var(--gris)', marginTop: 2 }}>{ot.empresa}</div>
+                      <div style={{ fontSize: 11, color: 'var(--gris)', marginTop: 2 }}>{ot.cliente}</div>
                     </td>
                     <td style={td}>
                       <span style={{ fontSize: 11, background: '#F3F4F6', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>
