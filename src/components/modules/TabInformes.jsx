@@ -335,10 +335,55 @@ function SeccionCargaInforme({ ot }) {
 
   // Documentos ya subidos
   const [docsSubidos, setDocsSubidos] = useState([])
+  const [sincronizandoDrive, setSincronizandoDrive] = useState(false)
   useEffect(() => { cargarDocs(); cargarSupervisores() }, [ot.ot_numero])
   async function cargarDocs() {
     const { data } = await supabase.from('documentos_ot').select('*').eq('ot_numero', ot.ot_numero).eq('tipo', 'informe').order('created_at', { ascending: false })
     setDocsSubidos(data || [])
+  }
+
+  // Sincronizar archivos desde carpeta Drive 09 → registrarlos en documentos_ot
+  async function sincronizarDesdeDrive() {
+    if (!carpeta09Id) { setError('Esta OT no tiene carpeta Drive configurada.'); return }
+    setSincronizandoDrive(true); setError('')
+    try {
+      const resp = await fetch(`/api/drive/listar-carpeta?folderId=${carpeta09Id}`)
+      const data = await resp.json()
+      if (!data.ok) throw new Error(data.error || 'Error al listar Drive')
+      const archivosEnDrive = [
+        ...(data.raiz || []),
+        ...(data.categorias || []).flatMap(c => c.archivos),
+      ]
+      if (archivosEnDrive.length === 0) { setError('No se encontraron archivos en la carpeta Drive.'); return }
+
+      // Registrar solo los que no existen ya (por drive_file_id o nombre)
+      const nombresExistentes = new Set(docsSubidos.map(d => d.nombre_archivo))
+      let nuevos = 0
+      for (const f of archivosEnDrive) {
+        if (nombresExistentes.has(f.name)) continue
+        const { error: insErr } = await supabase.from('documentos_ot').insert({
+          ot_numero:      ot.ot_numero,
+          tipo:           'informe',
+          nombre_archivo: f.name,
+          drive_url:      f.webViewLink || null,
+          drive_file_id:  f.id || null,
+          subido_por:     'Sincronizado desde Drive',
+        })
+        if (!insErr) nuevos++
+      }
+      await cargarDocs()
+      if (nuevos > 0) {
+        setExitoUpload(`✅ ${nuevos} archivo${nuevos > 1 ? 's' : ''} sincronizado${nuevos > 1 ? 's' : ''} desde Drive`)
+        setTimeout(() => setExitoUpload(''), 5000)
+      } else {
+        setExitoUpload('✓ Todos los archivos de Drive ya estaban registrados')
+        setTimeout(() => setExitoUpload(''), 3000)
+      }
+    } catch (e) {
+      setError('Error al sincronizar: ' + e.message)
+    } finally {
+      setSincronizandoDrive(false)
+    }
   }
   async function cargarSupervisores() {
     // Consultar tabla usuarios directamente (igual que ModalCrearOT) para tener email y teléfono
@@ -543,28 +588,41 @@ function SeccionCargaInforme({ ot }) {
           <div style={{ fontSize: 12, color: '#065F46', background: '#D1FAE5', padding: '6px 10px', borderRadius: 6, marginBottom: 10 }}>{exitoUpload}</div>
         )}
 
-        {/* Documentos ya subidos */}
-        {docsSubidos.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>Archivos subidos ({docsSubidos.length})</div>
-            {docsSubidos.map(d => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12 }}>
-                <span style={{ color: '#22C55E' }}>✓</span>
-                <a href={d.drive_url} target="_blank" rel="noreferrer" style={{ color: '#185FA5', flex: 1 }}>{d.nombre_archivo}</a>
-                <span style={{ color: '#94A3B8' }}>{new Date(d.created_at).toLocaleDateString('es-CL')}</span>
-                <button
-                  onClick={async () => {
-                    if (!window.confirm(`¿Eliminar "${d.nombre_archivo}"?`)) return
-                    await supabase.from('documentos_ot').delete().eq('id', d.id)
-                    cargarDocs()
-                  }}
-                  title="Eliminar archivo"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 14, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}
-                >✕</button>
-              </div>
-            ))}
+        {/* Documentos ya subidos + botón sincronizar Drive */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+              Archivos subidos ({docsSubidos.length})
+            </div>
+            {carpeta09Id && (
+              <button
+                onClick={sincronizarDesdeDrive}
+                disabled={sincronizandoDrive}
+                style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, border: '1px solid #3B82F6', background: '#EFF6FF', color: '#1D4ED8', cursor: sincronizandoDrive ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
+                {sincronizandoDrive ? '⏳ Sincronizando...' : '🔄 Sincronizar desde Drive'}
+              </button>
+            )}
           </div>
-        )}
+          {docsSubidos.map(d => (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #F1F5F9', fontSize: 12 }}>
+              <span style={{ color: '#22C55E' }}>✓</span>
+              <a href={d.drive_url} target="_blank" rel="noreferrer" style={{ color: '#185FA5', flex: 1 }}>{d.nombre_archivo}</a>
+              <span style={{ color: '#94A3B8' }}>{new Date(d.created_at).toLocaleDateString('es-CL')}</span>
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`¿Eliminar "${d.nombre_archivo}"?`)) return
+                  await supabase.from('documentos_ot').delete().eq('id', d.id)
+                  cargarDocs()
+                }}
+                title="Eliminar archivo"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 14, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}
+              >✕</button>
+            </div>
+          ))}
+          {docsSubidos.length === 0 && (
+            <div style={{ fontSize: 12, color: '#94A3B8', padding: '8px 0' }}>Sin archivos subidos aún.</div>
+          )}
+        </div>
 
         {/* Notificar supervisor */}
         <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 14 }}>
