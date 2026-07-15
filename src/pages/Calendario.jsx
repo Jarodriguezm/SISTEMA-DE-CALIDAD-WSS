@@ -1,212 +1,206 @@
 // ============================================================
-// Calendario.jsx — Módulo de Actividades WSS
-// Vistas: mes / semana / día
-// Muestra actividades manuales + OTs del sistema (sin duplicar)
+// Calendario.jsx — Módulo Calendario de Actividades WSS
+// Fuentes de datos:
+//   1. actividades_calendario (tabla propia)
+//   2. v_portal_ots_listado   (OTs existentes con fechas reales)
+// Vista día / semana / mes + CRUD de actividades
 // ============================================================
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-// ── Constantes ───────────────────────────────────────────────
-const MESES  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const DIAS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
-const SEDES  = ['Santiago','Antofagasta','Valparaíso','Concepción','Otras']
-const ESTADOS = ['Programada','En proceso','Completada','Cancelada','Postergada']
-
+// ── Constantes ───────────────────────────────────────────────────────────────
+const ESTADOS = ['Programada','En ejecución','Ejecutada','Reprogramada','Cancelada','Pendiente de informe','Cerrada']
 const ESTADO_COLOR = {
-  'Programada':   '#3B82F6',
-  'En proceso':   '#F59E0B',
-  'Completada':   '#10B981',
-  'Cancelada':    '#EF4444',
-  'Postergada':   '#8B5CF6',
-  // OT states
-  'Pendiente':    '#6B7280',
-  'Asignado':     '#F59E0B',
-  'Inspeccionado':'#3B82F6',
-  'Cerrado':      '#10B981',
-  'OT':           '#1E4D7B',
+  'Programada':            '#1E4D7B',
+  'En ejecución':          '#D97706',
+  'Ejecutada':             '#059669',
+  'Reprogramada':          '#7C3AED',
+  'Cancelada':             '#DC2626',
+  'Pendiente de informe':  '#EA580C',
+  'Cerrada':               '#64748B',
 }
-
-// Map de estados OT → color del calendario
 const OT_ESTADO_MAP = {
-  'Pendiente de asignación': 'Programada',
-  'Pendiente':               'Programada',
-  'Sin inspector':           'Programada',
-  'Asignado':                'En proceso',
-  'En proceso':              'En proceso',
-  'Acta cargada':            'En proceso',
-  'Informe cargado':         'Completada',
-  'Cerrada documentalmente': 'Completada',
-  'Cancelada':               'Cancelada',
+  'Pendiente':                 'Programada',
+  'Sin inspector':             'Programada',
+  'Asignado':                  'Programada',
+  'En proceso':                'En ejecución',
+  'Acta cargada':              'Pendiente de informe',
+  'Informe cargado':           'Ejecutada',
+  'Factura cargada':           'Ejecutada',
+  'Cerrada documentalmente':   'Cerrada',
 }
+const SEDES  = ['ANF','SCL','CCP']
+const DIAS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+const MESES  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-// ── Helpers ──────────────────────────────────────────────────
-function toISO(val) {
-  if (!val) return null
-  const d = new Date(val)
-  return isNaN(d) ? null : d.toISOString().slice(0, 10)
-}
-
+// ── Helpers de fecha ─────────────────────────────────────────────────────────
+function isoFecha(d) { return d.toISOString().split('T')[0] }
 function fmtFecha(iso) {
   if (!iso) return '—'
-  const d = new Date(iso)
-  return isNaN(d) ? iso : `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`
+  const [y,m,d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+function fmtHora(t) { return t ? t.substring(0,5) : '' }
+
+// Convierte cualquier string de fecha a YYYY-MM-DD
+function toISO(val) {
+  if (!val) return null
+  return String(val).split('T')[0]
 }
 
-function fmtHora(t) {
-  if (!t) return ''
-  return t.slice(0, 5)
-}
-
-function mismaFecha(isoA, dateB) {
-  return isoA && isoA.slice(0, 10) === dateB.toISOString().slice(0, 10)
-}
-
-// ── Componente principal ──────────────────────────────────────
+// ── Componente principal ──────────────────────────────────────────────────────
 export default function Calendario() {
-  const { usuario, esAdmin, esSupervisor, esComercial } = useAuth()
-  const puedeEditar = esAdmin() || esSupervisor() || esComercial()
+  const { usuario, esAdmin, esSupervisor } = useAuth()
+  const puedeCrear  = esAdmin() || esSupervisor() || (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
+  const puedeEditar = esAdmin() || esSupervisor()
 
-  const [actividades, setActividades] = useState([])
-  const [ots, setOts]                 = useState([])
-  const [cargando, setCargando]       = useState(true)
-  const [error, setError]             = useState('')
+  const [vista, setVista]               = useState('mes')
+  const [fechaRef, setFechaRef]         = useState(new Date())
+  const [actividades, setActividades]   = useState([])
+  const [cargando, setCargando]         = useState(false)
+  const [error, setError]               = useState('')
+  const [fuenteInfo, setFuenteInfo]     = useState({ cal: 0, ots: 0 })
 
-  const [vista, setVista]           = useState('mes')
-  const [fechaRef, setFechaRef]     = useState(new Date())
-  const [filtroSede, setFiltroSede] = useState('')
-  const [filtroTexto, setFiltroTexto] = useState('')
+  // Filtros
+  const [filtroSede, setFiltroSede]     = useState(
+    (esAdmin() || esSupervisor()) ? '' : (usuario?.sede || '')
+  )
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroResp, setFiltroResp]     = useState('')
 
-  const [modalAbierto, setModalAbierto]   = useState(false)
+  // Modal crear/editar
+  const [modalAbierto, setModalAbierto]         = useState(false)
+  const [actSeleccionada, setActSeleccionada]   = useState(null)
+  const [fechaInicioModal, setFechaInicioModal] = useState('')
+
+  // Detalle
   const [detalleAbierto, setDetalleAbierto] = useState(false)
-  const [actDetalle, setActDetalle]       = useState(null)
-  const [actEditar, setActEditar]         = useState(null)
-  const [fechaInicial, setFechaInicial]   = useState('')
+  const [actDetalle, setActDetalle]         = useState(null)
 
-  useEffect(() => { cargarDatos() }, [])
-
-  async function cargarDatos() {
+  // ── Carga de datos (actividades + OTs) ─────────────────────────────────────
+  const cargar = useCallback(async () => {
     try {
       setCargando(true)
       setError('')
+      const { inicio, fin } = getRango(vista, fechaRef)
+      const isoInicio = isoFecha(inicio)
+      const isoFin    = isoFecha(fin)
 
-      const [{ data: acts, error: e1 }, { data: otsData, error: e2 }] = await Promise.all([
-        supabase.from('actividades_calendario').select('*').order('fecha_inicio'),
-        supabase.from('v_portal_ots_listado').select('*').limit(500),
-      ])
+      // ─── 1. Actividades propias del calendario ────────────────────────────
+      let actsCal = []
+      try {
+        let queryCal = supabase.from('actividades_calendario').select('*').is('deleted_at', null).gte('fecha_inicio', isoInicio).lte('fecha_inicio', isoFin).order('fecha_inicio').order('hora_inicio')
+        if (filtroSede) queryCal = queryCal.eq('sede', filtroSede)
+        const { data, error: err } = await queryCal
+        if (!err && data) actsCal = data
+      } catch (e) {
+        // Tabla puede no existir aún si el SQL no se ejecutó en Supabase
+        console.warn('actividades_calendario no disponible:', e.message)
+      }
 
-      if (e1) console.warn('actividades_calendario:', e1.message)
-      if (e2) console.warn('v_portal_ots_listado:', e2.message)
+      // ─── 2. OTs desde la vista de listado ────────────────────────────────
+      // Prioridad de fecha operacional:
+      //   fecha_programacion > fecha_inspeccion > fecha_ejecucion
+      //   > fecha_inicio > fecha_termino > fecha_cierre > fecha_creacion
+      let actsOTs = []
+      try {
+        // SELECT * para capturar todos los campos de fecha disponibles en la vista
+        // Sin filtro de fecha en BD — se filtra en JS por fecha operacional efectiva
+        let queryOTs = supabase.from('v_portal_ots_listado').select('*').order('fecha_creacion', { ascending: false }).limit(500)
+        if (filtroSede) queryOTs = queryOTs.eq('sede', filtroSede)
+        const { data: otsData, error: errOT } = await queryOTs
 
-      setActividades(acts || [])
+        if (!errOT && otsData && otsData.length > 0) {
+          actsOTs = otsData
+            .map(ot => {
+              // Fecha operacional: primera no-nula según prioridad
+              const fechaEfectiva = toISO(
+                ot.fecha_programacion ||
+                ot.fecha_inspeccion   ||
+                ot.fecha_ejecucion    ||
+                ot.fecha_inicio       ||
+                ot.fecha_termino      ||
+                ot.fecha_cierre       ||
+                ot.fecha_creacion
+              )
+              const tipeFecha =
+                ot.fecha_programacion ? 'programación' :
+                ot.fecha_inspeccion   ? 'inspección'   :
+                ot.fecha_ejecucion    ? 'ejecución'    :
+                ot.fecha_inicio       ? 'inicio'       :
+                ot.fecha_termino      ? 'término'      :
+                ot.fecha_cierre       ? 'cierre'       : 'creación'
 
-      // OTs → pseudo-actividades
-      // Excluir OTs que ya tienen actividad manual creada
-      const otNumerosConAct = new Set(
-        (acts || []).filter(a => a.ot_numero).map(a => a.ot_numero)
+              return {
+                id:                 `ot-${ot.ot_numero}`,
+                titulo:             `OT ${ot.ot_numero}`,
+                descripcion:        ot.tipo_servicio || '',
+                cliente:            ot.cliente || '',
+                sede:               ot.sede || '',
+                area_servicio:      ot.tipo_servicio || '',
+                tipo_servicio:      ot.tipo_servicio || '',
+                ubicacion:          '',
+                fecha_inicio:       fechaEfectiva,
+                fecha_termino:      null,
+                hora_inicio:        null,
+                hora_termino:       null,
+                responsable_nombre: ot.supervisor || '',
+                inspector_nombre:   ot.inspector  || '',
+                estado:             OT_ESTADO_MAP[ot.estado] || 'Programada',
+                observaciones:      `Estado OT: ${ot.estado || ''} · Fecha: ${tipeFecha}`,
+                ot_numero:          ot.ot_numero,
+                es_ot:              true,
+              }
+            })
+            // Filtrar por el rango de fechas del período actual
+            .filter(a => a.fecha_inicio && a.fecha_inicio >= isoInicio && a.fecha_inicio <= isoFin)
+        }
+      } catch (e) {
+        console.warn('Error cargando OTs para calendario:', e.message)
+      }
+
+      // ─── 3. Combinar y filtrar ────────────────────────────────────────────
+      // OTs van primero solo si no hay actividades propias del mismo día
+      // para evitar duplicados visuales: si una OT ya tiene actividad asociada
+      // en actividades_calendario, ocultamos el OT
+      const otsConActividad = new Set(
+        actsCal.filter(a => a.ot_numero).map(a => a.ot_numero)
       )
+      const otsFiltradas = actsOTs.filter(o => !otsConActividad.has(o.ot_numero))
 
-      const pseudoOTs = (otsData || [])
-        .filter(ot => !otNumerosConAct.has(ot.ot_numero))
-        .map(ot => {
-          const fechaEfectiva = toISO(
-            ot.fecha_programacion || ot.fecha_inspeccion || ot.fecha_ejecucion ||
-            ot.fecha_inicio || ot.fecha_termino || ot.fecha_cierre || ot.fecha_creacion
-          )
-          if (!fechaEfectiva) return null
-          return {
-            id:                `ot-${ot.ot_numero}`,
-            es_ot:             true,
-            ot_numero:         ot.ot_numero,
-            titulo:            `OT ${ot.ot_numero} — ${ot.cliente || ''}`,
-            fecha_inicio:      fechaEfectiva,
-            fecha_termino:     fechaEfectiva,
-            estado:            OT_ESTADO_MAP[ot.estado] || 'Programada',
-            cliente:           ot.cliente,
-            sede:              ot.sede,
-            area_servicio:     ot.tipo_servicio || ot.producto_servicio_contratado,
-            tipo_servicio:     ot.tipo_servicio || ot.producto_servicio_contratado,
-            responsable_nombre: ot.inspector || ot.supervisor,
-            inspector_nombre:   ot.inspector,
-          }
-        })
-        .filter(Boolean)
+      let todas = [...actsCal, ...otsFiltradas]
+      setFuenteInfo({ cal: actsCal.length, ots: otsFiltradas.length })
 
-      setOts(pseudoOTs)
-    } catch (err) {
-      setError(err.message)
+      if (filtroSede)   todas = todas.filter(a => a.sede   === filtroSede)
+      if (filtroEstado) todas = todas.filter(a => a.estado === filtroEstado)
+      if (filtroResp)   todas = todas.filter(a =>
+        (a.responsable_nombre || '').toLowerCase().includes(filtroResp.toLowerCase()) ||
+        (a.inspector_nombre   || '').toLowerCase().includes(filtroResp.toLowerCase())
+      )
+      setActividades(todas)
+
+    } catch (e) {
+      setError('Error al cargar actividades: ' + e.message)
     } finally {
       setCargando(false)
     }
-  }
+  }, [vista, fechaRef, filtroSede, filtroEstado, filtroResp])
 
-  // Combinar actividades manuales + OTs
-  const todasLasActs = useMemo(() => {
-    return [...actividades, ...ots]
-  }, [actividades, ots])
+  useEffect(() => { cargar() }, [cargar])
 
-  // Filtrar
-  const actsFiltradas = useMemo(() => {
-    return todasLasActs.filter(a => {
-      if (filtroSede  && a.sede !== filtroSede)               return false
-      if (filtroTexto && !`${a.titulo} ${a.cliente || ''}`.toLowerCase().includes(filtroTexto.toLowerCase())) return false
-      return true
-    })
-  }, [todasLasActs, filtroSede, filtroTexto])
-
-  // Navegar entre períodos
-  function navegar(delta) {
-    setFechaRef(prev => {
-      const d = new Date(prev)
-      if (vista === 'mes')    d.setMonth(d.getMonth() + delta)
-      if (vista === 'semana') d.setDate(d.getDate() + delta * 7)
-      if (vista === 'dia')    d.setDate(d.getDate() + delta)
-      return d
-    })
-  }
-
-  function irHoy() { setFechaRef(new Date()) }
-
-  function getRango(v, ref) {
-    const d = new Date(ref)
-    if (v === 'mes') return {
-      inicio: new Date(d.getFullYear(), d.getMonth(), 1),
-      fin:    new Date(d.getFullYear(), d.getMonth() + 1, 0),
-    }
-    if (v === 'semana') {
-      const ini = new Date(d); ini.setDate(d.getDate() - d.getDay())
-      const fin = new Date(ini); fin.setDate(ini.getDate() + 6)
-      return { inicio: ini, fin }
-    }
-    return { inicio: d, fin: d }
-  }
-
-  function getLabelFecha() {
-    if (vista === 'mes') return `${MESES[fechaRef.getMonth()]} ${fechaRef.getFullYear()}`
-    if (vista === 'semana') {
-      const { inicio, fin } = getRango('semana', fechaRef)
-      return `${inicio.getDate()}/${inicio.getMonth()+1} – ${fin.getDate()}/${fin.getMonth()+1}/${fin.getFullYear()}`
-    }
-    return `${DIAS[fechaRef.getDay()]} ${fechaRef.getDate()} de ${MESES[fechaRef.getMonth()]} ${fechaRef.getFullYear()}`
-  }
-
-  function actsEnFecha(fecha) {
-    const iso = fecha.toISOString().slice(0, 10)
-    return actsFiltradas.filter(a => a.fecha_inicio && a.fecha_inicio.slice(0,10) === iso)
-  }
-
-  function abrirNueva(fecha) {
-    if (!puedeEditar) return
-    setActEditar(null)
-    setFechaInicial(fecha ? fecha.toISOString().slice(0, 10) : '')
+  function abrirNuevo(fechaISO) {
+    if (!puedeCrear) return
+    setActSeleccionada(null)
+    setFechaInicioModal(fechaISO || isoFecha(new Date()))
     setModalAbierto(true)
   }
 
   function abrirEditar(act) {
-    if (!puedeEditar || act.es_ot) return
-    setActEditar(act)
-    setFechaInicial(act.fecha_inicio || '')
+    if (act.es_ot) return  // OTs solo se editan desde el módulo OTs
+    setDetalleAbierto(false)
+    setActSeleccionada(act)
+    setFechaInicioModal(act.fecha_inicio)
     setModalAbierto(true)
   }
 
@@ -215,238 +209,290 @@ export default function Calendario() {
     setDetalleAbierto(true)
   }
 
-  async function eliminarAct(act) {
-    if (!act || act.es_ot) return
-    if (!confirm('¿Eliminar esta actividad?')) return
-    await supabase.from('actividades_calendario').delete().eq('id', act.id)
-    await cargarDatos()
+  async function eliminar(id) {
+    if (!confirm('¿Cancelar/eliminar esta actividad?')) return
+    const { error } = await supabase
+      .from('actividades_calendario')
+      .update({ deleted_at: new Date().toISOString(), updated_by: usuario?.email })
+      .eq('id', id)
+    if (!error) { setDetalleAbierto(false); cargar() }
   }
 
-  if (cargando) return (
-    <div style={{ padding: 32 }}>
-      <div className="loading-bar" />
-      <p style={{ color: 'var(--gris)', marginTop: 16 }}>Cargando calendario…</p>
-    </div>
-  )
+  function navAnterior()  { setFechaRef(f => moverFecha(f, -1, vista)) }
+  function navSiguiente() { setFechaRef(f => moverFecha(f,  1, vista)) }
+  function irHoy()        { setFechaRef(new Date()) }
+
+  const labelFechaRef = getLabelFecha(vista, fechaRef)
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={s.topBar}>
-        {/* Controles de vista */}
-        <div style={s.vistaBtns}>
-          {['mes','semana','dia'].map(v => (
-            <button key={v} style={{...s.vBtn, ...(vista===v ? s.vBtnActive : {})}}
-              onClick={() => setVista(v)}>
-              {v.charAt(0).toUpperCase() + v.slice(1)}
+    <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div style={s.header}>
+        <div>
+          <h1 style={{ margin:0, fontSize:22 }}>📅 Calendario de Actividades</h1>
+          <p style={{ margin:'2px 0 0', fontSize:12, color:'var(--gris)' }}>
+            {fuenteInfo.cal} actividades propias · {fuenteInfo.ots} OTs · Total {fuenteInfo.cal + fuenteInfo.ots}
+          </p>
+        </div>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          {puedeCrear && (
+            <button className="btn btn-primary btn-sm" onClick={() => abrirNuevo('')}>
+              + Nueva actividad
+            </button>
+          )}
+          <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Recargar</button>
+        </div>
+      </div>
+
+      {/* ── Filtros ─────────────────────────────────────────────────────────── */}
+      <div style={s.filtrosBar}>
+        <select className="select" style={{ minWidth:130 }} value={filtroSede} onChange={e => setFiltroSede(e.target.value)}>
+          <option value="">Todas las sedes</option>
+          {SEDES.map(sv => <option key={sv} value={sv}>{sv}</option>)}
+        </select>
+        <select className="select" style={{ minWidth:160 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+          <option value="">Todos los estados</option>
+          {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
+        <input
+          className="input"
+          placeholder="Filtrar por responsable / inspector..."
+          style={{ minWidth:220 }}
+          value={filtroResp}
+          onChange={e => setFiltroResp(e.target.value)}
+        />
+      </div>
+
+      {/* ── Navegación y vistas ─────────────────────────────────────────────── */}
+      <div style={s.navBar}>
+        <div style={{ display:'flex', gap:6 }}>
+          <button className="btn btn-ghost btn-sm" onClick={navAnterior}>‹ Anterior</button>
+          <button className="btn btn-ghost btn-sm" onClick={irHoy}>Hoy</button>
+          <button className="btn btn-ghost btn-sm" onClick={navSiguiente}>Siguiente ›</button>
+        </div>
+        <span style={{ fontWeight:700, fontSize:16, color:'var(--azul)' }}>{labelFechaRef}</span>
+        <div style={{ display:'flex', gap:4 }}>
+          {['dia','semana','mes'].map(v => (
+            <button
+              key={v}
+              className={`btn btn-sm ${vista === v ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setVista(v)}
+            >
+              {v === 'dia' ? 'Día' : v === 'semana' ? 'Semana' : 'Mes'}
             </button>
           ))}
         </div>
-
-        {/* Navegación fecha */}
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <button style={s.navBtn} onClick={() => navegar(-1)}>‹</button>
-          <span style={{ fontWeight:700, fontSize:16, minWidth:220, textAlign:'center' }}>
-            {getLabelFecha()}
-          </span>
-          <button style={s.navBtn} onClick={() => navegar(1)}>›</button>
-          <button style={s.hoyBtn} onClick={irHoy}>Hoy</button>
-        </div>
-
-        {/* Nueva actividad */}
-        {puedeEditar && (
-          <button style={s.newBtn} onClick={() => abrirNueva(null)}>+ Nueva actividad</button>
-        )}
       </div>
 
-      {/* Filtros */}
-      <div style={s.filtros}>
-        <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)} style={s.filtroSelect}>
-          <option value="">Todas las sedes</option>
-          {SEDES.map(se => <option key={se} value={se}>{se}</option>)}
-        </select>
-        <input
-          placeholder="Buscar actividad, cliente…"
-          value={filtroTexto}
-          onChange={e => setFiltroTexto(e.target.value)}
-          style={s.filtroInput}
-        />
-        {(filtroSede || filtroTexto) && (
-          <button style={s.hoyBtn} onClick={() => { setFiltroSede(''); setFiltroTexto('') }}>
-            ✕ Limpiar
-          </button>
-        )}
+      {error && <div className="alert alert-error" style={{ margin:'8px 0' }}>{error}</div>}
+      {cargando && <div style={{ height:3, background:'var(--azul)', borderRadius:2, animation:'pulse 1s infinite' }} />}
+
+      {/* ── Leyenda fuente de datos ──────────────────────────────────────────── */}
+      <div style={{ display:'flex', gap:16, padding:'6px 0', fontSize:11, color:'var(--gris)', flexWrap:'wrap' }}>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ width:10, height:10, borderRadius:2, background:'#1E4D7B', display:'inline-block' }} />
+          Actividades del calendario
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ width:10, height:10, borderRadius:2, border:'2px dashed #1E4D7B', display:'inline-block' }} />
+          Órdenes de Trabajo (fecha: programación → inspección → ejecución → creación)
+        </span>
       </div>
 
-      {/* Error */}
-      {error && <div style={s.errorBox}>⚠ {error}</div>}
-
-      {/* Leyenda */}
-      <div style={s.leyenda}>
-        {ESTADOS.map(et => (
-          <div key={et} style={{ display:'flex', alignItems:'center', gap:5 }}>
-            <div style={{ width:10, height:10, borderRadius:3, background: ESTADO_COLOR[et] || '#888' }} />
-            <span style={{ fontSize:11, color:'#6B7380' }}>{et}</span>
-          </div>
-        ))}
-        <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-          <div style={{ width:10, height:10, borderRadius:3, background: '#1E4D7B' }} />
-          <span style={{ fontSize:11, color:'#6B7380' }}>OT del sistema</span>
-        </div>
-      </div>
-
-      {/* Vista calendario */}
-      {vista === 'mes'    && <VistaMes    fechaRef={fechaRef} acts={actsFiltradas} onClickFecha={abrirNueva} onClickAct={abrirDetalle} />}
-      {vista === 'semana' && <VistaSemana fechaRef={fechaRef} acts={actsFiltradas} onClickFecha={abrirNueva} onClickAct={abrirDetalle} />}
-      {vista === 'dia'    && <VistaDia    fechaRef={fechaRef} acts={actsFiltradas} onClickAct={abrirDetalle} />}
-
-      {/* Modal editar/crear */}
-      {modalAbierto && (
-        <ModalEditar
-          act={actEditar}
-          fechaInicial={fechaInicial}
-          usuario={usuario}
-          onCerrar={() => setModalAbierto(false)}
-          onGuardado={() => { setModalAbierto(false); cargarDatos() }}
+      {/* ── Vista Mes ─────────────────────────────────────────────────────── */}
+      {vista === 'mes' && (
+        <VistaMes
+          fechaRef={fechaRef}
+          actividades={actividades}
+          onDiaClick={abrirNuevo}
+          onActClick={abrirDetalle}
+          puedeCrear={puedeCrear}
         />
       )}
 
-      {/* Modal detalle */}
+      {/* ── Vista Semana ──────────────────────────────────────────────────── */}
+      {vista === 'semana' && (
+        <VistaSemana
+          fechaRef={fechaRef}
+          actividades={actividades}
+          onDiaClick={abrirNuevo}
+          onActClick={abrirDetalle}
+          puedeCrear={puedeCrear}
+        />
+      )}
+
+      {/* ── Vista Día ─────────────────────────────────────────────────────── */}
+      {vista === 'dia' && (
+        <VistaDia
+          fechaRef={fechaRef}
+          actividades={actividades}
+          onActClick={abrirDetalle}
+          onNuevo={() => abrirNuevo(isoFecha(fechaRef))}
+          puedeCrear={puedeCrear}
+        />
+      )}
+
+      {/* ── Panel lista actividades ────────────────────────────────────────── */}
+      <div style={s.listaPanel}>
+        <h3 style={{ marginBottom:12, fontSize:14 }}>
+          Actividades del período ({actividades.length})
+          {actividades.length === 0 && !cargando && (
+            <span style={{ fontWeight:400, color:'var(--gris)', marginLeft:8 }}>
+              — Sin registros en este rango de fechas
+            </span>
+          )}
+        </h3>
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {actividades.map(a => (
+            <CardActividad key={a.id} act={a} onClick={() => abrirDetalle(a)} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Modal crear/editar ─────────────────────────────────────────────── */}
+      {modalAbierto && (
+        <ModalActividad
+          actividad={actSeleccionada}
+          fechaInicio={fechaInicioModal}
+          usuario={usuario}
+          onGuardado={() => { setModalAbierto(false); cargar() }}
+          onCerrar={() => setModalAbierto(false)}
+        />
+      )}
+
+      {/* ── Modal detalle ──────────────────────────────────────────────────── */}
       {detalleAbierto && actDetalle && (
         <ModalDetalle
           act={actDetalle}
-          puedeEditar={puedeEditar}
+          puedeEditar={puedeEditar && !actDetalle.es_ot}
+          onEditar={() => abrirEditar(actDetalle)}
+          onEliminar={() => eliminar(actDetalle.id)}
           onCerrar={() => setDetalleAbierto(false)}
-          onEditar={() => { setDetalleAbierto(false); abrirEditar(actDetalle) }}
-          onEliminar={() => { setDetalleAbierto(false); eliminarAct(actDetalle) }}
         />
       )}
     </div>
   )
 }
 
-// ── Vista Mes ─────────────────────────────────────────────────
-function VistaMes({ fechaRef, acts, onClickFecha, onClickAct }) {
-  const year  = fechaRef.getFullYear()
-  const month = fechaRef.getMonth()
-  const primerDia = new Date(year, month, 1).getDay()
-  const diasMes   = new Date(year, month + 1, 0).getDate()
+// ── Vista Mes ─────────────────────────────────────────────────────────────────
+function VistaMes({ fechaRef, actividades, onDiaClick, onActClick, puedeCrear }) {
+  const hoy   = isoFecha(new Date())
+  const año   = fechaRef.getFullYear()
+  const mes   = fechaRef.getMonth()
+  const primerDia = new Date(año, mes, 1)
+  const ultimoDia = new Date(año, mes + 1, 0)
+  const offsetInicio = primerDia.getDay()
 
-  const celdas = []
-  for (let i = 0; i < primerDia; i++) celdas.push(null)
-  for (let d = 1; d <= diasMes; d++) celdas.push(new Date(year, month, d))
+  const dias = []
+  for (let i = 0; i < offsetInicio; i++) dias.push(null)
+  for (let d = 1; d <= ultimoDia.getDate(); d++) dias.push(new Date(año, mes, d))
 
-  const semanas = []
-  for (let i = 0; i < celdas.length; i += 7) semanas.push(celdas.slice(i, i + 7))
+  function actsDia(fecha) {
+    const iso = isoFecha(fecha)
+    return actividades.filter(a => a.fecha_inicio === iso)
+  }
 
   return (
-    <div style={{ overflowX:'auto' }}>
-      <table style={s.mesTable}>
-        <thead>
-          <tr>
-            {DIAS.map(d => <th key={d} style={s.mesTh}>{d}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {semanas.map((sem, si) => (
-            <tr key={si}>
-              {sem.map((fecha, di) => {
-                if (!fecha) return <td key={di} style={s.mesTdVacio} />
-                const esHoy = fecha.toDateString() === new Date().toDateString()
-                const actsDelDia = acts.filter(a => a.fecha_inicio && a.fecha_inicio.slice(0,10) === fecha.toISOString().slice(0,10))
-                return (
-                  <td key={di} style={s.mesTd} onClick={() => onClickFecha(fecha)}>
-                    <div style={{
-                      ...s.mesDiaNum,
-                      color: esHoy ? '#fff' : '#6B7380',
-                      background: esHoy ? '#1E4D7B' : 'transparent',
-                      borderRadius: '50%',
-                      width: 22, height: 22,
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      marginLeft:'auto',
-                    }}>
-                      {fecha.getDate()}
-                    </div>
-                    <div style={s.mesCeldaActs}>
-                      {actsDelDia.slice(0, 3).map(a => (
-                        <span
-                          key={a.id}
-                          style={{
-                            ...s.chip,
-                            background: a.es_ot ? '#1E4D7B' : (ESTADO_COLOR[a.estado] || '#888'),
-                          }}
-                          onClick={ev => { ev.stopPropagation(); onClickAct(a) }}
-                          title={a.titulo}
-                        >
-                          {a.es_ot ? `OT ${a.ot_numero}` : a.titulo}
-                        </span>
-                      ))}
-                      {actsDelDia.length > 3 && (
-                        <span style={{ ...s.chip, background:'#9CA3AF' }}>
-                          +{actsDelDia.length - 3} más
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                )
-              })}
-              {sem.length < 7 && Array(7 - sem.length).fill(null).map((_, i) => (
-                <td key={`empty-${i}`} style={s.mesTdVacio} />
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={s.mesGrid}>
+      {DIAS.map(d => <div key={d} style={s.mesCabDia}>{d}</div>)}
+      {dias.map((fecha, i) => {
+        if (!fecha) return <div key={`e${i}`} style={s.mesCeldaVacia} />
+        const iso  = isoFecha(fecha)
+        const acts = actsDia(fecha)
+        const esHoy = iso === hoy
+        return (
+          <div
+            key={iso}
+            style={{ ...s.mesCelda, background: esHoy ? '#EFF6FF' : '#fff', border: esHoy ? '2px solid var(--azul)' : '1px solid var(--borde)' }}
+            onClick={() => puedeCrear && onDiaClick(iso)}
+          >
+            <div style={{ ...s.mesDiaNum, color: esHoy ? 'var(--azul)' : '#334155', fontWeight: esHoy ? 800 : 400 }}>
+              {fecha.getDate()}
+            </div>
+            {acts.slice(0, 3).map(a => (
+              <div
+                key={a.id}
+                onClick={e => { e.stopPropagation(); onActClick(a) }}
+                style={{
+                  ...s.mesChip,
+                  background: ESTADO_COLOR[a.estado] || '#1E4D7B',
+                  border: a.es_ot ? '1px dashed rgba(255,255,255,.6)' : 'none',
+                  opacity: a.es_ot ? 0.85 : 1,
+                }}
+                title={`${a.titulo}${a.cliente ? ' — ' + a.cliente : ''}`}
+              >
+                {a.es_ot ? '📋 ' : ''}{fmtHora(a.hora_inicio)} {a.titulo}
+              </div>
+            ))}
+            {acts.length > 3 && (
+              <div style={{ fontSize:10, color:'var(--gris)', marginTop:2 }}>+{acts.length - 3} más</div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-// ── Vista Semana ──────────────────────────────────────────────
-function VistaSemana({ fechaRef, acts, onClickFecha, onClickAct }) {
-  const inicio = new Date(fechaRef)
-  inicio.setDate(fechaRef.getDate() - fechaRef.getDay())
+// ── Vista Semana ──────────────────────────────────────────────────────────────
+function VistaSemana({ fechaRef, actividades, onDiaClick, onActClick, puedeCrear }) {
+  const hoy = isoFecha(new Date())
+  const dia  = fechaRef.getDay()
+  const lunes = new Date(fechaRef)
+  lunes.setDate(lunes.getDate() - (dia === 0 ? 6 : dia - 1))
 
-  const dias = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(inicio)
-    d.setDate(inicio.getDate() + i)
-    return d
+  const diasSemana = Array.from({ length:7 }, (_, i) => {
+    const d = new Date(lunes); d.setDate(lunes.getDate() + i); return d
   })
 
   return (
-    <div style={{ display:'grid', gap:8, marginTop:12 }}>
-      {dias.map((fecha, i) => {
-        const esHoy = fecha.toDateString() === new Date().toDateString()
-        const actsDelDia = acts.filter(a => a.fecha_inicio && a.fecha_inicio.slice(0,10) === fecha.toISOString().slice(0,10))
+    <div style={s.semanaGrid}>
+      {diasSemana.map(fecha => {
+        const iso  = isoFecha(fecha)
+        const acts = actividades.filter(a => a.fecha_inicio === iso)
+        const esHoy = iso === hoy
         return (
-          <div key={i} style={s.diaSemanaRow}>
-            <div
-              style={{
-                ...s.diaSemanaHeader,
-                background: esHoy ? '#1E4D7B' : '#F9FAFB',
-                color: esHoy ? '#fff' : '#1F2937',
-                cursor:'pointer',
-              }}
-              onClick={() => onClickFecha(fecha)}
-            >
-              {DIAS[fecha.getDay()]} {fecha.getDate()} de {MESES[fecha.getMonth()]}
+          <div
+            key={iso}
+            style={{
+              ...s.semanaCelda,
+              border: esHoy ? '2px solid var(--azul)' : '1px solid var(--borde)',
+              background: esHoy ? '#EFF6FF' : '#fff',
+            }}
+          >
+            <div style={{ ...s.semanaCabDia, color: esHoy ? 'var(--azul)' : '#334155' }}>
+              {DIAS[fecha.getDay()]} {fecha.getDate()}
             </div>
-            <div style={s.diaSemanaCelda}>
-              {actsDelDia.length === 0
-                ? <span style={s.vacio}>Sin actividades</span>
-                : actsDelDia.map(a => (
-                    <span
-                      key={a.id}
-                      style={{
-                        ...s.chip,
-                        background: a.es_ot ? '#1E4D7B' : (ESTADO_COLOR[a.estado] || '#888'),
-                        fontSize:12, padding:'4px 10px',
-                      }}
-                      onClick={() => onClickAct(a)}
-                    >
-                      {a.hora_inicio ? fmtHora(a.hora_inicio) + ' ' : ''}{a.es_ot ? `OT ${a.ot_numero} — ${a.cliente || ''}` : a.titulo}
-                    </span>
-                  ))
-              }
+            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              {acts.map(a => (
+                <div
+                  key={a.id}
+                  onClick={() => onActClick(a)}
+                  style={{
+                    ...s.semanaChip,
+                    background: ESTADO_COLOR[a.estado] || '#1E4D7B',
+                    border: a.es_ot ? '1px dashed rgba(255,255,255,.6)' : 'none',
+                    opacity: a.es_ot ? 0.85 : 1,
+                  }}
+                >
+                  <div style={{ fontWeight:700, fontSize:10 }}>{a.es_ot ? '📋 OT' : fmtHora(a.hora_inicio)}</div>
+                  <div style={{ fontSize:11, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{a.titulo}</div>
+                  {a.cliente && <div style={{ fontSize:10, opacity:.85 }}>{a.cliente}</div>}
+                </div>
+              ))}
+              {puedeCrear && (
+                <button
+                  onClick={() => onDiaClick(iso)}
+                  style={{
+                    fontSize:10, color:'var(--gris)', background:'none',
+                    border:'1px dashed var(--borde)', borderRadius:4,
+                    padding:'2px 4px', cursor:'pointer', marginTop:2,
+                  }}
+                >
+                  + Agregar
+                </button>
+              )}
             </div>
           </div>
         )
@@ -455,174 +501,275 @@ function VistaSemana({ fechaRef, acts, onClickFecha, onClickAct }) {
   )
 }
 
-// ── Vista Día ─────────────────────────────────────────────────
-function VistaDia({ fechaRef, acts, onClickAct }) {
-  const iso = fechaRef.toISOString().slice(0, 10)
-  const actsDelDia = acts.filter(a => a.fecha_inicio && a.fecha_inicio.slice(0,10) === iso)
-
+// ── Vista Día ─────────────────────────────────────────────────────────────────
+function VistaDia({ fechaRef, actividades, onActClick, onNuevo, puedeCrear }) {
+  const iso  = isoFecha(fechaRef)
+  const acts = actividades.filter(a => a.fecha_inicio === iso)
   return (
-    <div style={{ ...s.diaContainer, marginTop:16 }}>
-      <div style={s.diaTitulo}>
-        {DIAS[fechaRef.getDay()]}, {fechaRef.getDate()} de {MESES[fechaRef.getMonth()]} {fechaRef.getFullYear()}
+    <div style={{ padding:'16px 0' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <h3 style={{ margin:0 }}>
+          {DIAS[fechaRef.getDay()]}, {fechaRef.getDate()} de {MESES[fechaRef.getMonth()]} {fechaRef.getFullYear()}
+        </h3>
+        {puedeCrear && (
+          <button className="btn btn-secondary btn-sm" onClick={onNuevo}>+ Agregar actividad</button>
+        )}
       </div>
-      {actsDelDia.length === 0
-        ? <div style={s.vacio}>Sin actividades para este día</div>
-        : actsDelDia.map(a => (
+      {acts.length === 0 ? (
+        <p style={{ color:'var(--gris)', fontSize:13 }}>Sin actividades para este día.</p>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {acts.map(a => (
             <div
               key={a.id}
+              onClick={() => onActClick(a)}
               style={{
-                ...s.card,
-                background: a.es_ot ? '#1E4D7B' : (ESTADO_COLOR[a.estado] || '#888'),
+                ...s.diaCard,
+                borderLeft:`4px solid ${ESTADO_COLOR[a.estado] || '#1E4D7B'}`,
+                cursor:'pointer',
+                opacity: a.es_ot ? 0.9 : 1,
               }}
-              onClick={() => onClickAct(a)}
             >
-              <div style={s.cardTitulo}>{a.es_ot ? `OT ${a.ot_numero} — ${a.cliente}` : a.titulo}</div>
-              {(a.hora_inicio || a.hora_termino) && (
-                <div style={s.cardHora}>
-                  {fmtHora(a.hora_inicio)}{a.hora_termino ? ` – ${fmtHora(a.hora_termino)}` : ''}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:15 }}>{a.es_ot && '📋 '}{a.titulo}</div>
+                  {a.cliente && <div style={{ color:'var(--gris)', fontSize:12 }}>{a.cliente}</div>}
+                </div>
+                <span style={{ ...s.estadoBadge, background: ESTADO_COLOR[a.estado] || '#1E4D7B' }}>
+                  {a.estado}
+                </span>
+              </div>
+              <div style={{ display:'flex', gap:16, marginTop:6, fontSize:12, color:'#475569', flexWrap:'wrap' }}>
+                {(a.hora_inicio || a.hora_termino) && (
+                  <span>🕐 {fmtHora(a.hora_inicio)}{a.hora_termino ? ` – ${fmtHora(a.hora_termino)}` : ''}</span>
+                )}
+                {a.ubicacion && <span>📍 {a.ubicacion}</span>}
+                {a.ot_numero && <span>OT: {a.ot_numero}</span>}
+                {a.responsable_nombre && <span>👤 {a.responsable_nombre}</span>}
+              </div>
+              {a.es_ot && (
+                <div style={{ fontSize:10, color:'var(--gris)', marginTop:4 }}>
+                  Origen: Orden de Trabajo · {a.observaciones}
                 </div>
               )}
-              {a.responsable_nombre && (
-                <div style={s.cardResp}>👤 {a.responsable_nombre}</div>
-              )}
             </div>
-          ))
-      }
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Modal Crear / Editar ──────────────────────────────────────
-function ModalEditar({ act, fechaInicial, usuario, onCerrar, onGuardado }) {
-  const esNueva = !act
+// ── Card compacto ─────────────────────────────────────────────────────────────
+function CardActividad({ act, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        ...s.diaCard,
+        cursor:'pointer',
+        borderLeft:`4px solid ${ESTADO_COLOR[act.estado] || '#1E4D7B'}`,
+        padding:'8px 12px',
+        opacity: act.es_ot ? 0.9 : 1,
+      }}
+    >
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontWeight:600, fontSize:13, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+            {act.es_ot && '📋 '}{act.titulo}
+          </div>
+          <div style={{ fontSize:11, color:'var(--gris)' }}>
+            {fmtFecha(act.fecha_inicio)}{act.hora_inicio ? ` ${fmtHora(act.hora_inicio)}` : ''} · {act.cliente || ''}
+            {act.es_ot && <span style={{ marginLeft:6, color:'#7C3AED', fontWeight:600 }}>OT</span>}
+          </div>
+        </div>
+        <span style={{ ...s.estadoBadge, fontSize:10, background: ESTADO_COLOR[act.estado] || '#1E4D7B', whiteSpace:'nowrap', flexShrink:0 }}>
+          {act.estado}
+        </span>
+      </div>
+    </div>
+  )
+}
 
+// ── Modal crear / editar ──────────────────────────────────────────────────────
+function ModalActividad({ actividad, fechaInicio, usuario, onGuardado, onCerrar }) {
+  const esEdicion = !!actividad
   const [form, setForm] = useState({
-    titulo:              act?.titulo || '',
-    fecha_inicio:        act?.fecha_inicio?.slice(0,10) || fechaInicial || '',
-    fecha_termino:       act?.fecha_termino?.slice(0,10) || '',
-    hora_inicio:         act?.hora_inicio || '',
-    hora_termino:        act?.hora_termino || '',
-    estado:              act?.estado || 'Programada',
-    sede:                act?.sede || '',
-    cliente:             act?.cliente || '',
-    area_servicio:       act?.area_servicio || '',
-    tipo_servicio:       act?.tipo_servicio || '',
-    ubicacion:           act?.ubicacion || '',
-    responsable_nombre:  act?.responsable_nombre || (usuario ? `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim() : ''),
-    observaciones:       act?.observaciones || '',
+    titulo:             actividad?.titulo || '',
+    descripcion:        actividad?.descripcion || '',
+    ot_numero:          actividad?.ot_numero || '',
+    cliente:            actividad?.cliente || '',
+    sede:               actividad?.sede || '',
+    area_servicio:      actividad?.area_servicio || '',
+    tipo_servicio:      actividad?.tipo_servicio || '',
+    ubicacion:          actividad?.ubicacion || '',
+    fecha_inicio:       actividad?.fecha_inicio || fechaInicio,
+    fecha_termino:      actividad?.fecha_termino || '',
+    hora_inicio:        actividad?.hora_inicio ? actividad.hora_inicio.substring(0,5) : '',
+    hora_termino:       actividad?.hora_termino ? actividad.hora_termino.substring(0,5) : '',
+    responsable_nombre: actividad?.responsable_nombre || '',
+    responsable_email:  actividad?.responsable_email  || '',
+    inspector_nombre:   actividad?.inspector_nombre   || '',
+    inspector_email:    actividad?.inspector_email    || '',
+    estado:             actividad?.estado || 'Programada',
+    observaciones:      actividad?.observaciones || '',
   })
-
   const [guardando, setGuardando] = useState(false)
-  const [err, setErr] = useState('')
+  const [error, setError]         = useState('')
+  const [ots, setOts]             = useState([])
 
-  function setF(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  useEffect(() => {
+    supabase
+      .from('v_portal_ots_listado')
+      .select('ot_numero, cliente, estado')
+      .order('fecha_creacion', { ascending: false })
+      .limit(200)
+      .then(({ data }) => setOts(data || []))
+  }, [])
+
+  // Al seleccionar OT, pre-rellenar cliente
+  useEffect(() => {
+    if (form.ot_numero) {
+      const ot = ots.find(o => o.ot_numero === form.ot_numero)
+      if (ot && !actividad?.cliente) {
+        setForm(f => ({ ...f, cliente: ot.cliente || f.cliente }))
+      }
+    }
+  }, [form.ot_numero, ots])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   async function guardar() {
-    if (!form.titulo.trim())     return setErr('El título es obligatorio')
-    if (!form.fecha_inicio)      return setErr('La fecha de inicio es obligatoria')
-    setErr('')
-    setGuardando(true)
+    if (!form.titulo.trim()) { setError('El título es obligatorio'); return }
+    if (!form.fecha_inicio)  { setError('La fecha de inicio es obligatoria'); return }
+    setGuardando(true); setError('')
     try {
-      const payload = { ...form }
-      if (esNueva) {
-        const { error } = await supabase.from('actividades_calendario').insert([payload])
-        if (error) throw error
+      const payload = {
+        ...form,
+        hora_inicio:   form.hora_inicio   || null,
+        hora_termino:  form.hora_termino  || null,
+        fecha_termino: form.fecha_termino || null,
+        ot_numero:     form.ot_numero     || null,
+        updated_by:    usuario?.email,
+      }
+      if (esEdicion) {
+        const { error: err } = await supabase.from('actividades_calendario').update(payload).eq('id', actividad.id)
+        if (err) throw err
       } else {
-        const { error } = await supabase.from('actividades_calendario').update(payload).eq('id', act.id)
-        if (error) throw error
+        payload.created_by = usuario?.email
+        const { error: err } = await supabase.from('actividades_calendario').insert(payload)
+        if (err) throw err
       }
       onGuardado()
     } catch (e) {
-      setErr(e.message)
+      setError(e.message)
     } finally {
       setGuardando(false)
     }
   }
 
   return (
-    <div style={s.modalOverlay}>
-      <div style={s.modalBox}>
+    <div style={s.overlay} onClick={onCerrar}>
+      <div style={s.modal} onClick={e => e.stopPropagation()}>
         <div style={s.modalHeader}>
-          <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>
-            {esNueva ? 'Nueva actividad' : 'Editar actividad'}
-          </h3>
-          <button style={s.closeBtn} onClick={onCerrar}>✕</button>
+          <h2 style={{ margin:0, fontSize:17 }}>{esEdicion ? '✏️ Editar actividad' : '+ Nueva actividad'}</h2>
+          <button onClick={onCerrar} style={s.btnX}>✕</button>
         </div>
-        <div style={{ ...s.modalBody, overflowY:'auto', maxHeight:'70vh' }}>
-          {err && <div style={s.errorBox}>{err}</div>}
-
-          <div style={s.fila}>
-            <label style={s.label}>Título *</label>
-            <input value={form.titulo} onChange={e => setF('titulo', e.target.value)} style={s.input} placeholder="Ej: Inspección cliente X" />
+        {error && <div className="alert alert-error" style={{ margin:'0 16px 12px' }}>{error}</div>}
+        <div style={s.modalBody}>
+          <div className="field">
+            <label>Título <span style={{ color:'red' }}>*</span></label>
+            <input className="input" value={form.titulo} onChange={e => set('titulo', e.target.value)}
+              placeholder="Ej: Inspección válvulas — Cliente X" />
           </div>
-
-          <div style={{ ...s.fila, display:'flex', gap:12 }}>
-            <div style={{ flex:1 }}>
-              <label style={s.label}>Fecha inicio *</label>
-              <input type="date" value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} style={s.input} />
-            </div>
-            <div style={{ flex:1 }}>
-              <label style={s.label}>Fecha término</label>
-              <input type="date" value={form.fecha_termino} onChange={e => setF('fecha_termino', e.target.value)} style={s.input} />
-            </div>
-          </div>
-
-          <div style={{ ...s.fila, display:'flex', gap:12 }}>
-            <div style={{ flex:1 }}>
-              <label style={s.label}>Hora inicio</label>
-              <input type="time" value={form.hora_inicio} onChange={e => setF('hora_inicio', e.target.value)} style={s.input} />
-            </div>
-            <div style={{ flex:1 }}>
-              <label style={s.label}>Hora término</label>
-              <input type="time" value={form.hora_termino} onChange={e => setF('hora_termino', e.target.value)} style={s.input} />
-            </div>
-          </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Estado</label>
-            <select value={form.estado} onChange={e => setF('estado', e.target.value)} style={s.input}>
-              {ESTADOS.map(et => <option key={et} value={et}>{et}</option>)}
+          <div className="field">
+            <label>OT asociada</label>
+            <select className="select" value={form.ot_numero} onChange={e => set('ot_numero', e.target.value)}>
+              <option value="">Sin OT asociada</option>
+              {ots.map(o => (
+                <option key={o.ot_numero} value={o.ot_numero}>
+                  {o.ot_numero} — {o.cliente}
+                </option>
+              ))}
             </select>
           </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Sede</label>
-            <select value={form.sede} onChange={e => setF('sede', e.target.value)} style={s.input}>
-              <option value="">— seleccionar —</option>
-              {SEDES.map(se => <option key={se} value={se}>{se}</option>)}
+          <div style={s.grid2}>
+            <div className="field">
+              <label>Cliente</label>
+              <input className="input" value={form.cliente} onChange={e => set('cliente', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Sede</label>
+              <select className="select" value={form.sede} onChange={e => set('sede', e.target.value)}>
+                <option value="">— Sede —</option>
+                {SEDES.map(sv => <option key={sv} value={sv}>{sv}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={s.grid2}>
+            <div className="field">
+              <label>Área de servicio</label>
+              <input className="input" value={form.area_servicio} onChange={e => set('area_servicio', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Tipo de servicio</label>
+              <input className="input" value={form.tipo_servicio} onChange={e => set('tipo_servicio', e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label>Ubicación</label>
+            <input className="input" value={form.ubicacion} onChange={e => set('ubicacion', e.target.value)}
+              placeholder="Dirección o nombre de instalación" />
+          </div>
+          <div style={s.grid2}>
+            <div className="field">
+              <label>Fecha inicio <span style={{ color:'red' }}>*</span></label>
+              <input className="input" type="date" value={form.fecha_inicio} onChange={e => set('fecha_inicio', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Fecha término</label>
+              <input className="input" type="date" value={form.fecha_termino} onChange={e => set('fecha_termino', e.target.value)} />
+            </div>
+          </div>
+          <div style={s.grid2}>
+            <div className="field">
+              <label>Hora inicio</label>
+              <input className="input" type="time" value={form.hora_inicio} onChange={e => set('hora_inicio', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Hora término</label>
+              <input className="input" type="time" value={form.hora_termino} onChange={e => set('hora_termino', e.target.value)} />
+            </div>
+          </div>
+          <div style={s.grid2}>
+            <div className="field">
+              <label>Responsable</label>
+              <input className="input" value={form.responsable_nombre} onChange={e => set('responsable_nombre', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Inspector</label>
+              <input className="input" value={form.inspector_nombre} onChange={e => set('inspector_nombre', e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label>Estado</label>
+            <select className="select" value={form.estado} onChange={e => set('estado', e.target.value)}>
+              {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
           </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Cliente</label>
-            <input value={form.cliente} onChange={e => setF('cliente', e.target.value)} style={s.input} />
-          </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Tipo de servicio</label>
-            <input value={form.tipo_servicio} onChange={e => setF('tipo_servicio', e.target.value)} style={s.input} />
-          </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Ubicación</label>
-            <input value={form.ubicacion} onChange={e => setF('ubicacion', e.target.value)} style={s.input} />
-          </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Responsable</label>
-            <input value={form.responsable_nombre} onChange={e => setF('responsable_nombre', e.target.value)} style={s.input} />
-          </div>
-
-          <div style={s.fila}>
-            <label style={s.label}>Observaciones</label>
-            <textarea value={form.observaciones} onChange={e => setF('observaciones', e.target.value)}
-              style={{ ...s.input, height:80, resize:'vertical' }} />
+          <div className="field">
+            <label>Observaciones</label>
+            <textarea
+              className="input" rows={3} value={form.observaciones}
+              onChange={e => set('observaciones', e.target.value)}
+              style={{ resize:'vertical', fontFamily:'inherit' }}
+            />
           </div>
         </div>
         <div style={s.modalFooter}>
-          <button style={s.cancelBtn} onClick={onCerrar}>Cancelar</button>
-          <button style={s.saveBtn} onClick={guardar} disabled={guardando}>
-            {guardando ? 'Guardando…' : esNueva ? 'Crear' : 'Guardar'}
+          <button className="btn btn-secondary" onClick={onCerrar} disabled={guardando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+            {guardando ? '⏳ Guardando...' : (esEdicion ? '💾 Guardar cambios' : '✅ Crear actividad')}
           </button>
         </div>
       </div>
@@ -630,44 +777,59 @@ function ModalEditar({ act, fechaInicial, usuario, onCerrar, onGuardado }) {
   )
 }
 
-// ── Modal Detalle ─────────────────────────────────────────────
-function ModalDetalle({ act, puedeEditar, onCerrar, onEditar, onEliminar }) {
+// ── Modal detalle ─────────────────────────────────────────────────────────────
+function ModalDetalle({ act, puedeEditar, onEditar, onEliminar, onCerrar }) {
   return (
-    <div style={s.modalOverlay}>
-      <div style={{ ...s.modalBox, maxWidth:500 }}>
-        <div style={s.modalHeader}>
-          <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>
-            {act.es_ot ? `OT ${act.ot_numero}` : act.titulo}
-          </h3>
-          <button style={s.closeBtn} onClick={onCerrar}>✕</button>
+    <div style={s.overlay} onClick={onCerrar}>
+      <div style={{ ...s.modal, maxWidth:480 }} onClick={e => e.stopPropagation()}>
+        <div style={{ ...s.modalHeader, borderBottom:`3px solid ${ESTADO_COLOR[act.estado] || '#1E4D7B'}` }}>
+          <h2 style={{ margin:0, fontSize:16 }}>{act.es_ot && '📋 '}{act.titulo}</h2>
+          <button onClick={onCerrar} style={s.btnX}>✕</button>
         </div>
         <div style={s.modalBody}>
-          {act.es_ot && <Fila label="N° OT" value={act.ot_numero} />}
-          <Fila label="Estado"       value={act.estado} color={ESTADO_COLOR[act.estado]} />
-          <Fila label="Cliente"      value={act.cliente} />
-          <Fila label="Sede"         value={act.sede} />
-          <Fila label="Servicio"     value={act.tipo_servicio} />
-          <Fila label="Ubicación"    value={act.ubicacion} />
-          <Fila label="Fecha"        value={fmtFecha(act.fecha_inicio)} />
-          {act.fecha_termino && act.fecha_termino !== act.fecha_inicio && (
-            <Fila label="Término" value={fmtFecha(act.fecha_termino)} />
-          )}
-          {act.hora_inicio && (
-            <Fila label="Horario" value={`${fmtHora(act.hora_inicio)}${act.hora_termino ? ' – ' + fmtHora(act.hora_termino) : ''}`} />
-          )}
-          <Fila label="Responsable"  value={act.responsable_nombre} />
-          {act.inspector_nombre && <Fila label="Inspector" value={act.inspector_nombre} />}
-          {act.observaciones && <Fila label="Observaciones" value={act.observaciones} />}
           {act.es_ot && (
-            <a href={`/ots/${act.ot_numero}`} style={{ display:'inline-block', marginTop:12 }}>
-              <button style={s.saveBtn}>Ver OT completa →</button>
-            </a>
+            <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:6, padding:'6px 10px', fontSize:11, marginBottom:12 }}>
+              Este evento proviene de una Orden de Trabajo. Para modificarla, usa el módulo OTs.
+            </div>
+          )}
+          <span style={{ ...s.estadoBadge, background: ESTADO_COLOR[act.estado] || '#1E4D7B', display:'inline-block', marginBottom:12 }}>
+            {act.estado}
+          </span>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 16px', fontSize:13 }}>
+            <Fila label="Fecha inicio"  val={fmtFecha(act.fecha_inicio)} />
+            <Fila label="Fecha término" val={fmtFecha(act.fecha_termino)} />
+            <Fila label="Horario" val={`${fmtHora(act.hora_inicio) || '—'}${act.hora_termino ? ' → ' + fmtHora(act.hora_termino) : ''}`} />
+            <Fila label="Sede"          val={act.sede} />
+            <Fila label="Cliente"       val={act.cliente} />
+            <Fila label="OT"            val={act.ot_numero} />
+            <Fila label="Área"          val={act.area_servicio} />
+            <Fila label="Tipo servicio" val={act.tipo_servicio} />
+            <Fila label="Ubicación"     val={act.ubicacion} />
+            <Fila label="Responsable"   val={act.responsable_nombre} />
+            <Fila label="Inspector"     val={act.inspector_nombre} />
+          </div>
+          {act.descripcion && (
+            <div style={{ marginTop:12 }}>
+              <div style={s.labelMeta}>Descripción</div>
+              <p style={{ fontSize:13, margin:0 }}>{act.descripcion}</p>
+            </div>
+          )}
+          {act.observaciones && (
+            <div style={{ marginTop:10 }}>
+              <div style={s.labelMeta}>Observaciones</div>
+              <p style={{ fontSize:13, margin:0 }}>{act.observaciones}</p>
+            </div>
+          )}
+          {!act.es_ot && act.created_at && (
+            <div style={{ fontSize:10, color:'var(--gris)', marginTop:12 }}>
+              Creado: {new Date(act.created_at).toLocaleString('es-CL')} · {act.created_by || ''}
+            </div>
           )}
         </div>
-        {!act.es_ot && puedeEditar && (
+        {puedeEditar && (
           <div style={s.modalFooter}>
-            <button style={{ ...s.cancelBtn, color:'#DC2626' }} onClick={onEliminar}>Eliminar</button>
-            <button style={s.saveBtn} onClick={onEditar}>Editar</button>
+            <button className="btn btn-danger btn-sm" onClick={onEliminar}>🗑 Cancelar actividad</button>
+            <button className="btn btn-primary btn-sm" onClick={onEditar}>✏️ Editar</button>
           </div>
         )}
       </div>
@@ -675,60 +837,76 @@ function ModalDetalle({ act, puedeEditar, onCerrar, onEditar, onEliminar }) {
   )
 }
 
-// ── Auxiliares ────────────────────────────────────────────────
-function Fila({ label, value, color }) {
-  if (!value) return null
+function Fila({ label, val }) {
+  if (!val) return null
   return (
-    <div style={{ marginBottom:10 }}>
-      <div style={{ fontSize:11, fontWeight:700, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.5 }}>{label}</div>
-      <div style={{ fontSize:14, color: color || 'var(--texto, #1F2937)', marginTop:2 }}>
-        {color ? <span style={{ display:'inline-block', width:10, height:10, borderRadius:3, background:color, marginRight:6 }} /> : null}
-        {value}
-      </div>
+    <div>
+      <div style={{ fontSize:10, fontWeight:700, color:'var(--gris)', textTransform:'uppercase' }}>{label}</div>
+      <div style={{ marginTop:2 }}>{val}</div>
     </div>
   )
 }
 
-// ── Estilos ───────────────────────────────────────────────────
+// ── Helpers de rango ──────────────────────────────────────────────────────────
+function getRango(vista, ref) {
+  const d = new Date(ref)
+  if (vista === 'dia') return { inicio: d, fin: d }
+  if (vista === 'semana') {
+    const dow = d.getDay()
+    const lun = new Date(d); lun.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+    const dom = new Date(lun); dom.setDate(lun.getDate() + 6)
+    return { inicio: lun, fin: dom }
+  }
+  const inicio = new Date(d.getFullYear(), d.getMonth(), 1)
+  const fin    = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+  return { inicio, fin }
+}
+
+function moverFecha(fecha, delta, vista) {
+  const d = new Date(fecha)
+  if (vista === 'dia')    d.setDate(d.getDate() + delta)
+  if (vista === 'semana') d.setDate(d.getDate() + delta * 7)
+  if (vista === 'mes')    d.setMonth(d.getMonth() + delta)
+  return d
+}
+
+function getLabelFecha(vista, ref) {
+  if (vista === 'dia') {
+    return `${DIAS[ref.getDay()]} ${ref.getDate()} de ${MESES[ref.getMonth()]} ${ref.getFullYear()}`
+  }
+  if (vista === 'semana') {
+    const dow = ref.getDay()
+    const lun = new Date(ref); lun.setDate(ref.getDate() - (dow === 0 ? 6 : dow - 1))
+    const dom = new Date(lun); dom.setDate(lun.getDate() + 6)
+    return `${lun.getDate()} ${MESES[lun.getMonth()].substring(0,3)} – ${dom.getDate()} ${MESES[dom.getMonth()].substring(0,3)} ${dom.getFullYear()}`
+  }
+  return `${MESES[ref.getMonth()]} ${ref.getFullYear()}`
+}
+
+// ── Estilos ───────────────────────────────────────────────────────────────────
 const s = {
-  topBar:       { display:'flex', flexWrap:'wrap', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:12 },
-  vistaBtns:    { display:'flex', gap:4 },
-  vBtn:         { background:'#F3F4F6', color:'#1F2937', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:14 },
-  vBtnActive:   { background:'#1E4D7B', color:'#fff', border:'1px solid #1E4D7B' },
-  navBtn:       { background:'#1E4D7B', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:16 },
-  hoyBtn:       { background:'#F3F4F6', color:'#1F2937', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 12px', cursor:'pointer', fontSize:14 },
-  newBtn:       { background:'#10B981', color:'#fff', border:'none', borderRadius:6, padding:'8px 16px', cursor:'pointer', fontSize:14, fontWeight:600 },
-  filtros:      { display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:12 },
-  filtroSelect: { border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px', fontSize:13, cursor:'pointer' },
-  filtroInput:  { border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px', fontSize:13, width:200 },
-  leyenda:      { display:'flex', flexWrap:'wrap', gap:'6px 16px', marginBottom:12 },
-  errorBox:     { background:'#FEF2F2', color:'#991B1B', padding:10, borderRadius:6, marginBottom:12, fontSize:13 },
-  mesTable:     { width:'100%', borderCollapse:'collapse' },
-  mesTh:        { textAlign:'center', padding:'10px 6px', fontSize:13, fontWeight:600, color:'#6B7380', borderBottom:'1px solid #E5E7EB' },
-  mesTd:        { verticalAlign:'top', minHeight:90, height:90, padding:4, border:'1px solid #F5F5F5', cursor:'pointer' },
-  mesTdVacio:   { background:'#F9FAFB', border:'1px solid #F5F5F5' },
-  mesDiaNum:    { fontSize:12, color:'#6B7380', marginBottom:2, textAlign:'right' },
-  mesCeldaActs: { display:'flex', flexDirection:'column', gap:2 },
-  chip:         { fontSize:10, color:'#fff', borderRadius:4, padding:'2px 6px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'pointer', display:'block' },
-  diaSemanaRow: { border:'1px solid #F5F5F5', borderRadius:6, overflow:'hidden', marginBottom:4 },
-  diaSemanaHeader: { padding:'8px 12px', fontWeight:600, fontSize:13 },
-  diaSemanaCelda:  { padding:'8px 12px', display:'flex', flexWrap:'wrap', gap:6 },
-  card:         { borderRadius:6, padding:'8px 10px', marginBottom:6, cursor:'pointer', boxShadow:'0 1px 3px rgba(0,0,0,0.1)' },
-  cardTitulo:   { fontWeight:600, fontSize:13, color:'#fff', marginBottom:2 },
-  cardHora:     { fontSize:11, color:'rgba(255,255,255,0.85)' },
-  cardResp:     { fontSize:11, color:'rgba(255,255,255,0.7)', marginTop:2 },
-  diaContainer: { maxWidth:640 },
-  diaTitulo:    { fontSize:16, fontWeight:600, marginBottom:12 },
-  vacio:        { color:'#9CA3AF', fontStyle:'italic', padding:'12px 0' },
-  modalOverlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' },
-  modalBox:     { background:'#fff', borderRadius:12, width:'90%', maxWidth:640, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column' },
-  modalHeader:  { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 24px', borderBottom:'1px solid #F3F4F6' },
-  modalBody:    { padding:'16px 24px', overflowY:'auto' },
-  modalFooter:  { display:'flex', gap:8, justifyContent:'flex-end', padding:'16px 24px', borderTop:'1px solid #F3F4F6' },
-  closeBtn:     { background:'none', border:'none', cursor:'pointer', fontSize:18, color:'#6B7380', padding:'0 4px' },
-  fila:         { marginBottom:12 },
-  label:        { display:'block', fontSize:13, fontWeight:500, color:'#4B5563', marginBottom:4 },
-  input:        { width:'100%', padding:10, border:'1px solid #E5E7EB', borderRadius:6, fontSize:14, boxSizing:'border-box' },
-  saveBtn:      { background:'#1E4D7B', color:'#fff', border:'none', borderRadius:6, padding:'8px 20px', cursor:'pointer', fontSize:14 },
-  cancelBtn:    { background:'#F3F4F6', color:'#1F2937', border:'1px solid #E5E7EB', borderRadius:6, padding:'8px 20px', cursor:'pointer', fontSize:14 },
+  header:       { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 },
+  filtrosBar:   { display:'flex', gap:8, flexWrap:'wrap', marginBottom:8, padding:'10px 0' },
+  navBar:       { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderTop:'1px solid var(--borde)', borderBottom:'1px solid var(--borde)', marginBottom:8, flexWrap:'wrap', gap:8 },
+  mesGrid:      { display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, marginBottom:16 },
+  mesCabDia:    { textAlign:'center', fontSize:11, fontWeight:700, color:'var(--gris)', padding:'4px 0', textTransform:'uppercase' },
+  mesCeldaVacia:{ minHeight:90, background:'#F8FAFC', borderRadius:4 },
+  mesCelda:     { minHeight:90, borderRadius:4, padding:4, cursor:'pointer' },
+  mesDiaNum:    { fontSize:12, marginBottom:3 },
+  mesChip:      { fontSize:10, color:'#fff', borderRadius:3, padding:'1px 4px', marginBottom:2, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' },
+  semanaGrid:   { display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4, marginBottom:16 },
+  semanaCelda:  { borderRadius:6, padding:6, minHeight:120 },
+  semanaCabDia: { fontSize:12, fontWeight:700, marginBottom:6, textAlign:'center' },
+  semanaChip:   { color:'#fff', borderRadius:4, padding:'4px 6px', cursor:'pointer', marginBottom:3 },
+  diaCard:      { background:'#fff', border:'1px solid var(--borde)', borderRadius:6, padding:'10px 14px', boxShadow:'0 1px 3px rgba(0,0,0,.05)' },
+  listaPanel:   { background:'#F8FAFC', borderRadius:8, padding:'14px 16px', marginTop:12 },
+  overlay:      { position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 },
+  modal:        { background:'#fff', borderRadius:12, maxWidth:640, width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,.3)' },
+  modalHeader:  { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 20px', borderBottom:'1px solid var(--borde)' },
+  modalBody:    { padding:'16px 20px', overflowY:'auto', flex:1 },
+  modalFooter:  { padding:'12px 20px', borderTop:'1px solid var(--borde)', display:'flex', justifyContent:'flex-end', gap:8 },
+  btnX:         { background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--gris)', padding:4 },
+  estadoBadge:  { color:'#fff', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700 },
+  grid2:        { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' },
+  labelMeta:    { fontSize:11, fontWeight:700, color:'var(--gris)', textTransform:'uppercase', marginBottom:4 },
 }
