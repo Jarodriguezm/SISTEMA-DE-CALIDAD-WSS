@@ -37,7 +37,7 @@ const RUTAS_MENU = {
 }
 
 export default function Layout({ children }) {
-  const { usuario, menu, logout, esAdmin, esSupervisor } = useAuth()
+  const { usuario, menu, logout, esAdmin, esSupervisor, esInspector } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarAbierto, setSidebarAbierto] = useState(true)
@@ -226,14 +226,16 @@ export default function Layout({ children }) {
             abierto={sidebarAbierto}
             onClick={() => navigate('/calendario')}
           />
-          <NavItem
-            icono={iconos.clientes}
-            label="Clientes"
-            ruta="/clientes"
-            activo={esRutaActiva('/clientes')}
-            abierto={sidebarAbierto}
-            onClick={() => navigate('/clientes')}
-          />
+          {!esInspector() && (
+            <NavItem
+              icono={iconos.clientes}
+              label="Clientes"
+              ruta="/clientes"
+              activo={esRutaActiva('/clientes')}
+              abierto={sidebarAbierto}
+              onClick={() => navigate('/clientes')}
+            />
+          )}
           <NavItem
             icono={iconos.procedimientos}
             label="Procedimientos"
