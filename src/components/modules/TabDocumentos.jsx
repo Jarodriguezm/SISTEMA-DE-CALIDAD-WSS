@@ -98,6 +98,7 @@ const ETAPAS = [
 export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const { usuario, esAuditor } = useAuth()
   const [subiendo, setSubiendo] = useState(null)   // tipo de etapa subiendo
+  const [progresoMulti, setProgresoMulti] = useState(null) // { actual, total } para subidas múltiples
   const [sincronizando, setSincronizando] = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
   const [error, setError] = useState('')
@@ -191,15 +192,15 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         fileUrl = urlData?.publicUrl || null
       }
 
-      // Registrar en documentos_ot con los campos reales de la tabla
-      const { error: upsertErr } = await supabase.from('documentos_ot').upsert({
+      // Registrar en documentos_ot — insert (permite múltiples archivos por tipo)
+      const { error: upsertErr } = await supabase.from('documentos_ot').insert({
         ot_numero:      ot.ot_numero,
         tipo:           etapa.tipo,
         nombre_archivo: archivo.name,
         drive_url:      fileUrl,
         drive_file_id:  driveFileId || null,
         subido_por:     ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim(),
-      }, { onConflict: 'ot_numero,tipo' })
+      })
 
       if (upsertErr) throw upsertErr
 
@@ -211,6 +212,30 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
       setError(`Error al subir archivo: ${e.message}`)
     } finally {
       setSubiendo(null)
+    }
+  }
+
+  // Subida múltiple: sube cada archivo secuencialmente con progreso
+  async function handleSubirMultiples(etapa, archivos, driveFolderUrl = null) {
+    const lista = Array.from(archivos)
+    if (lista.length === 0) return
+    setError('')
+    setProgresoMulti({ actual: 0, total: lista.length })
+    let exitosos = 0
+    for (let i = 0; i < lista.length; i++) {
+      setProgresoMulti({ actual: i + 1, total: lista.length })
+      try {
+        await handleSubirArchivo(etapa, lista[i], driveFolderUrl)
+        exitosos++
+      } catch (e) {
+        setError(`Error en "${lista[i].name}": ${e.message}`)
+      }
+    }
+    setProgresoMulti(null)
+    if (exitosos > 0) {
+      setMensajeExito(`✅ ${exitosos} archivo${exitosos > 1 ? 's' : ''} subido${exitosos > 1 ? 's' : ''} correctamente`)
+      setTimeout(() => setMensajeExito(''), 5000)
+      onActualizar?.()
     }
   }
 
@@ -397,7 +422,9 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               carpetaInfo={carpetaInfo}
               etapaDocs={etapaDocs}
               subiendo={subiendo === etapa.tipo}
+              progresoMulti={subiendo === etapa.tipo ? progresoMulti : null}
               onSubirArchivo={(archivo) => handleSubirArchivo(etapa, archivo, carpetaInfo?.url)}
+              onSubirMultiple={(archivos) => handleSubirMultiples(etapa, archivos, carpetaInfo?.url)}
               onVincularDrive={(url) => handleVincularDrive(etapa, url)}
               soloLectura={esAuditor()}
               onVerDoc={(doc) => {
@@ -423,7 +450,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
 // ── Tarjeta por etapa ─────────────────────────────────────────────────────────
 
-function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArchivo, onVincularDrive, onVerDoc, soloLectura }) {
+function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, progresoMulti, onSubirArchivo, onSubirMultiple, onVincularDrive, onVerDoc, soloLectura }) {
   const [mostrarVincular, setMostrarVincular] = useState(false)
   const [vincularUrl, setVincularUrl] = useState('')
 
@@ -550,27 +577,35 @@ function EtapaCard({ etapa, estado, carpetaInfo, etapaDocs, subiendo, onSubirArc
           )
         )}
 
-        {/* Botón subir — siempre file picker, sube via API (no requiere permisos en Drive) */}
+        {/* Botón subir múltiple — acepta varios archivos a la vez */}
         {!esAuto && !soloLectura && (
-          <label style={{ cursor: subiendo ? 'not-allowed' : 'pointer' }}>
-            <input
-              type="file"
-              style={{ display: 'none' }}
-              disabled={subiendo}
-              onChange={e => {
-                const f = e.target.files?.[0]
-                if (f) onSubirArchivo(f)
-                e.target.value = ''
-              }}
-            />
-            <span style={{
-              ...S.btnUpload,
-              opacity: subiendo ? 0.6 : 1,
-              display: 'inline-block',
-            }}>
-              {subiendo ? '⏳ Subiendo...' : '⬆ Subir documento'}
-            </span>
-          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+            <label style={{ cursor: subiendo ? 'not-allowed' : 'pointer' }}>
+              <input
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                disabled={!!subiendo}
+                onChange={e => {
+                  const files = e.target.files
+                  if (files && files.length > 0) onSubirMultiple ? onSubirMultiple(files) : onSubirArchivo(files[0])
+                  e.target.value = ''
+                }}
+              />
+              <span style={{
+                ...S.btnUpload,
+                opacity: subiendo ? 0.6 : 1,
+                display: 'inline-block',
+              }}>
+                {subiendo
+                  ? progresoMulti
+                    ? `⏳ Subiendo ${progresoMulti.actual}/${progresoMulti.total}...`
+                    : '⏳ Subiendo...'
+                  : '⬆ Subir documentos'}
+              </span>
+            </label>
+            {!subiendo && <span style={{ fontSize: 10, color: '#94A3B8' }}>Puedes seleccionar varios archivos a la vez</span>}
+          </div>
         )}
       </div>
     </div>
