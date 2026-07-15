@@ -80,6 +80,163 @@ const METODOS_END = [
 
 const CRITICIDADES = ['Crítico', 'Mayor', 'Menor', 'Observación']
 
+// ── Columnas dinámicas por tipo de elemento IZAJE ─────────────────────────────
+
+const CAMPOS_IZAJE = {
+  'Grillete': [
+    { id:'subtipo',       label:'Subtipo',      type:'select', ops:['Ancla','Arco','Dee'] },
+    { id:'diametro_mm',   label:'Diám. (mm)',   type:'text' },
+    { id:'capacidad_ton', label:'Cap. (ton)',    type:'text' },
+    { id:'marca',         label:'Marca',        type:'text' },
+    { id:'serie',         label:'N° Serie',     type:'text' },
+  ],
+  'Eslinga cadena': [
+    { id:'longitud_m',         label:'Long. (m)',      type:'text' },
+    { id:'grados',             label:'Grados',         type:'text' },
+    { id:'capacidad_ton',      label:'Cap. (ton)',     type:'text' },
+    { id:'diametro_cadena_mm', label:'Ø cadena (mm)', type:'text' },
+    { id:'marca',              label:'Marca',          type:'text' },
+    { id:'certificado',        label:'Certificado',    type:'text' },
+  ],
+  'Eslinga textil': [
+    { id:'longitud_m',    label:'Long. (m)',   type:'text' },
+    { id:'ancho_mm',      label:'Ancho (mm)',  type:'text' },
+    { id:'capacidad_ton', label:'Cap. (ton)',  type:'text' },
+    { id:'clase',         label:'Clase',       type:'text' },
+    { id:'certificado',   label:'Certificado', type:'text' },
+  ],
+  'Eslinga cable de acero': [
+    { id:'longitud_m',    label:'Long. (m)',    type:'text' },
+    { id:'diametro_mm',   label:'Diám. (mm)',   type:'text' },
+    { id:'capacidad_ton', label:'Cap. (ton)',   type:'text' },
+    { id:'construccion',  label:'Construcción', type:'text' },
+    { id:'certificado',   label:'Certificado',  type:'text' },
+  ],
+  'Cáncamo': [
+    { id:'diametro_mm',   label:'Diám. (mm)',  type:'text' },
+    { id:'capacidad_ton', label:'Cap. (ton)',  type:'text' },
+    { id:'tipo',          label:'Tipo',        type:'select', ops:['Recto','Giratorio'] },
+    { id:'certificado',   label:'Certificado', type:'text' },
+  ],
+  'Gancho': [
+    { id:'tipo_gancho',   label:'Tipo gancho',     type:'text' },
+    { id:'capacidad_ton', label:'Cap. (ton)',       type:'text' },
+    { id:'apertura_mm',   label:'Apertura (mm)',    type:'text' },
+    { id:'sistema_seguro',label:'Sistema seguro',   type:'select', ops:['Sí','No'] },
+  ],
+  'Grúa Puente': [
+    { id:'capacidad_ton',          label:'Cap. (ton)',       type:'text' },
+    { id:'luz_m',                  label:'Luz (m)',          type:'text' },
+    { id:'velocidad_izaje',        label:'Vel. izaje',       type:'text' },
+    { id:'certificado_operacion',  label:'Cert. operación',  type:'text' },
+    { id:'fecha_ultima_inspeccion',label:'Últ. inspección',  type:'text' },
+  ],
+  'Grúa Pórtico': [
+    { id:'capacidad_ton',          label:'Cap. (ton)',       type:'text' },
+    { id:'luz_m',                  label:'Luz (m)',          type:'text' },
+    { id:'velocidad_izaje',        label:'Vel. izaje',       type:'text' },
+    { id:'certificado_operacion',  label:'Cert. operación',  type:'text' },
+    { id:'fecha_ultima_inspeccion',label:'Últ. inspección',  type:'text' },
+  ],
+  'Grúa Horquilla': [
+    { id:'capacidad_ton',         label:'Cap. (ton)',      type:'text' },
+    { id:'radio_trabajo_m',       label:'Radio trab. (m)', type:'text' },
+    { id:'altura_max_m',          label:'Altura máx. (m)', type:'text' },
+    { id:'año_fab',               label:'Año fab.',        type:'text' },
+    { id:'patente',               label:'Patente',         type:'text' },
+    { id:'certificado_operacion', label:'Cert. operación', type:'text' },
+  ],
+  'Grúa Articulada': [
+    { id:'capacidad_ton',         label:'Cap. (ton)',      type:'text' },
+    { id:'radio_trabajo_m',       label:'Radio trab. (m)', type:'text' },
+    { id:'altura_max_m',          label:'Altura máx. (m)', type:'text' },
+    { id:'año_fab',               label:'Año fab.',        type:'text' },
+    { id:'patente',               label:'Patente',         type:'text' },
+    { id:'certificado_operacion', label:'Cert. operación', type:'text' },
+  ],
+  'Grúa Móvil': [
+    { id:'capacidad_ton',         label:'Cap. (ton)',      type:'text' },
+    { id:'radio_trabajo_m',       label:'Radio trab. (m)', type:'text' },
+    { id:'altura_max_m',          label:'Altura máx. (m)', type:'text' },
+    { id:'año_fab',               label:'Año fab.',        type:'text' },
+    { id:'patente',               label:'Patente',         type:'text' },
+    { id:'certificado_operacion', label:'Cert. operación', type:'text' },
+  ],
+}
+
+// ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
+
+function MultiSelect({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const filtered = options.filter(o =>
+    o.toLowerCase().includes(search.toLowerCase()) && !value.includes(o)
+  )
+  function add(opt) {
+    if (!value.includes(opt)) onChange([...value, opt])
+    setSearch('')
+  }
+  function addCustom() {
+    const s = search.trim()
+    if (s && !value.includes(s)) { onChange([...value, s]); setSearch('') }
+  }
+  function remove(opt) { onChange(value.filter(v => v !== opt)) }
+  return (
+    <div style={{ position:'relative' }}>
+      <div
+        style={{ border:'1px solid #CBD5E1', borderRadius:8, padding:'6px 8px', minHeight:38,
+          background:'#fff', cursor:'text', display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}
+        onClick={() => setOpen(true)}>
+        {value.map(v => (
+          <span key={v} style={{ background:'#EFF6FF', color:'#1D4ED8', borderRadius:4, padding:'2px 8px',
+            fontSize:12, fontWeight:600, display:'flex', alignItems:'center', gap:4 }}>
+            {v}
+            <button onClick={e => { e.stopPropagation(); remove(v) }}
+              style={{ background:'none', border:'none', cursor:'pointer', color:'#94A3B8', fontSize:11, padding:0, lineHeight:1 }}>✕</button>
+          </span>
+        ))}
+        <input
+          value={search}
+          onChange={e => { setSearch(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); addCustom() }
+            if (e.key === 'Escape') setOpen(false)
+          }}
+          placeholder={value.length === 0 ? placeholder : ''}
+          style={{ border:'none', outline:'none', fontSize:13, minWidth:80, flex:1, background:'transparent' }}
+        />
+      </div>
+      {open && (
+        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200,
+          background:'#fff', border:'1px solid #CBD5E1', borderRadius:8,
+          boxShadow:'0 4px 12px rgba(0,0,0,.12)', maxHeight:200, overflowY:'auto', marginTop:4 }}>
+          {filtered.length === 0 && search.trim() && (
+            <div style={{ padding:'8px 12px', fontSize:12, color:'#64748B' }}>
+              Presiona Enter para agregar "<strong>{search}</strong>"
+            </div>
+          )}
+          {filtered.map(o => (
+            <div key={o}
+              onClick={() => { add(o); setOpen(false) }}
+              style={{ padding:'8px 12px', fontSize:13, cursor:'pointer', color:'#1E293B' }}
+              onMouseEnter={e => e.currentTarget.style.background='#F1F5F9'}
+              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+              {o}
+            </div>
+          ))}
+          {filtered.length === 0 && !search.trim() && (
+            <div style={{ padding:'8px 12px', fontSize:12, color:'#94A3B8' }}>Sin más opciones</div>
+          )}
+        </div>
+      )}
+      {open && (
+        <div style={{ position:'fixed', inset:0, zIndex:199 }} onClick={() => setOpen(false)} />
+      )}
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function NuevoInforme() {
@@ -107,9 +264,9 @@ export default function NuevoInforme() {
     supervisor_nombre: '',
   })
   const [normas, setNormas] = useState({
-    norma_ejecucion: '',
-    norma_evaluacion: '',
-    procedimientos: '',
+    norma_ejecucion: [],
+    norma_evaluacion: [],
+    procedimientos: [],
   })
   const [equipo, setEquipo]         = useState({})
   const [endAplicados, setEnd]      = useState([])
@@ -130,13 +287,19 @@ export default function NuevoInforme() {
   const [hallazgoForm, setHallazgoForm] = useState({ descripcion: '', ubicacion: '', norma: '', criticidad: 'Menor' })
   const [subiendoFoto, setSubiendoFoto] = useState(false)
 
+  // Inspectores de la OT
+  const [inspectoresOT, setInspectoresOT] = useState([])
   // Tabla de elementos IZAJE
   const [elementosIzaje, setElementosIzaje] = useState([])
   // Fotos de inspección generales
   const [fotosInspeccion, setFotosInspeccion] = useState([])
   const [subiendoFotoGeneral, setSubiendoFotoGeneral] = useState(false)
-  // Equipo de medición END utilizado
-  const [equipoMedicion, setEquipoMedicion] = useState({ tipo:'', marca:'', modelo:'', numero_serie:'', cert_calibracion:'' })
+  // Equipos de medición END (múltiples)
+  const [equiposMedicion, setEquiposMedicion] = useState([])
+  // Equipos de izaje principales (múltiples)
+  const [equiposIzaje, setEquiposIzaje] = useState([{}])
+  // Error de validación de hallazgo
+  const [hallazgoDescError, setHallazgoDescError] = useState(false)
 
   // Auto-cargar si hay ?ot= en la URL
   useEffect(() => {
@@ -211,12 +374,27 @@ export default function NuevoInforme() {
         supervisor_nombre: asigData?.supervisor || otData.supervisor || '',
       })
 
-      // Pre-llenar normas: prioridad asignación → acta → vacío
+      // Pre-llenar normas: prioridad asignación → acta → memoria localStorage
+      const splitNorma = str => (str ? str.split(',').map(s => s.trim()).filter(Boolean) : [])
+      const initNormaEje  = splitNorma(asigData?.norma_ejecucion  || actaNormas?.norma_ejecucion  || '')
+      const initNormaEval = splitNorma(asigData?.norma_evaluacion || actaNormas?.norma_evaluacion || '')
+      const initProc      = splitNorma(asigData?.procedimientos   || actaNormas?.procedimientos   || '')
+
+      // Memoria por cliente
+      const clienteKey = `wss_cliente_${(otData.cliente || '').replace(/\s+/g, '_').toLowerCase()}`
+      let memData = null
+      try { const m = localStorage.getItem(clienteKey); if (m) memData = JSON.parse(m) } catch {}
+
       setNormas({
-        norma_ejecucion:  asigData?.norma_ejecucion  || actaNormas?.norma_ejecucion  || '',
-        norma_evaluacion: asigData?.norma_evaluacion || actaNormas?.norma_evaluacion || '',
-        procedimientos:   asigData?.procedimientos   || actaNormas?.procedimientos   || '',
+        norma_ejecucion:  initNormaEje.length  ? initNormaEje  : (memData?.norma_ejecucion  || []),
+        norma_evaluacion: initNormaEval.length ? initNormaEval : (memData?.norma_evaluacion || []),
+        procedimientos:   initProc.length      ? initProc      : (memData?.procedimientos   || []),
       })
+
+      // Parsear inspectores asignados a la OT
+      if (asigData?.inspectores_asignados) {
+        setInspectoresOT(asigData.inspectores_asignados.split(',').map(s => s.trim()).filter(Boolean))
+      }
 
       // Pre-mapear tipos_inspeccion → métodos END
       if (asigData?.tipos_inspeccion) {
@@ -270,7 +448,8 @@ export default function NuevoInforme() {
   }
 
   function addHallazgo() {
-    if (!hallazgoForm.descripcion.trim()) return
+    if (!hallazgoForm.descripcion.trim()) { setHallazgoDescError(true); return }
+    setHallazgoDescError(false)
     setHallazgos(prev => [...prev, { ...hallazgoForm, foto_url: null }])
     setHallazgoForm({ descripcion: '', ubicacion: '', norma: '', criticidad: 'Menor' })
   }
@@ -339,9 +518,9 @@ export default function NuevoInforme() {
           mediciones,
           hallazgos,
           resultado,
-          norma_ejecucion:   normas.norma_ejecucion,
-          norma_evaluacion:  normas.norma_evaluacion,
-          procedimientos:    normas.procedimientos,
+          norma_ejecucion:   normas.norma_ejecucion.join(', '),
+          norma_evaluacion:  normas.norma_evaluacion.join(', '),
+          procedimientos:    normas.procedimientos.join(', '),
         }),
       })
       const d = await res.json()
@@ -356,20 +535,35 @@ export default function NuevoInforme() {
   async function guardar(estado) {
     if (!tipo) return setErrorGuardar('Selecciona el tipo de equipo')
     setGuardando(true); setErrorGuardar('')
+    // Guardar memoria por cliente antes de insertar
+    const clienteKey = `wss_cliente_${(general.cliente_nombre || '').replace(/\s+/g, '_').toLowerCase()}`
+    try {
+      localStorage.setItem(clienteKey, JSON.stringify({
+        norma_ejecucion:  normas.norma_ejecucion,
+        norma_evaluacion: normas.norma_evaluacion,
+        procedimientos:   normas.procedimientos,
+      }))
+    } catch {}
     const { data, error } = await supabase.from('informes').insert({
-      tipo_equipo:       tipo,
-      ot_numero:         general.ot_numero,
-      cliente_nombre:    general.cliente_nombre,
-      lugar:             general.lugar,
-      fecha_inspeccion:  general.fecha_inspeccion,
-      supervisor_nombre: general.supervisor_nombre,
-      inspector_id:      usuario?.id,
-      inspector_nombre:  [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.email,
-      datos_equipo:      {
+      tipo_equipo:         tipo,
+      ot_numero:           general.ot_numero,
+      cliente_nombre:      general.cliente_nombre,
+      lugar:               general.lugar,
+      fecha_inspeccion:    general.fecha_inspeccion,
+      supervisor_nombre:   general.supervisor_nombre,
+      inspector_id:        usuario?.id,
+      inspector_nombre:    [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.email,
+      norma_ejecucion:     normas.norma_ejecucion.join(', '),
+      norma_evaluacion:    normas.norma_evaluacion.join(', '),
+      procedimientos:      normas.procedimientos.join(', '),
+      norma_ejecucion_arr: normas.norma_ejecucion,
+      datos_equipo:        {
         ...equipo,
-        elementos_izaje:  elementosIzaje,
-        fotos_inspeccion: fotosInspeccion,
-        equipo_medicion:  equipoMedicion,
+        equipos_izaje_adicionales: equiposIzaje,
+        elementos_izaje:           elementosIzaje,
+        fotos_inspeccion:          fotosInspeccion,
+        equipo_medicion:           equiposMedicion,
+        inspectores_ot:            inspectoresOT,
       },
       end_aplicados:     endAplicados,
       mediciones,
@@ -439,7 +633,7 @@ export default function NuevoInforme() {
           {otCargada && (
             <button className="btn btn-secondary" onClick={() => {
               setOtCargada(null); setAsignacion(null); setGeneral({ ot_numero:'', cliente_nombre:'', lugar:'', fecha_inspeccion: new Date().toISOString().split('T')[0], supervisor_nombre:'' })
-              setNormas({ norma_ejecucion:'', norma_evaluacion:'', procedimientos:'' }); setEnd([])
+              setNormas({ norma_ejecucion:[], norma_evaluacion:[], procedimientos:[] }); setEnd([]); setInspectoresOT([])
             }}>✕ Limpiar</button>
           )}
         </div>
@@ -530,10 +724,29 @@ export default function NuevoInforme() {
                 placeholder="Planta, ciudad, región" />
             </div>
             <div>
-              <label style={S.label}>Inspector</label>
-              <input className="input"
-                value={[usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.email || ''}
-                disabled style={{ background: '#F8FAFC', color: '#475569' }} />
+              <label style={S.label}>Inspectores de la OT</label>
+              {inspectoresOT.length > 0 ? (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, padding:'6px 0' }}>
+                  {inspectoresOT.map(insp => {
+                    const nombreLogueado = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ').trim().toLowerCase()
+                    const esYo = nombreLogueado === insp.toLowerCase() || (usuario?.email || '').toLowerCase() === insp.toLowerCase()
+                    return (
+                      <span key={insp} style={{
+                        background: esYo ? '#D1FAE5' : '#EFF6FF',
+                        color: esYo ? '#065F46' : '#1D4ED8',
+                        border: `1px solid ${esYo ? '#6EE7B7' : '#BFDBFE'}`,
+                        borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 600,
+                      }}>
+                        {insp}{esYo ? ' ✓ Tú' : ''}
+                      </span>
+                    )
+                  })}
+                </div>
+              ) : (
+                <input className="input"
+                  value={[usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') || usuario?.email || ''}
+                  disabled style={{ background:'#F8FAFC', color:'#475569' }} />
+              )}
               {usuario?.nivel_snt && (
                 <div style={{ fontSize:11, color:'#7C3AED', marginTop:3, fontWeight:700 }}>
                   🏅 Nivel {usuario.nivel_snt} SNT-TC-1A
@@ -558,21 +771,30 @@ export default function NuevoInforme() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={S.label}>Norma de ejecución</label>
-              <input className="input" value={normas.norma_ejecucion}
-                onChange={e => setNormas(p => ({ ...p, norma_ejecucion: e.target.value }))}
-                placeholder="Ej: API 653, ASME V, AWS D1.1..." />
+              <MultiSelect
+                value={normas.norma_ejecucion}
+                onChange={v => setNormas(p => ({ ...p, norma_ejecucion: v }))}
+                options={['API 650','API 653','API 570','API 510','ASME V','ASME VIII','AWS D1.1','AWS D1.2','AWS D1.3','DS43','ISO 9712','ASTM E165','ASTM E709','ASTM E1417','ASME B31.3','ASME B31.1','ASME B30.2','ASME B30.9','ASME B30.10','INN OI376','INN OI377']}
+                placeholder="Selecciona o escribe normas de ejecución..."
+              />
             </div>
             <div>
               <label style={S.label}>Norma de evaluación / criterio de aceptación</label>
-              <input className="input" value={normas.norma_evaluacion}
-                onChange={e => setNormas(p => ({ ...p, norma_evaluacion: e.target.value }))}
-                placeholder="Ej: API 653 Tabla 4.3.2, AWS D1.1 Tabla 6.1..." />
+              <MultiSelect
+                value={normas.norma_evaluacion}
+                onChange={v => setNormas(p => ({ ...p, norma_evaluacion: v }))}
+                options={['API 650 Apéndice C','API 653 Tabla 4.3.2','AWS D1.1 Tabla 6.1','ASME V Art. 6','ASME V Art. 7','DS43 Art. 42','ISO 9712','ASTM E165','ASTM E709','API 570 Párrafo 7']}
+                placeholder="Selecciona o escribe criterios de aceptación..."
+              />
             </div>
             <div>
               <label style={S.label}>Procedimientos WSS aplicables</label>
-              <textarea className="input" rows={3} value={normas.procedimientos}
-                onChange={e => setNormas(p => ({ ...p, procedimientos: e.target.value }))}
-                placeholder="Ej: PRO-DII-END-001 Rev.03, PRO-DII-UT-002 Rev.02..." />
+              <MultiSelect
+                value={normas.procedimientos}
+                onChange={v => setNormas(p => ({ ...p, procedimientos: v }))}
+                options={['PRO-DII-IV-001','PRO-DII-LP-001','PRO-DII-PM-001','PRO-DII-UT-001','PRO-DII-UT-002','PRO-DII-UTPA-001','PRO-DII-IRT-001','PRO-DII-PH-001','PRO-DII-PC-001','PRO-DII-IZL-001','PRO-DII-IZL-002','PRO-DII-CTK-001']}
+                placeholder="Selecciona o escribe procedimientos WSS..."
+              />
             </div>
           </div>
         </div>
@@ -581,23 +803,61 @@ export default function NuevoInforme() {
           {/* ── PASO 4: Datos del equipo ── */}
           <div style={S.seccion}>
             <div style={S.seccionTitulo}>⑤ Datos del Equipo — {TIPOS.find(t => t.id === tipo)?.label}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {camposActivos.map(c => (
-                <div key={c.id}>
-                  <label style={S.label}>{c.label} {c.req && <span style={{ color: 'red' }}>*</span>}</label>
-                  {c.type === 'select' ? (
-                    <select className="input" value={equipo[c.id] || ''}
-                      onChange={e => setEquipo(p => ({ ...p, [c.id]: e.target.value }))}>
-                      <option value="">— Seleccionar —</option>
-                      {c.ops.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input className="input" type={c.type} value={equipo[c.id] || ''}
-                      onChange={e => setEquipo(p => ({ ...p, [c.id]: e.target.value }))} />
-                  )}
+            {tipo === 'IZAJE' ? (<>
+              {equiposIzaje.map((eq, idx) => (
+                <div key={idx} style={{ border:'1px solid #E2E8F0', borderRadius:8, padding:14, marginBottom:12, background:'#FAFAFA' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color:'#475569' }}>Equipo mayor #{idx + 1}</span>
+                    {equiposIzaje.length > 1 && (
+                      <button onClick={() => setEquiposIzaje(prev => prev.filter((_, j) => j !== idx))}
+                        style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:13 }}>
+                        ✕ Eliminar
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    {camposActivos.map(c => (
+                      <div key={c.id}>
+                        <label style={S.label}>{c.label} {c.req && <span style={{ color:'red' }}>*</span>}</label>
+                        {c.type === 'select' ? (
+                          <select className="input" value={eq[c.id] || ''}
+                            onChange={e => setEquiposIzaje(prev => prev.map((x, j) => j === idx ? { ...x, [c.id]: e.target.value } : x))}>
+                            <option value="">— Seleccionar —</option>
+                            {c.ops.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input className="input" type={c.type} value={eq[c.id] || ''}
+                            onChange={e => setEquiposIzaje(prev => prev.map((x, j) => j === idx ? { ...x, [c.id]: e.target.value } : x))} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
-            </div>
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => setEquiposIzaje(prev => [...prev, {}])}
+                style={{ cursor:'pointer' }}>
+                + Agregar equipo
+              </button>
+            </>) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {camposActivos.map(c => (
+                  <div key={c.id}>
+                    <label style={S.label}>{c.label} {c.req && <span style={{ color: 'red' }}>*</span>}</label>
+                    {c.type === 'select' ? (
+                      <select className="input" value={equipo[c.id] || ''}
+                        onChange={e => setEquipo(p => ({ ...p, [c.id]: e.target.value }))}>
+                        <option value="">— Seleccionar —</option>
+                        {c.ops.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input className="input" type={c.type} value={equipo[c.id] || ''}
+                        onChange={e => setEquipo(p => ({ ...p, [c.id]: e.target.value }))} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── PASO 5b: Elementos de izaje (solo IZAJE) ── */}
@@ -625,14 +885,14 @@ export default function NuevoInforme() {
                       </tr>
                     </thead>
                     <tbody>
-                      {elementosIzaje.map((el, i) => (
-                        <tr key={i}>
+                      {elementosIzaje.map((el, i) => [
+                        <tr key={`m${i}`}>
                           <td style={S.tdInput}>
                             <select className="input" value={el.tipo}
                               onChange={e => updateElementoIzaje(i,'tipo',e.target.value)}
                               style={{ fontSize:12, minWidth:130 }}>
                               <option value="">— Tipo —</option>
-                              {['Grillete','Eslinga cadena','Eslinga textil','Eslinga cable de acero','Cáncamo','Gancho','Aparejo diferencial','Esparrago','Otro'].map(t => (
+                              {['Grillete','Eslinga cadena','Eslinga textil','Eslinga cable de acero','Cáncamo','Gancho','Grúa Puente','Grúa Pórtico','Grúa Horquilla','Grúa Articulada','Grúa Móvil','Aparejo diferencial','Esparrago','Otro'].map(t => (
                                 <option key={t} value={t}>{t}</option>
                               ))}
                             </select>
@@ -671,8 +931,29 @@ export default function NuevoInforme() {
                             <button onClick={() => removeElementoIzaje(i)}
                               style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:16 }}>✕</button>
                           </td>
-                        </tr>
-                      ))}
+                        </tr>,
+                        (el.tipo && CAMPOS_IZAJE[el.tipo]) ? (
+                          <tr key={`d${i}`} style={{ background:'#F8FAFC' }}>
+                            <td colSpan={5} style={{ padding:'8px 12px', border:'1px solid #E2E8F0', borderTop:'none' }}>
+                              <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
+                                {CAMPOS_IZAJE[el.tipo].map(campo => (
+                                  <div key={campo.id} style={{ minWidth:90 }}>
+                                    <label style={{ fontSize:10, fontWeight:600, color:'#64748B', display:'block', marginBottom:2 }}>{campo.label}</label>
+                                    {campo.type === 'select' ? (
+                                      <select className="input" value={el[campo.id] || ''} onChange={e => updateElementoIzaje(i, campo.id, e.target.value)} style={{ fontSize:11, padding:'4px 6px' }}>
+                                        <option value="">—</option>
+                                        {campo.ops.map(o => <option key={o} value={o}>{o}</option>)}
+                                      </select>
+                                    ) : (
+                                      <input className="input" value={el[campo.id] || ''} onChange={e => updateElementoIzaje(i, campo.id, e.target.value)} style={{ fontSize:11, padding:'4px 6px', width:90 }} />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null,
+                      ])}
                     </tbody>
                   </table>
                 </div>
@@ -713,42 +994,74 @@ export default function NuevoInforme() {
 
           {/* ── PASO 6b: Equipo de medición END utilizado ── */}
           <div style={S.seccion}>
-            <div style={S.seccionTitulo}>⑦ Equipo / Instrumento END Utilizado</div>
-            <p style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>
-              Registra el instrumento o equipo de medición con el que se realizó la inspección (marca, modelo, N° serie y calibración).
-            </p>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              <div>
-                <label style={S.label}>Tipo / Nombre del instrumento</label>
-                <input className="input" value={equipoMedicion.tipo}
-                  onChange={e => setEquipoMedicion(p => ({ ...p, tipo: e.target.value }))}
-                  placeholder="Ej: Medidor UT, Lámpara UV, Yoquillo magnético..." />
-              </div>
-              <div>
-                <label style={S.label}>Marca</label>
-                <input className="input" value={equipoMedicion.marca}
-                  onChange={e => setEquipoMedicion(p => ({ ...p, marca: e.target.value }))}
-                  placeholder="Ej: Olympus, GE, Magnaflux, Sonatest..." />
-              </div>
-              <div>
-                <label style={S.label}>Modelo</label>
-                <input className="input" value={equipoMedicion.modelo}
-                  onChange={e => setEquipoMedicion(p => ({ ...p, modelo: e.target.value }))}
-                  placeholder="Ej: 38DL Plus, Epoch 650, NDT9 UT..." />
-              </div>
-              <div>
-                <label style={S.label}>N° de Serie</label>
-                <input className="input" value={equipoMedicion.numero_serie}
-                  onChange={e => setEquipoMedicion(p => ({ ...p, numero_serie: e.target.value }))}
-                  placeholder="Ej: SN-123456" />
-              </div>
-              <div style={{ gridColumn:'1/-1' }}>
-                <label style={S.label}>N° Certificado de calibración (y vigencia)</label>
-                <input className="input" value={equipoMedicion.cert_calibracion}
-                  onChange={e => setEquipoMedicion(p => ({ ...p, cert_calibracion: e.target.value }))}
-                  placeholder="Ej: CAL-2025-001234, vigente hasta 15/08/2025" />
-              </div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+              <div style={S.seccionTitulo}>⑦ Equipo / Instrumento END Utilizado</div>
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => setEquiposMedicion(prev => [...prev, { tipo:'', marca:'', modelo:'', numero_serie:'', cert_calibracion:'' }])}
+                style={{ cursor:'pointer' }}>
+                + Agregar equipo
+              </button>
             </div>
+            <p style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>
+              Registra cada instrumento utilizado (marca, modelo, N° serie y certificado de calibración).
+            </p>
+            {equiposMedicion.length === 0 ? (
+              <div style={{ color:'var(--gris)', fontSize:13, padding:'14px 0', textAlign:'center', borderTop:'1px dashed #E2E8F0' }}>
+                Sin equipos. Haz clic en "+ Agregar equipo" para ingresar.
+              </div>
+            ) : (
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', minWidth:700 }}>
+                  <thead>
+                    <tr style={{ background:'#F8FAFC' }}>
+                      {['Tipo / Instrumento','Marca','Modelo','N° Serie','Certificado calibración',''].map(h => (
+                        <th key={h} style={{ padding:'8px 12px', fontSize:11, fontWeight:700, color:'#64748B', textAlign:'left', border:'1px solid #E2E8F0' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {equiposMedicion.map((em, i) => (
+                      <tr key={i}>
+                        <td style={S.tdInput}>
+                          <select className="input" value={em.tipo}
+                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, tipo: e.target.value } : x))}
+                            style={{ fontSize:12, minWidth:160 }}>
+                            <option value="">— Tipo —</option>
+                            {['Medidor UT','Medidor UT Phased Array','Lámpara UV (36W)','Lámpara UV (100W)','Yoquillo magnético','Bobina de campo','Penetrómetro','Cuña de calibración','Cámara termográfica','Medidor de espesores por ultrasonido','Galga de recubrimiento','Manómetro digital','Dinamómetro'].map(t => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={S.tdInput}>
+                          <input className="input" value={em.marca}
+                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, marca: e.target.value } : x))}
+                            placeholder="Marca" style={{ fontSize:12, width:90 }} />
+                        </td>
+                        <td style={S.tdInput}>
+                          <input className="input" value={em.modelo}
+                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, modelo: e.target.value } : x))}
+                            placeholder="Modelo" style={{ fontSize:12, width:90 }} />
+                        </td>
+                        <td style={S.tdInput}>
+                          <input className="input" value={em.numero_serie}
+                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, numero_serie: e.target.value } : x))}
+                            placeholder="N° serie" style={{ fontSize:12, width:80 }} />
+                        </td>
+                        <td style={S.tdInput}>
+                          <input className="input" value={em.cert_calibracion}
+                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, cert_calibracion: e.target.value } : x))}
+                            placeholder="CAL-2025-XXXX, vig. hasta..." style={{ fontSize:12 }} />
+                        </td>
+                        <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
+                          <button onClick={() => setEquiposMedicion(prev => prev.filter((_, j) => j !== i))}
+                            style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:16 }}>✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* ── PASO 7: Mediciones (tanque y tubería) ── */}
@@ -837,8 +1150,12 @@ export default function NuevoInforme() {
                 <div style={{ gridColumn:'1/-1' }}>
                   <label style={S.label}>Descripción <span style={{ color:'red' }}>*</span></label>
                   <textarea className="input" rows={2} value={hallazgoForm.descripcion}
-                    onChange={e => setHallazgoForm(p => ({ ...p, descripcion: e.target.value }))}
-                    placeholder="Ej: Corrosión generalizada en primer anillo, con pérdida de espesor estimada en 15%..." />
+                    onChange={e => { setHallazgoForm(p => ({ ...p, descripcion: e.target.value })); setHallazgoDescError(false) }}
+                    placeholder="Ej: Corrosión generalizada en primer anillo, con pérdida de espesor estimada en 15%..."
+                    style={{ borderColor: hallazgoDescError ? '#EF4444' : undefined }} />
+                  {hallazgoDescError && (
+                    <div style={{ color:'#EF4444', fontSize:12, marginTop:4 }}>⚠ La descripción es obligatoria para agregar un hallazgo.</div>
+                  )}
                 </div>
                 <div>
                   <label style={S.label}>Ubicación en el equipo</label>
@@ -860,7 +1177,8 @@ export default function NuevoInforme() {
                   </select>
                 </div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={addHallazgo} style={{ marginTop:10 }}>
+              <button className="btn btn-secondary btn-sm" onClick={addHallazgo}
+                style={{ marginTop:10, opacity: hallazgoForm.descripcion.trim() ? 1 : 0.5, cursor: hallazgoForm.descripcion.trim() ? 'pointer' : 'not-allowed' }}>
                 + Agregar hallazgo
               </button>
             </div>
