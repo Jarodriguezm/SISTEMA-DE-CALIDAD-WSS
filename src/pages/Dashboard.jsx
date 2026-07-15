@@ -7,7 +7,7 @@ const CARDS = [
   { key: 'total_ots',             label: 'Total OTs',           color: 'var(--azul)',   to: '/ots' },
   { key: 'ots_pendientes',        label: 'OTs Pendientes',      color: 'var(--rojo)',   to: '/ots?estados=Pendiente de asignación,Sin inspector&label=Pendientes' },
   { key: 'ots_asignadas',         label: 'OTs Asignadas',       color: 'var(--ambar)',  to: '/ots?estados=Asignado,Asignada,En proceso,Acta cargada,Informe enviado,Factura cargada&label=Asignadas' },
-  { key: 'ots_cerradas',          label: 'OTs Cerradas',        color: 'var(--verde)',  to: '/ots?estados=Informe cargado,Cerrada documentalmente&label=Cerradas' },
+  { key: 'ots_cerradas',          label: 'OTs Cerradas',        color: 'var(--verde)',  to: '/documentos?filtro=completas' },
   { key: 'documentos_pendientes', label: 'Etapas Pendientes',   color: '#DC2626',       to: '/documentos?filtro=pendientes' },
   { key: 'documentos_cargados',   label: 'Etapas Cargadas',    color: '#0891B2',       to: '/documentos' },
   { key: 'total_asignaciones',    label: 'Asignaciones',        color: 'var(--azul)',   to: '/asignaciones' },
