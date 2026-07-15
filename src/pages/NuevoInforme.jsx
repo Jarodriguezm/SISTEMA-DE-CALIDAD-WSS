@@ -6,7 +6,7 @@ import { useAuth } from '../lib/AuthContext'
 // ── Configuración por tipo de equipo ──────────────────────────────────────────
 
 const TIPOS = [
-  { id: 'TANQUE',     icon: '🛢️', label: 'Tanque',         desc: 'API 650 / API 653',   color: '#1D4ED8' },
+  { id: 'TANQUE',     icon: '🛢️', label: 'Tanque',         desc: 'API 650 / API 653 / DS43', color: '#1D4ED8' },
   { id: 'TUBERIA',    icon: '🔩', label: 'Tubería',         desc: 'API 570 / ASME B31',  color: '#047857' },
   { id: 'ESTRUCTURA', icon: '🏗️', label: 'Estructura',      desc: 'AWS D1.1 / ASME V',   color: '#92400E' },
   { id: 'IZAJE',      icon: '🏋️', label: 'Izaje / Levante', desc: 'ASME B30 / INN OI377',color: '#7C3AED' },
