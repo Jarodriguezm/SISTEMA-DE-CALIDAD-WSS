@@ -22,7 +22,7 @@ const CAMPOS = {
     { id: 'cantidad_anillos', label: 'Cantidad de anillos',     type: 'number' },
     { id: 'material',         label: 'Material',                type: 'select', ops: ['Acero Carbono','Acero Inoxidable','FRP','Otro'] },
     { id: 'tipo_techo',       label: 'Tipo de techo',           type: 'select', ops: ['Cónico fijo','Flotante externo','Flotante interno','Abierto','Sin techo'] },
-    { id: 'norma_diseño',     label: 'Norma de diseño',         type: 'select', ops: ['API 650','API 653','API 620','ASME','Otra'] },
+    { id: 'norma_diseño',     label: 'Norma de diseño',         type: 'select', ops: ['API 650 (Ed. 13, 2020)','API 653 (Ed. 5, 2014)','API 620 (Ed. 12, 2013)','ASME VIII Div.1 (Ed. 2021)','Otra'] },
     { id: 'año_fabricacion',  label: 'Año de fabricación',      type: 'number' },
     { id: 'estado_fondo',     label: 'Estado del fondo',        type: 'select', ops: ['Bueno','Regular','Deficiente','No inspeccionado'] },
     { id: 'estado_techo',     label: 'Estado del techo',        type: 'select', ops: ['Bueno','Regular','Deficiente','No aplica'] },
@@ -46,7 +46,7 @@ const CAMPOS = {
     { id: 'ubicacion',        label: 'Ubicación en planta',           type: 'text' },
     { id: 'material',         label: 'Material estructural',          type: 'select', ops: ['Acero Carbono','Acero Inoxidable','Aluminio','Otro'] },
     { id: 'proceso_soldadura',label: 'Proceso de soldadura',          type: 'select', ops: ['SMAW','GMAW','FCAW','GTAW','SAW','Múltiple'] },
-    { id: 'norma_soldadura',  label: 'Norma de soldadura',            type: 'select', ops: ['AWS D1.1','AWS D1.2','AWS D1.3','AWS D1.6','ASME BPVC Secc. V','Otra'] },
+    { id: 'norma_soldadura',  label: 'Norma de soldadura',            type: 'select', ops: ['AWS D1.1 (Ed. 2020)','AWS D1.2 (Ed. 2014)','AWS D1.3 (Ed. 2018)','AWS D1.6 (Ed. 2017)','ASME BPVC Secc. V (Ed. 2021)','Otra'] },
     { id: 'año_fabricacion',  label: 'Año de fabricación',            type: 'number' },
     { id: 'estado_pintura',   label: 'Estado de pintura / corrosión', type: 'select', ops: ['Bueno','Regular','Deficiente'] },
     { id: 'estado_soldaduras',label: 'Estado general soldaduras',     type: 'select', ops: ['Sin discontinuidades','Con observaciones','Con defectos'] },
@@ -774,7 +774,7 @@ export default function NuevoInforme() {
               <MultiSelect
                 value={normas.norma_ejecucion}
                 onChange={v => setNormas(p => ({ ...p, norma_ejecucion: v }))}
-                options={['API 650','API 653','API 570','API 510','ASME V','ASME VIII','AWS D1.1','AWS D1.2','AWS D1.3','DS43','ISO 9712','ASTM E165','ASTM E709','ASTM E1417','ASME B31.3','ASME B31.1','ASME B30.2','ASME B30.9','ASME B30.10','INN OI376','INN OI377']}
+                options={['API 650 (Ed. 13, 2020)','API 653 (Ed. 5, 2014)','API 570 (Ed. 4, 2016)','API 510 (Ed. 10, 2014)','ASME V (Ed. 2021)','ASME VIII Div.1 (Ed. 2021)','AWS D1.1 (Ed. 2020)','AWS D1.2 (Ed. 2014)','AWS D1.3 (Ed. 2018)','DS 43/2015','ISO 9712 (Ed. 2021)','ASTM E165 (Ed. 2018)','ASTM E709 (Ed. 2021)','ASTM E1417 (Ed. 2021)','ASME B31.3 (Ed. 2022)','ASME B31.1 (Ed. 2020)','ASME B30.2 (Ed. 2016)','ASME B30.9 (Ed. 2018)','ASME B30.10 (Ed. 2019)','INN OI376','INN OI377']}
                 placeholder="Selecciona o escribe normas de ejecución..."
               />
             </div>
@@ -783,7 +783,7 @@ export default function NuevoInforme() {
               <MultiSelect
                 value={normas.norma_evaluacion}
                 onChange={v => setNormas(p => ({ ...p, norma_evaluacion: v }))}
-                options={['API 650 Apéndice C','API 653 Tabla 4.3.2','AWS D1.1 Tabla 6.1','ASME V Art. 6','ASME V Art. 7','DS43 Art. 42','ISO 9712','ASTM E165','ASTM E709','API 570 Párrafo 7']}
+                options={['API 650 Apéndice C (Ed. 13, 2020)','API 653 Tabla 4.3.2 (Ed. 5, 2014)','AWS D1.1 Tabla 6.1 (Ed. 2020)','ASME V Art. 6 (Ed. 2021)','ASME V Art. 7 (Ed. 2021)','DS 43/2015 Art. 42','ISO 9712 (Ed. 2021)','ASTM E165 (Ed. 2018)','ASTM E709 (Ed. 2021)','API 570 Párrafo 7 (Ed. 4, 2016)']}
                 placeholder="Selecciona o escribe criterios de aceptación..."
               />
             </div>
