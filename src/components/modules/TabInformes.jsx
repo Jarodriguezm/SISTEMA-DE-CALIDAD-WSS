@@ -231,11 +231,12 @@ function FormReserva({ ot, onReservada, onCancel }) {
   )
 }
 
-function VisorInforme({ informe }) {
+function VisorInforme({ informe, onEliminar }) {
   const areaLabels = { END: 'END', IZL: 'Izaje y Levante', TRZ: 'Trazabilidad', VER: 'Verificación' }
   const serieBg = { ESI: '#DBEAFE', EAI: '#FEF9C3', IVS: '#D1FAE5', IVA: '#FCE7F3' }
   const serieColor = { ESI: '#1E40AF', EAI: '#854D0E', IVS: '#065F46', IVA: '#9D174D' }
   const navigate = useNavigate()
+  const puedeEliminar = true
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, marginBottom: 6 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -254,6 +255,7 @@ function VisorInforme({ informe }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {informe.area && <span className="badge badge-blue" style={{ fontSize: 10 }}>{areaLabels[informe.area] || informe.area}</span>}
           {informe.sello && informe.sello !== 'N/A' && <span className="badge badge-amber" style={{ fontSize: 10 }}>🔒 {informe.sello}</span>}
+          {informe.estado === 'Anulado' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#FEE2E2', color: '#991B1B', fontWeight: 700 }}>ANULADO</span>}
         </div>
         <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
           {informe.fecha_inspeccion && <>📅 {informe.fecha_inspeccion}</>}
@@ -262,8 +264,18 @@ function VisorInforme({ informe }) {
         </div>
         {informe.observacion && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, fontStyle: 'italic' }}>{informe.observacion}</div>}
       </div>
-      <div style={{ fontSize: 10, color: '#CBD5E1', textAlign: 'right', whiteSpace: 'nowrap' }}>
-        {informe.created_at && new Date(informe.created_at).toLocaleDateString('es-CL')}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <div style={{ fontSize: 10, color: '#CBD5E1', whiteSpace: 'nowrap' }}>
+          {informe.created_at && new Date(informe.created_at).toLocaleDateString('es-CL')}
+        </div>
+        {puedeEliminar && onEliminar && (
+          <button
+            onClick={() => onEliminar(informe.id, informe.codigo_informe)}
+            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid #EF4444', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600 }}
+            title="Eliminar número reservado">
+            🗑️ Eliminar
+          </button>
+        )}
       </div>
     </div>
   )
@@ -631,6 +643,13 @@ export default function TabInformes({ ot, onInformeCreado }) {
     onInformeCreado && onInformeCreado()
   }
 
+  async function eliminarInforme(id, codigo) {
+    if (!window.confirm(`¿Eliminar ${codigo}? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('numeros_informe').delete().eq('id', id)
+    if (error) { alert('Error al eliminar: ' + error.message); return }
+    cargarInformes()
+  }
+
   if (cargando) return <div style={{ padding: 32, textAlign: 'center', color: '#94A3B8' }}>Cargando informes…</div>
 
   if (exito) return <PantallaExito codigos={exito} onVolver={() => setExito(null)} />
@@ -679,7 +698,7 @@ export default function TabInformes({ ot, onInformeCreado }) {
       {/* Filtros por serie */}
       {informes.length > 0 && series.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-          {['todos', ...series].map(s => (
+          {['t          {['todos', ...series].map(s => (
             <button key={s} type="button" onClick={() => setFiltreSerie(s)}
               style={{ padding: '4px 12px', borderRadius: 16, border: '2px solid', borderColor: filtreSerie === s ? '#1A3A5C' : '#E2E8F0', background: filtreSerie === s ? '#1A3A5C' : '#fff', color: filtreSerie === s ? '#fff' : '#64748B', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
               {s === 'todos' ? `Todos (${informes.length})` : `${s} (${informes.filter(i => i.serie === s).length})`}
@@ -696,13 +715,14 @@ export default function TabInformes({ ot, onInformeCreado }) {
       {informesFiltrados.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', border: '2px dashed #E2E8F0', borderRadius: 12, color: '#94A3B8' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
-          <div style={{ fontWeight: 700, color: '#64748B', marginBottom: 6 }}>Sin informes reservados</div>
-          <div style={{ fontSize: 13 }}>Usa el botón de arriba para reservar números de informe para esta OT</div>
+          <p style={{ fontWeight: 600, margin: '0 0 6px 0' }}>Sin números reservados</p>
+          <p style={{ fontSize: 12, margin: 0 }}>Usa "Reservar números" para generar correlativos de informe.</p>
         </div>
       ) : (
         <div>
-          <div style={{ fontSize: 12, color: '#64748B', marginBottom: 10 }}>{informesFiltrados.length} informe{informesFiltrados.length > 1 ? 's' : ''} registrado{informesFiltrados.length > 1 ? 's' : ''}</div>
-          {informesFiltrados.map(inf => <VisorInforme key={inf.id} informe={inf} />)}
+          {informesFiltrados.map(inf => (
+            <VisorInforme key={inf.id} informe={inf} onEliminar={eliminarInforme} />
+          ))}
         </div>
       )}
     </div>
