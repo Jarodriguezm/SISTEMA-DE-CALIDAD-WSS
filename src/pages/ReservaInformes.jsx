@@ -499,12 +499,20 @@ export default function ReservaInformes() {
                             {r.created_at ? new Date(r.created_at).toLocaleDateString('es-CL') : '—'}
                           </td>
                           <td>
-                            {r.ot_numero && (
-                              <button className="btn btn-secondary btn-sm"
-                                onClick={() => navigate(`/ots/${r.ot_numero}`)}>
-                                Ver OT
-                              </button>
-                            )}
+                            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                              {r.ot_numero && (
+                                <button className="btn btn-secondary btn-sm"
+                                  onClick={() => navigate(`/ots/${r.ot_numero}`)}>
+                                  Ver OT
+                                </button>
+                              )}
+                              {r.ot_numero && r.estado !== 'Anulado' && (
+                                <button className="btn btn-primary btn-sm"
+                                  onClick={() => navigate(`/informes/nuevo?ot=${r.ot_numero}&reg=${codigo}`)}>
+                                  📝 Crear Informe
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
