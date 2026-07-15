@@ -235,10 +235,20 @@ function VisorInforme({ informe }) {
   const areaLabels = { END: 'END', IZL: 'Izaje y Levante', TRZ: 'Trazabilidad', VER: 'Verificación' }
   const serieBg = { ESI: '#DBEAFE', EAI: '#FEF9C3', IVS: '#D1FAE5', IVA: '#FCE7F3' }
   const serieColor = { ESI: '#1E40AF', EAI: '#854D0E', IVS: '#065F46', IVA: '#9D174D' }
+  const navigate = useNavigate()
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, marginBottom: 6 }}>
-      <div style={{ background: serieBg[informe.serie] || '#F1F5F9', color: serieColor[informe.serie] || '#475569', fontFamily: 'monospace', fontWeight: 900, fontSize: 15, padding: '4px 10px', borderRadius: 6, minWidth: 100, textAlign: 'center', letterSpacing: '.5px' }}>
-        {informe.codigo_informe}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        <div style={{ background: serieBg[informe.serie] || '#F1F5F9', color: serieColor[informe.serie] || '#475569', fontFamily: 'monospace', fontWeight: 900, fontSize: 15, padding: '4px 10px', borderRadius: 6, minWidth: 100, textAlign: 'center', letterSpacing: '.5px' }}>
+          {informe.codigo_informe}
+        </div>
+        {informe.ot_numero && informe.estado !== 'Anulado' && (
+          <button
+            onClick={() => navigate(`/informes/nuevo?ot=${informe.ot_numero}&reg=${informe.codigo_informe}`)}
+            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid #3B82F6', background: '#EFF6FF', color: '#1D4ED8', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 }}>
+            📝 Crear Informe
+          </button>
+        )}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
