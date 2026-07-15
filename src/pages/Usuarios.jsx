@@ -23,6 +23,13 @@ export default function Usuarios() {
   const [editando, setEditando]       = useState(null)   // usuario en edición
   const [guardando, setGuardando]     = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
+  // Crear usuario
+  const NUEVO_VACIO = { nombre:'', apellido:'', email:'', password:'', rol:'INSPECTOR', sede:'SCL', telefono_whatsapp:'' }
+  const [creando, setCreando]           = useState(false)
+  const [nuevoU, setNuevoU]             = useState(NUEVO_VACIO)
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false)
+  const [errorCrear, setErrorCrear]     = useState('')
+  const [verPass, setVerPass]           = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -71,6 +78,35 @@ export default function Usuarios() {
     }
   }
 
+  async function handleCrearUsuario() {
+    setErrorCrear('')
+    if (!nuevoU.nombre.trim() || !nuevoU.email.trim() || !nuevoU.password || !nuevoU.rol) {
+      setErrorCrear('Nombre, email, contraseña y rol son requeridos'); return
+    }
+    if (nuevoU.password.length < 8) {
+      setErrorCrear('La contraseña debe tener al menos 8 caracteres'); return
+    }
+    try {
+      setGuardandoNuevo(true)
+      const resp = await fetch('/api/crear-usuario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nuevoU),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error al crear usuario')
+      setMensajeExito(`✅ Usuario ${nuevoU.nombre} creado correctamente`)
+      setCreando(false)
+      setNuevoU(NUEVO_VACIO)
+      cargar()
+      setTimeout(() => setMensajeExito(''), 4000)
+    } catch (e) {
+      setErrorCrear(e.message)
+    } finally {
+      setGuardandoNuevo(false)
+    }
+  }
+
   const filtrados = usuarios.filter(u => {
     const q = busqueda.toLowerCase()
     return !q || [u.nombre, u.apellido, u.email, u.rol, u.sede]
@@ -87,6 +123,77 @@ export default function Usuarios() {
 
   return (
     <div>
+      {/* Modal crear usuario */}
+      {creando && (
+        <div style={S.overlay}>
+          <div style={S.modal}>
+            <div style={S.modalHeader}>
+              <h2 style={{ margin: 0, color: '#fff', fontSize: 17 }}>➕ Nuevo Usuario</h2>
+              <button onClick={() => { setCreando(false); setNuevoU(NUEVO_VACIO); setErrorCrear('') }} style={S.btnX} disabled={guardandoNuevo}>✕</button>
+            </div>
+            <div style={{ padding: 24 }}>
+              {errorCrear && <div className="alert alert-error" style={{ marginBottom: 16 }}>{errorCrear}</div>}
+              <div className="grid">
+                <div className="col-6 field">
+                  <label>Nombre *</label>
+                  <input className="input" value={nuevoU.nombre}
+                    onChange={e => setNuevoU(u => ({ ...u, nombre: e.target.value }))} />
+                </div>
+                <div className="col-6 field">
+                  <label>Apellido</label>
+                  <input className="input" value={nuevoU.apellido}
+                    onChange={e => setNuevoU(u => ({ ...u, apellido: e.target.value }))} />
+                </div>
+                <div className="col-6 field">
+                  <label>Email *</label>
+                  <input className="input" type="email" value={nuevoU.email}
+                    onChange={e => setNuevoU(u => ({ ...u, email: e.target.value }))} />
+                </div>
+                <div className="col-6 field">
+                  <label>Contraseña * (mín. 8 caracteres)</label>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <input className="input" type={verPass ? 'text' : 'password'}
+                      value={nuevoU.password} style={{ flex:1 }}
+                      onChange={e => setNuevoU(u => ({ ...u, password: e.target.value }))} />
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVerPass(v => !v)}>
+                      {verPass ? '🙈' : '👁'}
+                    </button>
+                  </div>
+                </div>
+                <div className="col-6 field">
+                  <label>WhatsApp</label>
+                  <input className="input" placeholder="+56912345678"
+                    value={nuevoU.telefono_whatsapp}
+                    onChange={e => setNuevoU(u => ({ ...u, telefono_whatsapp: e.target.value }))} />
+                </div>
+                <div className="col-2 field">
+                  <label>Rol *</label>
+                  <select className="select" value={nuevoU.rol}
+                    onChange={e => setNuevoU(u => ({ ...u, rol: e.target.value }))}>
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div className="col-2 field">
+                  <label>Sede *</label>
+                  <select className="select" value={nuevoU.sede}
+                    onChange={e => setNuevoU(u => ({ ...u, sede: e.target.value }))}>
+                    {SEDES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:10, marginTop:16, borderTop:'1px solid var(--borde)', paddingTop:16 }}>
+                <button className="btn btn-ghost" onClick={() => { setCreando(false); setNuevoU(NUEVO_VACIO); setErrorCrear('') }} disabled={guardandoNuevo}>
+                  Cancelar
+                </button>
+                <button className="btn btn-primary" onClick={handleCrearUsuario} disabled={guardandoNuevo}>
+                  {guardandoNuevo ? 'Creando...' : '✓ Crear usuario'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal edición */}
       {editando && (
         <div style={S.overlay}>
@@ -165,7 +272,12 @@ export default function Usuarios() {
             {filtrados.length} usuario{filtrados.length !== 1 ? 's' : ''} registrados
           </p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-primary btn-sm" onClick={() => { setCreando(true); setErrorCrear('') }}>
+            + Nuevo usuario
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
+        </div>
       </div>
 
       {/* Éxito */}
