@@ -698,7 +698,7 @@ export default function TabInformes({ ot, onInformeCreado }) {
       {/* Filtros por serie */}
       {informes.length > 0 && series.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-          {['t          {['todos', ...series].map(s => (
+          {['todos', ...series].map(s => (
             <button key={s} type="button" onClick={() => setFiltreSerie(s)}
               style={{ padding: '4px 12px', borderRadius: 16, border: '2px solid', borderColor: filtreSerie === s ? '#1A3A5C' : '#E2E8F0', background: filtreSerie === s ? '#1A3A5C' : '#fff', color: filtreSerie === s ? '#fff' : '#64748B', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
               {s === 'todos' ? `Todos (${informes.length})` : `${s} (${informes.filter(i => i.serie === s).length})`}
