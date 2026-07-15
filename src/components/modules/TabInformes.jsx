@@ -388,11 +388,12 @@ function SeccionCargaInforme({ ot }) {
       const nuevosResultados = []
       for (const file of archivos) {
         const { file_url } = await subirArchivoAStorage(ot.ot_numero, file)
-        await supabase.from('documentos_ot').insert({
+        const { error: insErr } = await supabase.from('documentos_ot').insert({
           ot_numero: ot.ot_numero, tipo: 'informe',
           nombre_archivo: file.name,
           drive_url: file_url, subido_por: usuario?.email || '',
         })
+        if (insErr) throw new Error(`Error guardando "${file.name}": ${insErr.message}`)
         nuevosResultados.push({ nombre: file.name, url: file_url })
       }
       setResultados(nuevosResultados)
