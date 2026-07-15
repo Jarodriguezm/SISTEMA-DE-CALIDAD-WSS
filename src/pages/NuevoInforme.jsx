@@ -80,89 +80,64 @@ const METODOS_END = [
 
 const CRITICIDADES = ['Crítico', 'Mayor', 'Menor', 'Observación']
 
-// ── Columnas dinámicas por tipo de elemento IZAJE ─────────────────────────────
+// ── Familias de elementos IZAJE con columnas específicas por tabla ─────────────
+// Familia HARDWARE: Grilletes, Cáncamos, Ganchos → Medida|Marca|Modelo|Cap|N°Serie|Sello WSS
+// Familia ESLINGA:  Eslingas planas/cadena/cable → Largo|Marca|N°Serie-Código|Ancho|Cap|Sello WSS
+// Familia GRUA:     Equipos mayores               → Cap|Luz|Vel|CertOp|UltInsp
 
-const CAMPOS_IZAJE = {
-  'Grillete': [
-    { id:'subtipo',       label:'Subtipo',      type:'select', ops:['Ancla','Arco','Dee'] },
-    { id:'diametro_mm',   label:'Diám. (mm)',   type:'text' },
-    { id:'capacidad_ton', label:'Cap. (ton)',    type:'text' },
-    { id:'marca',         label:'Marca',        type:'text' },
-    { id:'serie',         label:'N° Serie',     type:'text' },
+const TIPOS_IZAJE = {
+  hardware: ['Grillete','Grillete conector','Cáncamo Giratorio','Cáncamo Fijo','Gancho'],
+  eslinga:  ['Eslinga Plana','Eslinga cadena','Eslinga cable de acero','Eslinga textil'],
+  grua:     ['Grúa Puente','Grúa Pórtico','Grúa Horquilla','Grúa Articulada','Grúa Móvil','Aparejo diferencial'],
+  otro:     ['Esparrago','Otro'],
+}
+
+const TODOS_TIPOS_IZAJE = [
+  ...TIPOS_IZAJE.hardware, ...TIPOS_IZAJE.eslinga, ...TIPOS_IZAJE.grua, ...TIPOS_IZAJE.otro
+]
+
+function getFamiliaIzaje(tipo) {
+  for (const [fam, lista] of Object.entries(TIPOS_IZAJE)) {
+    if (lista.includes(tipo)) return fam
+  }
+  return 'otro'
+}
+
+// Columnas por familia (excluye: Item, Tipo, Sello Antiguo y Resultado que son comunes)
+const COLS_FAMILIA = {
+  hardware: [
+    { id:'medida',    label:'Medida',    ph:'ej: 2", M16, 5/8"', w:90 },
+    { id:'marca',     label:'Marca',     ph:'ej: Crosby',         w:90 },
+    { id:'modelo',    label:'Modelo',    ph:'S/I',                w:70 },
+    { id:'capacidad', label:'Capacidad', ph:'ej: 35 Ton',         w:90 },
+    { id:'n_serie',   label:'N° Serie',  ph:'S/I',                w:90 },
+    { id:'sello_wss', label:'Sello WSS', ph:'ej: 1341',           w:80 },
   ],
-  'Eslinga cadena': [
-    { id:'longitud_m',         label:'Long. (m)',      type:'text' },
-    { id:'grados',             label:'Grados',         type:'text' },
-    { id:'capacidad_ton',      label:'Cap. (ton)',     type:'text' },
-    { id:'diametro_cadena_mm', label:'Ø cadena (mm)', type:'text' },
-    { id:'marca',              label:'Marca',          type:'text' },
-    { id:'certificado',        label:'Certificado',    type:'text' },
+  eslinga: [
+    { id:'largo',     label:'Largo',          ph:'ej: 6 m',   w:70 },
+    { id:'marca',     label:'Marca',          ph:'ej: Gorila', w:90 },
+    { id:'n_serie',   label:'N°Serie/Código', ph:'',           w:150 },
+    { id:'ancho',     label:'Ancho',          ph:'ej: 50 mm',  w:75 },
+    { id:'capacidad', label:'Capacidad',      ph:'ej: 4000 Kg',w:90 },
+    { id:'sello_wss', label:'Sello WSS',      ph:'ej: 1341',   w:80 },
   ],
-  'Eslinga textil': [
-    { id:'longitud_m',    label:'Long. (m)',   type:'text' },
-    { id:'ancho_mm',      label:'Ancho (mm)',  type:'text' },
-    { id:'capacidad_ton', label:'Cap. (ton)',  type:'text' },
-    { id:'clase',         label:'Clase',       type:'text' },
-    { id:'certificado',   label:'Certificado', type:'text' },
+  grua: [
+    { id:'capacidad',              label:'Capacidad',       ph:'ej: 5 Ton', w:90 },
+    { id:'luz_m',                  label:'Luz / Radio (m)', ph:'',          w:100 },
+    { id:'velocidad_izaje',        label:'Vel. izaje',      ph:'',          w:90 },
+    { id:'certificado_operacion',  label:'Cert. operación', ph:'',          w:120 },
+    { id:'fecha_ultima_inspeccion',label:'Últ. inspección', ph:'',          w:110 },
   ],
-  'Eslinga cable de acero': [
-    { id:'longitud_m',    label:'Long. (m)',    type:'text' },
-    { id:'diametro_mm',   label:'Diám. (mm)',   type:'text' },
-    { id:'capacidad_ton', label:'Cap. (ton)',   type:'text' },
-    { id:'construccion',  label:'Construcción', type:'text' },
-    { id:'certificado',   label:'Certificado',  type:'text' },
-  ],
-  'Cáncamo': [
-    { id:'diametro_mm',   label:'Diám. (mm)',  type:'text' },
-    { id:'capacidad_ton', label:'Cap. (ton)',  type:'text' },
-    { id:'tipo',          label:'Tipo',        type:'select', ops:['Recto','Giratorio'] },
-    { id:'certificado',   label:'Certificado', type:'text' },
-  ],
-  'Gancho': [
-    { id:'tipo_gancho',   label:'Tipo gancho',     type:'text' },
-    { id:'capacidad_ton', label:'Cap. (ton)',       type:'text' },
-    { id:'apertura_mm',   label:'Apertura (mm)',    type:'text' },
-    { id:'sistema_seguro',label:'Sistema seguro',   type:'select', ops:['Sí','No'] },
-  ],
-  'Grúa Puente': [
-    { id:'capacidad_ton',          label:'Cap. (ton)',       type:'text' },
-    { id:'luz_m',                  label:'Luz (m)',          type:'text' },
-    { id:'velocidad_izaje',        label:'Vel. izaje',       type:'text' },
-    { id:'certificado_operacion',  label:'Cert. operación',  type:'text' },
-    { id:'fecha_ultima_inspeccion',label:'Últ. inspección',  type:'text' },
-  ],
-  'Grúa Pórtico': [
-    { id:'capacidad_ton',          label:'Cap. (ton)',       type:'text' },
-    { id:'luz_m',                  label:'Luz (m)',          type:'text' },
-    { id:'velocidad_izaje',        label:'Vel. izaje',       type:'text' },
-    { id:'certificado_operacion',  label:'Cert. operación',  type:'text' },
-    { id:'fecha_ultima_inspeccion',label:'Últ. inspección',  type:'text' },
-  ],
-  'Grúa Horquilla': [
-    { id:'capacidad_ton',         label:'Cap. (ton)',      type:'text' },
-    { id:'radio_trabajo_m',       label:'Radio trab. (m)', type:'text' },
-    { id:'altura_max_m',          label:'Altura máx. (m)', type:'text' },
-    { id:'año_fab',               label:'Año fab.',        type:'text' },
-    { id:'patente',               label:'Patente',         type:'text' },
-    { id:'certificado_operacion', label:'Cert. operación', type:'text' },
-  ],
-  'Grúa Articulada': [
-    { id:'capacidad_ton',         label:'Cap. (ton)',      type:'text' },
-    { id:'radio_trabajo_m',       label:'Radio trab. (m)', type:'text' },
-    { id:'altura_max_m',          label:'Altura máx. (m)', type:'text' },
-    { id:'año_fab',               label:'Año fab.',        type:'text' },
-    { id:'patente',               label:'Patente',         type:'text' },
-    { id:'certificado_operacion', label:'Cert. operación', type:'text' },
-  ],
-  'Grúa Móvil': [
-    { id:'capacidad_ton',         label:'Cap. (ton)',      type:'text' },
-    { id:'radio_trabajo_m',       label:'Radio trab. (m)', type:'text' },
-    { id:'altura_max_m',          label:'Altura máx. (m)', type:'text' },
-    { id:'año_fab',               label:'Año fab.',        type:'text' },
-    { id:'patente',               label:'Patente',         type:'text' },
-    { id:'certificado_operacion', label:'Cert. operación', type:'text' },
+  otro: [
+    { id:'capacidad', label:'Capacidad', ph:'', w:90 },
+    { id:'marca',     label:'Marca',     ph:'', w:90 },
+    { id:'n_serie',   label:'N° Serie',  ph:'', w:100 },
+    { id:'sello_wss', label:'Sello WSS', ph:'', w:80 },
   ],
 }
+
+// Para compatibilidad con código anterior que usaba CAMPOS_IZAJE
+const CAMPOS_IZAJE = {}
 
 // ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
 
@@ -867,110 +842,118 @@ export default function NuevoInforme() {
                 <div style={S.seccionTitulo}>⑤b Elementos de Izaje Inspeccionados</div>
                 <button className="btn btn-secondary btn-sm" onClick={addElementoIzaje}>+ Agregar elemento</button>
               </div>
-              <p style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>
-                Ingresa cada elemento inspeccionado (grillete, eslinga, cáncamo, gancho, etc.) con su N° de sello y resultado individual.
-              </p>
+
               {elementosIzaje.length === 0 ? (
                 <div style={{ color:'var(--gris)', fontSize:13, padding:'14px 0', textAlign:'center', borderTop:'1px dashed #E2E8F0' }}>
-                  Sin elementos. Haz clic en "+ Agregar elemento" para ingresar.
+                  Sin elementos. Haz clic en "+ Agregar elemento".
                 </div>
               ) : (
-                <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', minWidth:600 }}>
-                    <thead>
-                      <tr style={{ background:'#F8FAFC' }}>
-                        {['Tipo de elemento','N° Sello / ID','Descripción / Observación','Resultado',''].map(h => (
-                          <th key={h} style={{ padding:'8px 12px', fontSize:11, fontWeight:700, color:'#64748B', textAlign:'left', border:'1px solid #E2E8F0' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {elementosIzaje.map((el, i) => [
-                        <tr key={`m${i}`}>
-                          <td style={S.tdInput}>
-                            <select className="input" value={el.tipo}
-                              onChange={e => updateElementoIzaje(i,'tipo',e.target.value)}
-                              style={{ fontSize:12, minWidth:130 }}>
-                              <option value="">— Tipo —</option>
-                              {['Grillete','Eslinga cadena','Eslinga textil','Eslinga cable de acero','Cáncamo','Gancho','Grúa Puente','Grúa Pórtico','Grúa Horquilla','Grúa Articulada','Grúa Móvil','Aparejo diferencial','Esparrago','Otro'].map(t => (
-                                <option key={t} value={t}>{t}</option>
+                <>
+                  {/* ─── Tablas separadas por familia de elemento ─── */}
+                  {[
+                    { fam:'hardware', label:'Accesorios de Izaje (Grilletes, Cáncamos, Ganchos)' },
+                    { fam:'eslinga',  label:'Eslingas' },
+                    { fam:'grua',     label:'Equipos de Izaje (Grúas / Aparejos)' },
+                    { fam:'otro',     label:'Otros' },
+                  ].map(({ fam, label }) => {
+                    const cols = COLS_FAMILIA[fam]
+                    const filas = elementosIzaje.map((el, i) => ({ ...el, _i: i }))
+                      .filter(el => getFamiliaIzaje(el.tipo) === fam)
+                    if (filas.length === 0) return null
+                    return (
+                      <div key={fam} style={{ marginBottom:22 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:6, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
+                          {label}
+                        </div>
+                        <div style={{ overflowX:'auto' }}>
+                          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                            <thead>
+                              <tr style={{ background:'linear-gradient(135deg,#1A3A5C,#185FA5)', color:'#fff' }}>
+                                <th style={S.th}>Item</th>
+                                <th style={S.th}>Sello antiguo</th>
+                                <th style={S.th}>Elemento</th>
+                                {cols.map(c => <th key={c.id} style={S.th}>{c.label}</th>)}
+                                <th style={S.th}>Resultado</th>
+                                <th style={{ ...S.th, width:32 }}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filas.map((el, rowIdx) => (
+                                <tr key={el._i} style={{ background: rowIdx % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                  <td style={{ ...S.td, textAlign:'center', fontWeight:700, color:'#475569', width:36 }}>{rowIdx + 1}</td>
+                                  <td style={S.tdInput}>
+                                    <input className="input" value={el.n_sello || ''}
+                                      onChange={e => updateElementoIzaje(el._i,'n_sello',e.target.value)}
+                                      placeholder="S/I" style={{ fontSize:11, width:65, textAlign:'center' }} />
+                                  </td>
+                                  <td style={S.tdInput}>
+                                    <select className="input" value={el.tipo}
+                                      onChange={e => updateElementoIzaje(el._i,'tipo',e.target.value)}
+                                      style={{ fontSize:11, minWidth:130 }}>
+                                      <option value="">— Tipo —</option>
+                                      {TODOS_TIPOS_IZAJE.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                  </td>
+                                  {cols.map(c => (
+                                    <td key={c.id} style={S.tdInput}>
+                                      <input className="input" value={el[c.id] || ''}
+                                        onChange={e => updateElementoIzaje(el._i, c.id, e.target.value)}
+                                        placeholder={c.ph || ''} style={{ fontSize:11, width: c.w || 80 }} />
+                                    </td>
+                                  ))}
+                                  <td style={{ ...S.td, minWidth:150 }}>
+                                    <div style={{ display:'flex', gap:4 }}>
+                                      {[['CUMPLE','✓ Aceptable','#16A34A','#D1FAE5','#065F46'],['NO_CUMPLE','✗ Rechazado','#DC2626','#FEE2E2','#991B1B']].map(([val,lbl,bc,bg,fc]) => (
+                                        <button key={val} onClick={() => updateElementoIzaje(el._i,'resultado',val)}
+                                          style={{ flex:1, padding:'5px 3px', borderRadius:5, border:`2px solid ${el.resultado===val ? bc : '#E2E8F0'}`,
+                                            cursor:'pointer', fontSize:10, fontWeight:700,
+                                            background: el.resultado===val ? bg : '#F8FAFC',
+                                            color: el.resultado===val ? fc : '#94A3B8' }}>
+                                          {lbl}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td style={{ ...S.td, textAlign:'center' }}>
+                                    <button onClick={() => removeElementoIzaje(el._i)}
+                                      style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:15 }}>✕</button>
+                                  </td>
+                                </tr>
                               ))}
-                            </select>
-                          </td>
-                          <td style={S.tdInput}>
-                            <input className="input" value={el.n_sello}
-                              onChange={e => updateElementoIzaje(i,'n_sello',e.target.value)}
-                              placeholder="Ej: S-0045" style={{ fontSize:12, width:90 }} />
-                          </td>
-                          <td style={S.tdInput}>
-                            <input className="input" value={el.descripcion}
-                              onChange={e => updateElementoIzaje(i,'descripcion',e.target.value)}
-                              placeholder='Ej: 3/4" ancla, 2 ton, Crosby' style={{ fontSize:12 }} />
-                          </td>
-                          <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', minWidth:160 }}>
-                            <div style={{ display:'flex', gap:6 }}>
-                              <button onClick={() => updateElementoIzaje(i,'resultado','CUMPLE')}
-                                style={{ flex:1, padding:'6px 4px', borderRadius:6, border:'2px solid',
-                                  borderColor: el.resultado==='CUMPLE' ? '#16A34A' : '#E2E8F0',
-                                  cursor:'pointer', fontSize:11, fontWeight:700,
-                                  background: el.resultado==='CUMPLE' ? '#D1FAE5' : '#F8FAFC',
-                                  color: el.resultado==='CUMPLE' ? '#065F46' : '#94A3B8' }}>
-                                ✓ CUMPLE
-                              </button>
-                              <button onClick={() => updateElementoIzaje(i,'resultado','NO_CUMPLE')}
-                                style={{ flex:1, padding:'6px 4px', borderRadius:6, border:'2px solid',
-                                  borderColor: el.resultado==='NO_CUMPLE' ? '#DC2626' : '#E2E8F0',
-                                  cursor:'pointer', fontSize:11, fontWeight:700,
-                                  background: el.resultado==='NO_CUMPLE' ? '#FEE2E2' : '#F8FAFC',
-                                  color: el.resultado==='NO_CUMPLE' ? '#991B1B' : '#94A3B8' }}>
-                                ✗ NO CUMPLE
-                              </button>
-                            </div>
-                          </td>
-                          <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
-                            <button onClick={() => removeElementoIzaje(i)}
-                              style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:16 }}>✕</button>
-                          </td>
-                        </tr>,
-                        (el.tipo && CAMPOS_IZAJE[el.tipo]) ? (
-                          <tr key={`d${i}`} style={{ background:'#F8FAFC' }}>
-                            <td colSpan={5} style={{ padding:'8px 12px', border:'1px solid #E2E8F0', borderTop:'none' }}>
-                              <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
-                                {CAMPOS_IZAJE[el.tipo].map(campo => (
-                                  <div key={campo.id} style={{ minWidth:90 }}>
-                                    <label style={{ fontSize:10, fontWeight:600, color:'#64748B', display:'block', marginBottom:2 }}>{campo.label}</label>
-                                    {campo.type === 'select' ? (
-                                      <select className="input" value={el[campo.id] || ''} onChange={e => updateElementoIzaje(i, campo.id, e.target.value)} style={{ fontSize:11, padding:'4px 6px' }}>
-                                        <option value="">—</option>
-                                        {campo.ops.map(o => <option key={o} value={o}>{o}</option>)}
-                                      </select>
-                                    ) : (
-                                      <input className="input" value={el[campo.id] || ''} onChange={e => updateElementoIzaje(i, campo.id, e.target.value)} style={{ fontSize:11, padding:'4px 6px', width:90 }} />
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null,
-                      ])}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {/* Resumen */}
-              {elementosIzaje.length > 0 && (
-                <div style={{ marginTop:12, display:'flex', gap:16, fontSize:12 }}>
-                  <span style={{ color:'#065F46', fontWeight:700 }}>
-                    ✓ {elementosIzaje.filter(e => e.resultado==='CUMPLE').length} cumplen
-                  </span>
-                  <span style={{ color:'#991B1B', fontWeight:700 }}>
-                    ✗ {elementosIzaje.filter(e => e.resultado==='NO_CUMPLE').length} no cumplen
-                  </span>
-                  <span style={{ color:'#64748B' }}>
-                    ({elementosIzaje.filter(e => !e.resultado).length} sin evaluar)
-                  </span>
-                </div>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Fila de nuevos elementos sin tipo asignado aún */}
+                  {elementosIzaje.some(el => !el.tipo) && (
+                    <div style={{ border:'1px dashed #CBD5E1', borderRadius:8, padding:'10px 14px' }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#94A3B8', marginBottom:8 }}>Elementos sin tipo asignado</div>
+                      {elementosIzaje.map((el, i) => el.tipo ? null : (
+                        <div key={i} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
+                          <span style={{ fontSize:11, color:'#64748B', minWidth:30 }}>#{i+1}</span>
+                          <select className="input" value={el.tipo}
+                            onChange={e => updateElementoIzaje(i,'tipo',e.target.value)}
+                            style={{ fontSize:12, flex:1, maxWidth:220 }}>
+                            <option value="">— Seleccionar tipo de elemento —</option>
+                            {TODOS_TIPOS_IZAJE.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          <button onClick={() => removeElementoIzaje(i)}
+                            style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:15 }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Resumen */}
+                  <div style={{ marginTop:12, display:'flex', gap:16, fontSize:12 }}>
+                    <span style={{ color:'#065F46', fontWeight:700 }}>✓ {elementosIzaje.filter(e => e.resultado==='CUMPLE').length} aceptables</span>
+                    <span style={{ color:'#991B1B', fontWeight:700 }}>✗ {elementosIzaje.filter(e => e.resultado==='NO_CUMPLE').length} rechazados</span>
+                    <span style={{ color:'#64748B' }}>({elementosIzaje.filter(e => !e.resultado).length} sin evaluar)</span>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -1316,6 +1299,8 @@ const S = {
     borderRadius:10, cursor:'pointer', textAlign:'left',
   },
   tdInput: { padding:'4px 8px', border:'1px solid #E2E8F0' },
+  th: { padding:'7px 10px', fontSize:11, fontWeight:700, color:'#fff', textAlign:'left', border:'1px solid rgba(255,255,255,.15)', whiteSpace:'nowrap' },
+  td:  { padding:'5px 8px', border:'1px solid #E2E8F0', fontSize:12 },
   btnIA: {
     background:'linear-gradient(135deg,#7C3AED,#5B21B6)',
     color:'#fff', border:'none', borderRadius:10,
