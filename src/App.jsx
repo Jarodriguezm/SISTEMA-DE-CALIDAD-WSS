@@ -16,6 +16,7 @@ import Procedimientos from './pages/Procedimientos'
 import Acreditaciones from './pages/Acreditaciones'
 import Informes from './pages/Informes'
 import NuevoInforme from './pages/NuevoInforme'
+import DetalleInforme from './pages/DetalleInforme'
 import Documentos from './pages/Documentos'
 import Supervisor from './pages/Supervisor'
 import './styles/global.css'
@@ -83,6 +84,7 @@ function AppRoutes() {
       <Route path="/acreditaciones" element={<RutaPrivada><Acreditaciones /></RutaPrivada>} />
       <Route path="/informes" element={<RutaPrivada><Informes /></RutaPrivada>} />
       <Route path="/informes/nuevo" element={<RutaPrivada><NuevoInforme /></RutaPrivada>} />
+      <Route path="/informes/:id" element={<RutaPrivada><DetalleInforme /></RutaPrivada>} />
       <Route path="/documentos" element={<RutaPrivada><Documentos /></RutaPrivada>} />
 
       <Route path="/supervisor" element={<RutaPrivada><Supervisor /></RutaPrivada>} />
