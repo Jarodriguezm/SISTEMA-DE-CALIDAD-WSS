@@ -276,14 +276,21 @@ function TarjetaItem({ item, navigate, completado = false }) {
         <button
           onClick={() => navigate(`/informes/nuevo?ot=${asig.ot_numero}&reg=${reg}&cod=${cod}`)}
           style={{ padding:'8px 18px', borderRadius:8, border:'none', background:'#1E3A5F', color:'#fff', cursor:'pointer', fontSize:12, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>
-          Iniciar →
+          📝 Crear Informe
         </button>
       ) : (
-        <button
-          onClick={() => item.completado?.id && navigate(`/informes/${item.completado.id}`)}
-          style={{ padding:'8px 18px', borderRadius:8, border:'1.5px solid #10B981', background:'#F0FDF4', color:'#065F46', cursor:'pointer', fontSize:12, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>
-          Ver →
-        </button>
+        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+          <button
+            onClick={() => item.completado?.id && navigate(`/informes/${item.completado.id}`)}
+            style={{ padding:'8px 18px', borderRadius:8, border:'1.5px solid #10B981', background:'#F0FDF4', color:'#065F46', cursor:'pointer', fontSize:12, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>
+            Ver →
+          </button>
+          <button
+            onClick={() => navigate(`/informes/nuevo?ot=${asig.ot_numero}&reg=${reg}&cod=${cod}`)}
+            style={{ padding:'6px 12px', borderRadius:8, border:'1.5px solid #CBD5E1', background:'#F8FAFC', color:'#64748B', cursor:'pointer', fontSize:11, fontWeight:600, whiteSpace:'nowrap', flexShrink:0 }}>
+            ➕ Nuevo
+          </button>
+        </div>
       )}
     </div>
   )
