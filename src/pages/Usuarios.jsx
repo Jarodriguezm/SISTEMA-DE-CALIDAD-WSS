@@ -39,7 +39,7 @@ export default function Usuarios() {
       setError('')
       const { data, error: err } = await supabase
         .from('usuarios')
-        .select('id, nombre, apellido, email, rol, sede, activo, telefono_whatsapp')
+        .select('id, nombre, apellido, email, rol, sede, activo, telefono_whatsapp, nivel_snt')
         .order('nombre')
       if (err) throw err
       setUsuarios(data || [])
@@ -64,6 +64,7 @@ export default function Usuarios() {
           sede:                editando.sede,
           activo:              editando.activo,
           telefono_whatsapp:   editando.telefono_whatsapp?.trim() || null,
+          nivel_snt:           editando.nivel_snt || null,
         })
         .eq('id', editando.id)
       if (err) throw err
@@ -249,6 +250,16 @@ export default function Usuarios() {
                     <option value="inactivo">Inactivo</option>
                   </select>
                 </div>
+                <div className="col-4 field">
+                  <label>Nivel SNT-TC-1A</label>
+                  <select className="select" value={editando.nivel_snt || ''}
+                    onChange={e => setEditando(u => ({ ...u, nivel_snt: e.target.value || null }))}>
+                    <option value="">— No aplica —</option>
+                    <option value="I">Nivel I</option>
+                    <option value="II">Nivel II</option>
+                    <option value="III">Nivel III</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16, borderTop: '1px solid var(--borde)', paddingTop: 16 }}>
@@ -327,6 +338,11 @@ export default function Usuarios() {
                 <tr key={u.id}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{u.nombre} {u.apellido}</div>
+                    {u.nivel_snt && (
+                      <span style={{ fontSize:10, background:'#EDE9FE', color:'#5B21B6', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>
+                        SNT Nv.{u.nivel_snt}
+                      </span>
+                    )}
                   </td>
                   <td>
                     {u.email
