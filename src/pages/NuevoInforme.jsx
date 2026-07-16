@@ -443,6 +443,36 @@ const DN_OPCIONES = ['1/2"','3/4"','1"','1¼"','1½"','2"','2½"','3"','4"','6"'
 const SCHEDULE_OPCIONES = ['Sch 5','Sch 10','Sch 20','Sch 40','Sch 80','Sch 120','Sch 160','STD','XS','XXS','XH','XXH']
 const SPOOL_MATERIALES = ['Acero Carbono A106-B','Acero Carbono A53','Acero Inox. 304 (A312)','Acero Inox. 316L (A312)','Acero Inox. 321 (A312)','Duplex 2205','HDPE','PVC','CPVC','Cobre','Aleación de Níquel','Otro']
 
+// Tabla ASME B36.10M — espesor de pared (mm) por NPS y Schedule
+const ASME_B36_10M = {
+  '1/2"':  { 'Sch 5':1.24, 'Sch 10':1.65, 'Sch 40':2.77, 'STD':2.77, 'Sch 80':3.73, 'XS':3.73, 'XH':3.73, 'Sch 160':4.78, 'XXS':7.47, 'XXH':7.47 },
+  '3/4"':  { 'Sch 5':1.65, 'Sch 10':1.65, 'Sch 40':2.87, 'STD':2.87, 'Sch 80':3.91, 'XS':3.91, 'XH':3.91, 'Sch 160':5.56, 'XXS':7.82, 'XXH':7.82 },
+  '1"':    { 'Sch 5':1.65, 'Sch 10':1.73, 'Sch 40':3.38, 'STD':3.38, 'Sch 80':4.55, 'XS':4.55, 'XH':4.55, 'Sch 160':6.35, 'XXS':9.09, 'XXH':9.09 },
+  '1¼"':   { 'Sch 5':1.65, 'Sch 10':1.73, 'Sch 40':3.56, 'STD':3.56, 'Sch 80':4.85, 'XS':4.85, 'XH':4.85, 'Sch 160':6.35, 'XXS':9.70, 'XXH':9.70 },
+  '1½"':   { 'Sch 5':1.65, 'Sch 10':2.11, 'Sch 40':3.68, 'STD':3.68, 'Sch 80':5.08, 'XS':5.08, 'XH':5.08, 'Sch 160':7.14, 'XXS':10.16, 'XXH':10.16 },
+  '2"':    { 'Sch 5':1.65, 'Sch 10':2.11, 'Sch 40':3.91, 'STD':3.91, 'Sch 80':5.54, 'XS':5.54, 'XH':5.54, 'Sch 160':8.74, 'XXS':11.07, 'XXH':11.07 },
+  '2½"':   { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 40':5.16, 'STD':5.16, 'Sch 80':7.01, 'XS':7.01, 'XH':7.01, 'Sch 160':9.53, 'XXS':14.02, 'XXH':14.02 },
+  '3"':    { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 40':5.49, 'STD':5.49, 'Sch 80':7.62, 'XS':7.62, 'XH':7.62, 'Sch 160':11.13, 'XXS':15.24, 'XXH':15.24 },
+  '4"':    { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 20':3.18, 'Sch 40':6.02, 'STD':6.02, 'Sch 80':8.56, 'XS':8.56, 'XH':8.56, 'Sch 120':11.13, 'Sch 160':13.49, 'XXS':17.12, 'XXH':17.12 },
+  '6"':    { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 20':3.18, 'Sch 40':7.11, 'STD':7.11, 'Sch 80':10.97, 'XS':10.97, 'XH':10.97, 'Sch 120':14.27, 'Sch 160':18.26, 'XXS':21.95, 'XXH':21.95 },
+  '8"':    { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 20':3.96, 'Sch 40':8.18, 'STD':8.18, 'Sch 60':10.31, 'Sch 80':12.70, 'XS':12.70, 'XH':12.70, 'Sch 100':15.09, 'Sch 120':17.48, 'Sch 160':21.44, 'XXS':22.23, 'XXH':22.23 },
+  '10"':   { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 20':3.40, 'Sch 40':9.27, 'STD':9.27, 'Sch 60':12.70, 'Sch 80':15.09, 'XS':12.70, 'XH':12.70, 'Sch 100':18.26, 'Sch 120':21.44, 'Sch 140':25.40, 'Sch 160':28.58, 'XXS':25.40, 'XXH':25.40 },
+  '12"':   { 'Sch 5':1.65, 'Sch 10':2.77, 'Sch 20':3.96, 'Sch 40':9.53, 'STD':9.53, 'Sch 60':14.27, 'Sch 80':17.48, 'XS':12.70, 'XH':12.70, 'Sch 100':21.44, 'Sch 120':25.40, 'Sch 140':28.58, 'Sch 160':33.32, 'XXS':25.40, 'XXH':25.40 },
+  '14"':   { 'Sch 5':1.65, 'Sch 10':3.40, 'Sch 20':4.78, 'Sch 40':9.53, 'STD':9.53, 'Sch 60':11.13, 'Sch 80':15.09, 'XS':12.70, 'XH':12.70, 'Sch 100':19.05, 'Sch 120':23.83, 'Sch 140':27.79, 'Sch 160':31.75 },
+  '16"':   { 'Sch 5':1.65, 'Sch 10':3.40, 'Sch 20':4.78, 'Sch 40':9.53, 'STD':9.53, 'Sch 60':12.70, 'Sch 80':15.09, 'XS':12.70, 'XH':12.70, 'Sch 100':21.44, 'Sch 120':26.19, 'Sch 140':30.96, 'Sch 160':36.53 },
+  '18"':   { 'Sch 5':1.65, 'Sch 10':3.40, 'Sch 20':4.78, 'Sch 40':11.13, 'STD':9.53, 'Sch 60':14.27, 'Sch 80':19.05, 'XS':12.70, 'XH':12.70, 'Sch 100':23.83, 'Sch 120':29.36, 'Sch 140':34.93, 'Sch 160':39.67 },
+  '20"':   { 'Sch 5':1.65, 'Sch 10':3.40, 'Sch 20':5.54, 'Sch 40':11.13, 'STD':9.53, 'Sch 60':15.09, 'Sch 80':20.62, 'XS':12.70, 'XH':12.70, 'Sch 100':26.19, 'Sch 120':32.54, 'Sch 140':38.10, 'Sch 160':44.45 },
+  '24"':   { 'Sch 5':1.65, 'Sch 10':3.40, 'Sch 20':6.35, 'Sch 40':14.27, 'STD':9.53, 'Sch 60':17.48, 'Sch 80':24.61, 'XS':12.70, 'XH':12.70, 'Sch 100':30.96, 'Sch 120':38.10, 'Sch 140':46.02, 'Sch 160':52.37 },
+  '30"':   { 'Sch 5':1.65, 'Sch 10':3.96, 'STD':9.53, 'XS':12.70, 'XH':12.70 },
+  '36"':   { 'Sch 5':1.65, 'Sch 10':3.96, 'STD':9.53, 'XS':12.70, 'XH':12.70 },
+}
+function getAsmEspesor(dn, sch) {
+  if (!dn || !sch) return null
+  const row = ASME_B36_10M[dn]
+  if (!row) return null
+  return row[sch] ?? null
+}
+
 // ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
 
 function MultiSelect({ value, onChange, options, placeholder }) {
@@ -1765,8 +1795,8 @@ export default function NuevoInforme() {
                       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                         <thead>
                           <tr style={{ background:'#F1F5F9' }}>
-                            {['N° / ID Spool','DN (pulg)','Schedule','Material','Longitud (m)','Ubicación / Desc.','Estado',''].map(h => (
-                              <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color:'#475569', whiteSpace:'nowrap' }}>{h}</th>
+                            {['N° / ID Spool','DN (pulg)','Schedule','e nom. ASME (mm)','Material','Longitud (m)','Ubicación / Desc.','Estado',''].map(h => (
+                              <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color: h==='e nom. ASME (mm)' ? '#0369A1' : '#475569', whiteSpace:'nowrap' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1799,6 +1829,15 @@ export default function NuevoInforme() {
                                   <option value="">--</option>
                                   {SCHEDULE_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
+                              </td>
+                              {/* Espesor nominal ASME B36.10M — calculado automático */}
+                              <td style={{ padding:'4px 6px', textAlign:'center' }}>
+                                {(() => {
+                                  const e = getAsmEspesor(sp.dn, sp.schedule)
+                                  return e
+                                    ? <span style={{ fontWeight:700, color:'#0369A1', fontFamily:'monospace', fontSize:12 }}>{e} mm</span>
+                                    : <span style={{ color:'#94A3B8', fontSize:11 }}>—</span>
+                                })()}
                               </td>
                               <td style={{ padding:'4px 6px' }}>
                                 <select value={sp.material}
@@ -1858,9 +1897,13 @@ export default function NuevoInforme() {
                         <div style={{ fontSize:12, fontWeight:700, color:'#475569' }}>📏 Mediciones de Espesores UT</div>
                         <button className="btn btn-secondary btn-sm"
                           onClick={() => {
-                            const med = { spool_ref:'', punto:'', nominal_mm:'', medido_mm:'', minimo_mm:'', perdida_pct:'', tasa_mm_ano:'', estado:'' }
+                            const med = { spool_ref:'', punto:'', nominal_mm:'', nominal_fuente:'', medido_mm:'', minimo_mm:'', perdida_pct:'', tasa_mm_ano:'', estado:'' }
                             setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, medicionesUT:[...l.medicionesUT, med]} : l))
                           }}>+ Punto</button>
+                      </div>
+                      <div style={{ fontSize:10, color:'#64748B', marginBottom:4 }}>
+                        ① Si no tienes el espesor nominal: haz clic en <strong>⬇ ASME</strong> para usar el valor ASME B36.10M según DN+Schedule del spool,
+                        o <strong>✏ Estimado</strong> para indicar que se tomó el valor máximo medido en terreno como referencia (API 570 §4.3).
                       </div>
                       {ln.medicionesUT.length === 0 ? (
                         <div style={{ fontSize:11, color:'#94A3B8', fontStyle:'italic' }}>Sin puntos de medición. Haz clic en "+ Punto" para agregar.</div>
@@ -1869,7 +1912,7 @@ export default function NuevoInforme() {
                           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                             <thead>
                               <tr style={{ background:'#F0FDF4' }}>
-                                {['Spool Ref','Punto / Zona','Nominal (mm)','Medido (mm)','Mín. req. (mm)','% Pérdida','Tasa (mm/año)','Estado',''].map(h => (
+                                {['Spool Ref','Punto / Zona','Nominal (mm) ①','Medido (mm)','Mín. req. (mm)','% Pérdida','Tasa (mm/año)','Estado',''].map(h => (
                                   <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>{h}</th>
                                 ))}
                               </tr>
@@ -1888,7 +1931,46 @@ export default function NuevoInforme() {
                                   <tr key={mIdx} style={{ borderBottom:'1px solid #DCFCE7', background: pct !== '' && parseFloat(pct) >= 20 ? '#FEF2F2' : 'transparent' }}>
                                     <td style={{ padding:'4px 6px' }}><input value={m.spool_ref} onChange={e=>upd('spool_ref',e.target.value)} style={{ width:80,fontSize:11 }}/></td>
                                     <td style={{ padding:'4px 6px' }}><input value={m.punto} onChange={e=>upd('punto',e.target.value)} placeholder="Codo ext., Recto, Tee…" style={{ width:130,fontSize:11 }}/></td>
-                                    <td style={{ padding:'4px 6px' }}><input type="number" value={m.nominal_mm} onChange={e=>upd('nominal_mm',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 4px' }}>
+                                      {/* Nominal con asistente ASME B36.10M */}
+                                      <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:3 }}>
+                                          <input type="number" value={m.nominal_mm}
+                                            onChange={e => { upd('nominal_mm', e.target.value); upd('nominal_fuente','manual') }}
+                                            style={{ width:58, fontSize:11,
+                                              border: m.nominal_fuente==='estimado' ? '1.5px dashed #D97706' : '1px solid #CBD5E1',
+                                            }} />
+                                          {m.nominal_fuente === 'estimado' && (
+                                            <span style={{ fontSize:9, color:'#D97706', fontWeight:700 }}>EST</span>
+                                          )}
+                                          {m.nominal_fuente === 'asme' && (
+                                            <span style={{ fontSize:9, color:'#0369A1', fontWeight:700 }}>ASME</span>
+                                          )}
+                                        </div>
+                                        {/* Botón: calcular desde spool referenciado */}
+                                        {(() => {
+                                          const sp = ln.spools.find(s => s.id_spool && s.id_spool === m.spool_ref)
+                                            ?? (ln.spools.length === 1 ? ln.spools[0] : null)
+                                          const eAsme = sp ? getAsmEspesor(sp.dn, sp.schedule) : null
+                                          return (
+                                            <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
+                                              {eAsme && (
+                                                <button onClick={() => { upd('nominal_mm', String(eAsme)); upd('nominal_fuente','asme') }}
+                                                  style={{ fontSize:9, padding:'1px 5px', background:'#EFF6FF',
+                                                    border:'1px solid #93C5FD', borderRadius:4, cursor:'pointer', color:'#1D4ED8', whiteSpace:'nowrap' }}>
+                                                  ⬇ ASME {eAsme}mm
+                                                </button>
+                                              )}
+                                              <button onClick={() => upd('nominal_fuente','estimado')}
+                                                style={{ fontSize:9, padding:'1px 5px', background:'#FFFBEB',
+                                                  border:'1px solid #FCD34D', borderRadius:4, cursor:'pointer', color:'#92400E', whiteSpace:'nowrap' }}>
+                                                ✏ Estimado
+                                              </button>
+                                            </div>
+                                          )
+                                        })()}
+                                      </div>
+                                    </td>
                                     <td style={{ padding:'4px 6px' }}><input type="number" value={m.medido_mm} onChange={e=>upd('medido_mm',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
                                     <td style={{ padding:'4px 6px' }}><input type="number" value={m.minimo_mm} onChange={e=>upd('minimo_mm',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
                                     <td style={{ padding:'4px 6px', fontWeight:700, color: ok ? '#166534' : '#DC2626' }}>{pct !== '' ? `${pct}%` : '—'}</td>
