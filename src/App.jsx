@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/layout/Layout'
+import OfflineIndicator from './components/OfflineIndicator'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import OTs from './pages/OTs'
@@ -20,6 +21,7 @@ import DetalleInforme from './pages/DetalleInforme'
 import Documentos from './pages/Documentos'
 import Supervisor from './pages/Supervisor'
 import './styles/global.css'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // Ruta protegida
 function RutaPrivada({ children }) {
@@ -99,10 +101,14 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Registrar Service Worker para PWA offline
+  useRegisterSW({ immediate: true })
+
   return (
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <OfflineIndicator />
       </AuthProvider>
     </BrowserRouter>
   )
