@@ -221,12 +221,108 @@ const TK_CHECKLIST = {
     { id:'emision_ac',    label:'Emisión acústica (si aplica)' },
     { id:'uniones_int',   label:'Estado uniones internas' },
   ],
+
+  // ── Contingencia (por demanda / problema reportado) ───────────────────────
+  'Acero-contingencia': [
+    { id:'descripcion_zona',   label:'Zona afectada identificada' },
+    { id:'tipo_dano_fuga',     label:'Tipo daño — Fuga / Filtración' },
+    { id:'tipo_dano_corr',     label:'Tipo daño — Corrosión acelerada' },
+    { id:'tipo_dano_deform',   label:'Tipo daño — Deformación / Abolladuras' },
+    { id:'tipo_dano_impacto',  label:'Tipo daño — Impacto externo' },
+    { id:'tipo_dano_grieta',   label:'Tipo daño — Grieta / Fisura' },
+    { id:'visual_zona',        label:'Inspección visual focalizada zona afectada' },
+    { id:'ut_zona',            label:'UT en zona afectada (medición espesores)' },
+    { id:'lp_pm_zona',         label:'LP / PM en zona afectada (si aplica)' },
+    { id:'evaluacion_ffs',     label:'Evaluación aptitud servicio (API 579-1 / FFS)' },
+    { id:'riesgo_propagacion', label:'Evaluación riesgo de propagación' },
+    { id:'apto_continuar',     label:'Apto para continuar operación (con/sin restricciones)' },
+  ],
+  'Plástico (PE/PP)-contingencia': [
+    { id:'zona_afectada',      label:'Zona afectada identificada' },
+    { id:'tipo_dano_fuga',     label:'Tipo daño — Fuga / Filtración' },
+    { id:'tipo_dano_grieta',   label:'Tipo daño — Grieta / Fisura' },
+    { id:'tipo_dano_deform',   label:'Tipo daño — Deformación / Ablandamiento' },
+    { id:'visual_zona',        label:'Inspección visual focalizada zona afectada' },
+    { id:'emision_ac',         label:'Emisión acústica zona afectada (si aplica)' },
+    { id:'evaluacion_ffs',     label:'Evaluación aptitud para servicio' },
+    { id:'apto_continuar',     label:'Apto para continuar operación' },
+  ],
+  'FRP-contingencia': [
+    { id:'zona_afectada',      label:'Zona afectada identificada' },
+    { id:'tipo_dano_fuga',     label:'Tipo daño — Fuga / Filtración' },
+    { id:'tipo_dano_delam',    label:'Tipo daño — Delaminación' },
+    { id:'tipo_dano_fisura',   label:'Tipo daño — Fisura / Rotura' },
+    { id:'tipo_dano_impacto',  label:'Tipo daño — Impacto externo' },
+    { id:'coin_tap_zona',      label:'Coin tap test zona afectada' },
+    { id:'barcol_zona',        label:'Dureza Barcol zona afectada' },
+    { id:'emision_ac',         label:'Emisión acústica (si aplica)' },
+    { id:'evaluacion_ffs',     label:'Evaluación aptitud para servicio' },
+    { id:'apto_continuar',     label:'Apto para continuar operación' },
+  ],
+
+  // ── Post-reparación ───────────────────────────────────────────────────────
+  'Acero-post_reparacion': [
+    { id:'tipo_reparacion',    label:'Tipo de reparación realizada' },
+    { id:'wps_pqr',            label:'WPS / PQR aplicable disponible' },
+    { id:'vt_soldadura_rep',   label:'VT soldaduras de reparación (API 653)' },
+    { id:'lp_pm_sold_rep',     label:'LP / PM soldaduras reparación' },
+    { id:'ut_zona_rep',        label:'UT zona reparada (verificación espesor)' },
+    { id:'prueba_hermeticidad',label:'Prueba de hermeticidad zona reparada' },
+    { id:'revestimiento_rep',  label:'Estado recubrimiento post-reparación' },
+    { id:'reintegracion_ok',   label:'Zona reparada apta para reintegrar al servicio' },
+  ],
+  'Plástico (PE/PP)-post_reparacion': [
+    { id:'tipo_reparacion',    label:'Tipo de reparación (termofusión / parche)' },
+    { id:'vt_union_rep',       label:'VT uniones de reparación' },
+    { id:'prueba_hermeticidad',label:'Prueba de hermeticidad zona reparada' },
+    { id:'reintegracion_ok',   label:'Zona reparada apta para reintegrar al servicio' },
+  ],
+  'FRP-post_reparacion': [
+    { id:'tipo_reparacion',    label:'Tipo de reparación (laminado secundario / parche)' },
+    { id:'coin_tap_rep',       label:'Coin tap test zona reparada' },
+    { id:'barcol_rep',         label:'Dureza Barcol zona reparada (curado correcto)' },
+    { id:'prueba_hermeticidad',label:'Prueba de hermeticidad zona reparada' },
+    { id:'reintegracion_ok',   label:'Zona reparada apta para reintegrar al servicio' },
+  ],
+}
+
+const TK_TIPOS_INSPECCION = [
+  { id:'preoperacional',   icon:'🆕', label:'Pre-operacional / Nuevo',      sub:'API 650 · DS 43/2015' },
+  { id:'externa_5',        icon:'🔍', label:'Periódica Externa — 5 años',   sub:'API 653 · DS 43/2015' },
+  { id:'interna_10',       icon:'🔬', label:'Periódica Interna — 10 años',  sub:'API 653 · DS 43/2015' },
+  { id:'contingencia',     icon:'⚠️', label:'Por demanda / Contingencia',   sub:'API 653 · API 579-1' },
+  { id:'post_reparacion',  icon:'🔧', label:'Post-reparación',              sub:'API 653 · ASME V' },
+  { id:'retorno_servicio', icon:'▶️', label:'Retorno al servicio',          sub:'API 653' },
+  { id:'cert_ds43',        icon:'📜', label:'Certificación DS 43 (INN)',    sub:'DS 43/2015 · API 653' },
+]
+
+const TK_NORMAS_POR_TIPO = {
+  preoperacional:   'API 650 (Ed. 13, 2020) · DS 43/2015 · ASME V (Ed. 2021)',
+  externa_5:        'API 653 (Ed. 5, 2014) · DS 43/2015 · ASME V (Ed. 2021)',
+  interna_10:       'API 653 (Ed. 5, 2014) · DS 43/2015 · ASME V (Ed. 2021)',
+  contingencia:     'API 653 (Ed. 5, 2014) · API 579-1/ASME FFS-1 (Ed. 2016) · DS 43/2015',
+  post_reparacion:  'API 653 (Ed. 5, 2014) · ASME V (Ed. 2021) · AWS D1.1 (Ed. 2020)',
+  retorno_servicio: 'API 653 (Ed. 5, 2014) · DS 43/2015',
+  cert_ds43:        'DS 43/2015 (Art. 38-52) · API 653 (Ed. 5, 2014) · Acreditación INN',
 }
 
 const TK_NORMAS = {
   'Acero':             'API 650 (Ed. 13, 2020) · API 653 (Ed. 5, 2014) · DS 43/2015 · ASME V (Ed. 2021)',
   'Plástico (PE/PP)':  'DS 43/2015 · ASTM D1998 · NTC 4384',
   'FRP':               'ASTM D3299 · ASME RTP-1 · DS 43/2015 · AWWA D120',
+}
+
+// Mapea (material, tipoInspeccion) → clave del checklist
+function getTkChecklistKey(material, tipoInspeccion) {
+  const esExterno = ['preoperacional','externa_5','cert_ds43','retorno_servicio'].includes(tipoInspeccion)
+  const esInterno = ['interna_10'].includes(tipoInspeccion)
+  const esContingencia = tipoInspeccion === 'contingencia'
+  const esPostRep = tipoInspeccion === 'post_reparacion'
+
+  if (esContingencia)  return `${material}-contingencia`
+  if (esPostRep)       return `${material}-post_reparacion`
+  if (esInterno)       return `${material}-interno`
+  return `${material}-externo`   // preoperacional, externa_5, cert_ds43, retorno_servicio
 }
 
 // ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
@@ -369,12 +465,13 @@ export default function NuevoInforme() {
   // ── Estado inspección TANQUE (múltiples tanques) ─────────────────────────
   const initTanque = () => ({
     tag: '',
-    config:       { material:'', orientacion:'', tipoInspeccion:'' },
-    geom:         {},
-    checklist:    {},
-    medicionesUT: [],
-    verticalidad: { norte:'', sur:'', este:'', oeste:'' },
-    asentamiento: [],
+    config:             { material:'', orientacion:'', tipoInspeccion:'' },
+    motivo_contingencia: '',
+    geom:               {},
+    checklist:          {},
+    medicionesUT:       [],
+    verticalidad:       { norte:'', sur:'', este:'', oeste:'' },
+    asentamiento:       [],
   })
   const [tanques, setTanques] = useState([initTanque()])
 
@@ -1136,30 +1233,44 @@ export default function NuevoInforme() {
                     </div>
                     <div>
                       <label style={S.label}>Tipo de inspección</label>
-                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                        {[['externa_5','🔍 Exterior — 5 años','API 653 + DS 43'],
-                          ['interna_10','🔬 Interior — 10 años','API 653 + DS 43']].map(([val,lbl,sub]) => (
-                          <button key={val}
-                            onClick={() => updateTanque(tkIdx, 'config', { ...tk.config, tipoInspeccion:val })}
-                            style={{ padding:'7px 10px', borderRadius:7,
-                              border:`2px solid ${tk.config.tipoInspeccion===val?'#7C3AED':'#E2E8F0'}`,
-                              background: tk.config.tipoInspeccion===val?'#EDE9FE':'#fff',
-                              color: tk.config.tipoInspeccion===val?'#5B21B6':'#475569',
-                              fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
-                            {lbl}
+                      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        {TK_TIPOS_INSPECCION.map(({ id, icon, label, sub }) => (
+                          <button key={id}
+                            onClick={() => updateTanque(tkIdx, 'config', { ...tk.config, tipoInspeccion:id })}
+                            style={{ padding:'6px 10px', borderRadius:7,
+                              border:`2px solid ${tk.config.tipoInspeccion===id?'#7C3AED':'#E2E8F0'}`,
+                              background: tk.config.tipoInspeccion===id?'#EDE9FE':'#fff',
+                              color: tk.config.tipoInspeccion===id?'#5B21B6':'#475569',
+                              fontWeight:700, fontSize:11, cursor:'pointer', textAlign:'left' }}>
+                            {icon} {label}
                             <div style={{ fontSize:10, fontWeight:400, marginTop:1,
-                              color: tk.config.tipoInspeccion===val?'#7C3AED':'#94A3B8' }}>{sub}</div>
+                              color: tk.config.tipoInspeccion===id?'#7C3AED':'#94A3B8' }}>{sub}</div>
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>
 
-                  {/* Badge normas */}
-                  {tk.config.material && (
+                  {/* Badge normas combinadas: material + tipo inspección */}
+                  {(tk.config.material || tk.config.tipoInspeccion) && (
                     <div style={{ background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:7,
                       padding:'7px 12px', marginBottom:14, fontSize:11, color:'#0369A1' }}>
-                      📋 <strong>Normas:</strong> {TK_NORMAS[tk.config.material]}
+                      📋 <strong>Normas aplicables:</strong>{' '}
+                      {tk.config.tipoInspeccion && TK_NORMAS_POR_TIPO[tk.config.tipoInspeccion]
+                        ? TK_NORMAS_POR_TIPO[tk.config.tipoInspeccion]
+                        : TK_NORMAS[tk.config.material] || '—'}
+                    </div>
+                  )}
+
+                  {/* Campo motivo — solo para contingencia */}
+                  {tk.config.tipoInspeccion === 'contingencia' && (
+                    <div style={{ marginBottom:14, background:'#FFFBEB', border:'1px solid #FCD34D',
+                      borderRadius:8, padding:'10px 14px' }}>
+                      <label style={{ ...S.label, color:'#92400E' }}>⚠️ Problema / motivo de la inspección <span style={{ color:'red' }}>*</span></label>
+                      <textarea className="input" rows={2}
+                        value={tk.motivo_contingencia || ''}
+                        onChange={e => updateTanque(tkIdx, 'motivo_contingencia', e.target.value)}
+                        placeholder="Ej: Cliente detectó fuga en soldadura perimetral del primer anillo, costado norte, aprox. h=1.5m..." />
                     </div>
                   )}
 
@@ -1192,7 +1303,7 @@ export default function NuevoInforme() {
 
                   {/* ── Checklist visual ── */}
                   {tk.config.material && tk.config.tipoInspeccion && (() => {
-                    const key = `${tk.config.material}-${tk.config.tipoInspeccion==='externa_5'?'externo':'interno'}`
+                    const key = getTkChecklistKey(tk.config.material, tk.config.tipoInspeccion)
                     const items = TK_CHECKLIST[key] || []
                     if (!items.length) return null
                     return (
