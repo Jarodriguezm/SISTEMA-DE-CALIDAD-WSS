@@ -30,45 +30,87 @@ export function CroquisGancho({ data = {}, onChange }) {
       <div style={S.title}>Control Dimensional — Gancho (ASME B30.10)</div>
       <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
 
-        {/* SVG gancho */}
-        <div style={{ flex:'0 0 200px' }}>
-          <svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:200 }}>
-            {/* ── Cuerpo del gancho ── */}
-            {/* Vástago / base superior */}
-            <rect x="82" y="10" width="36" height="55" rx="4" fill="#CBD5E1" stroke="#475569" strokeWidth="2"/>
-            {/* Cuello */}
-            <rect x="88" y="63" width="24" height="20" rx="2" fill="#94A3B8" stroke="#475569" strokeWidth="1.5"/>
-            {/* Cuerpo curvo — arco principal */}
-            <path d="M 88 83 Q 88 130 105 150 Q 122 170 140 155 Q 160 138 155 115 Q 150 95 135 90"
-                  fill="none" stroke="#334155" strokeWidth="14" strokeLinecap="round"/>
-            {/* Pestillo de seguridad */}
-            <path d="M 98 115 Q 88 108 82 118 Q 76 128 85 135"
-                  fill="none" stroke="#334155" strokeWidth="5" strokeLinecap="round"/>
+        {/* SVG gancho — silueta cerrada tipo dibujo técnico */}
+        <div style={{ flex:'0 0 210px' }}>
+          <svg viewBox="0 0 210 265" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:210 }}>
 
-            {/* ── Cotas ── */}
-            {/* A: Abertura garganta */}
-            <line x1="85" y1="108" x2="137" y2="108" stroke="#DC2626" strokeWidth="1.5" strokeDasharray="4,2"/>
-            <line x1="85" y1="104" x2="85" y2="112" stroke="#DC2626" strokeWidth="1.5"/>
-            <line x1="137" y1="104" x2="137" y2="112" stroke="#DC2626" strokeWidth="1.5"/>
-            <circle cx="50" cy="108" r="10" fill="#DC2626"/>
-            <text x="50" y="113" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">A</text>
-            <line x1="60" y1="108" x2="85" y2="108" stroke="#DC2626" strokeWidth="1"/>
+            {/* ── Vástago con rosca ── */}
+            <rect x="84" y="8" width="32" height="52" fill="#CBD5E1" stroke="#475569" strokeWidth="1.5"/>
+            {[14,20,26,32,38,44,50].map(y => (
+              <line key={y} x1="84" y1={y} x2="116" y2={y} stroke="#94A3B8" strokeWidth="0.8"/>
+            ))}
 
-            {/* B: Altura base (vástago) */}
-            <line x1="128" y1="10" x2="128" y2="82" stroke="#2563EB" strokeWidth="1.5" strokeDasharray="4,2"/>
-            <line x1="124" y1="10" x2="132" y2="10" stroke="#2563EB" strokeWidth="1.5"/>
-            <line x1="124" y1="82" x2="132" y2="82" stroke="#2563EB" strokeWidth="1.5"/>
-            <circle cx="160" cy="46" r="10" fill="#2563EB"/>
-            <text x="160" y="51" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">B</text>
-            <line x1="128" y1="46" x2="150" y2="46" stroke="#2563EB" strokeWidth="1"/>
+            {/* ── Tuerca/collar ── */}
+            <rect x="76" y="58" width="48" height="13" rx="2" fill="#64748B" stroke="#334155" strokeWidth="1.5"/>
 
-            {/* C: Ancho base */}
-            <line x1="82" y1="195" x2="118" y2="195" stroke="#059669" strokeWidth="1.5" strokeDasharray="4,2"/>
-            <line x1="82" y1="191" x2="82" y2="199" stroke="#059669" strokeWidth="1.5"/>
-            <line x1="118" y1="191" x2="118" y2="199" stroke="#059669" strokeWidth="1.5"/>
-            <circle cx="100" cy="218" r="10" fill="#059669"/>
-            <text x="100" y="223" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">C</text>
-            <line x1="100" y1="195" x2="100" y2="208" stroke="#059669" strokeWidth="1"/>
+            {/* ── Cuerpo del gancho: path cerrado con fillRule evenodd ──
+                Outer: contorno exterior del cuerpo
+                Inner: hueco interior (garganta) — la resta crea la abertura
+            ── */}
+            <path
+              fillRule="evenodd"
+              fill="#B8C5D6"
+              stroke="#334155"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              d={[
+                /* OUTER — sentido horario */
+                'M 84,71 L 116,71',
+                'C 142,71 163,93 163,124',
+                'C 163,158 141,186 110,193',
+                'C 79,200 50,182 44,153',
+                'C 38,124 56,100 82,93',
+                'C 83,90 84,82 84,71 Z',
+                /* INNER — sentido antihorario (garganta) */
+                'M 82,100',
+                'C 62,107 55,124 55,140',
+                'C 55,160 69,175 88,178',
+                'C 107,181 124,167 124,148',
+                'L 113,145',
+                'C 112,160 102,170 88,167',
+                'C 74,164 65,152 65,138',
+                'C 65,122 76,108 82,108 Z',
+              ].join(' ')}
+            />
+
+            {/* ── Sombra/profundidad lateral del cuerpo ── */}
+            <path
+              d="M 116,71 C 140,71 161,91 162,120 C 163,150 148,178 122,188 L 110,193 C 141,186 163,158 163,124 C 163,93 142,71 116,71 Z"
+              fill="#9FB0C4" stroke="none"
+            />
+
+            {/* ── Pestillo de seguridad ── */}
+            <path d="M 82,100 Q 60,108 54,128 Q 50,145 62,154"
+              fill="none" stroke="#334155" strokeWidth="5" strokeLinecap="round"/>
+            <path d="M 82,100 Q 60,108 54,128 Q 50,145 62,154"
+              fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round"/>
+
+            {/* ── Cota A: Abertura de garganta ── */}
+            <line x1="55" y1="140" x2="113" y2="140" stroke="#DC2626" strokeWidth="1.5" strokeDasharray="4,2"/>
+            <line x1="55" y1="136" x2="55" y2="144" stroke="#DC2626" strokeWidth="1.5"/>
+            <line x1="113" y1="136" x2="113" y2="144" stroke="#DC2626" strokeWidth="1.5"/>
+            <circle cx="30" cy="140" r="10" fill="#DC2626"/>
+            <text x="30" y="145" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">A</text>
+            <line x1="40" y1="140" x2="55" y2="140" stroke="#DC2626" strokeWidth="1"/>
+
+            {/* ── Cota B: Altura de base (cuerpo del gancho) ── */}
+            <line x1="173" y1="71" x2="173" y2="193" stroke="#2563EB" strokeWidth="1.5" strokeDasharray="4,2"/>
+            <line x1="169" y1="71" x2="177" y2="71" stroke="#2563EB" strokeWidth="1.5"/>
+            <line x1="169" y1="193" x2="177" y2="193" stroke="#2563EB" strokeWidth="1.5"/>
+            <circle cx="193" cy="132" r="10" fill="#2563EB"/>
+            <text x="193" y="137" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">B</text>
+            <line x1="173" y1="132" x2="183" y2="132" stroke="#2563EB" strokeWidth="1"/>
+
+            {/* ── Cota C: Ancho de base (collar) ── */}
+            <line x1="76" y1="225" x2="124" y2="225" stroke="#059669" strokeWidth="1.5" strokeDasharray="4,2"/>
+            <line x1="76" y1="221" x2="76" y2="229" stroke="#059669" strokeWidth="1.5"/>
+            <line x1="124" y1="221" x2="124" y2="229" stroke="#059669" strokeWidth="1.5"/>
+            {/* guías verticales del collar hasta cota C */}
+            <line x1="76" y1="71" x2="76" y2="222" stroke="#059669" strokeWidth="0.7" strokeDasharray="2,4"/>
+            <line x1="124" y1="71" x2="124" y2="222" stroke="#059669" strokeWidth="0.7" strokeDasharray="2,4"/>
+            <circle cx="100" cy="244" r="10" fill="#059669"/>
+            <text x="100" y="249" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">C</text>
+            <line x1="100" y1="225" x2="100" y2="234" stroke="#059669" strokeWidth="1"/>
           </svg>
           <p style={S.nota}>Referencia: ASME B30.10</p>
         </div>
