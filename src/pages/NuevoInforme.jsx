@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { encolarInforme } from '../lib/offlineDB'
 
 // ── Configuración por tipo de equipo ──────────────────────────────────────────
 
@@ -961,7 +962,8 @@ export default function NuevoInforme() {
       try { lineasGuardar = await subirFotosLineas(lineas, general.ot_numero) }
       catch {}
     }
-    const { data, error } = await supabase.from('informes').insert({
+    // Construir payload del informe
+    const payload = {
       tipo_equipo:         tipo,
       ot_numero:           general.ot_numero,
       cliente_nombre:      general.cliente_nombre,
@@ -992,9 +994,36 @@ export default function NuevoInforme() {
       estado,
       reg_dii_numero:    regDii || null,
       metodo_end_cod:    codEnd || null,
-    }).select('id').single()
+    }
+
+    // ── Si no hay conexión → guardar en cola offline ──────────────────────
+    if (!navigator.onLine) {
+      setGuardando(false)
+      try {
+        await encolarInforme(payload)
+        setErrorGuardar('')
+        alert('📡 Sin conexión. El informe quedó guardado en este dispositivo y se subirá automáticamente cuando recuperes señal.')
+      } catch (e) {
+        setErrorGuardar('Error al guardar offline: ' + e.message)
+      }
+      return
+    }
+
+    // ── Con conexión → subir directo a Supabase ───────────────────────────
+    const { data, error } = await supabase.from('informes').insert(payload).select('id').single()
     setGuardando(false)
-    if (error) return setErrorGuardar(error.message)
+    if (error) {
+      // Si falló por pérdida de conexión durante el envío → encolar
+      if (!navigator.onLine || error.message?.includes('fetch')) {
+        try {
+          await encolarInforme(payload)
+          alert('📡 Se perdió la conexión al guardar. El informe quedó guardado en este dispositivo.')
+        } catch {}
+      } else {
+        setErrorGuardar(error.message)
+      }
+      return
+    }
     navigate(`/informes/${data.id}`)
   }
 
