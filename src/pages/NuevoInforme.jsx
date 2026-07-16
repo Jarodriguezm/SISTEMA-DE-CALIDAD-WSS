@@ -679,6 +679,7 @@ export default function NuevoInforme() {
     soldaduras:     [],
     ph: { presion_diseno:'', presion_prueba:'', fluido_prueba:'Agua', temperatura:'', duracion_hrs:'', resultado:'' },
     checklist:      {},
+    fotos:          [],   // { preview, url, caption, zona, nombre }
   })
   const [lineas, setLineas] = useState([initLinea()])
   function updateLinea(idx, field, value) {
@@ -918,6 +919,30 @@ export default function NuevoInforme() {
 
   // ── Guardar ──────────────────────────────────────────────────────────────
 
+  // ── Subir fotos de líneas a Supabase Storage ─────────────────────────────
+  async function subirFotosLineas(lineasData, otNumero) {
+    const lineasConUrls = await Promise.all(lineasData.map(async (ln) => {
+      if (!ln.fotos || ln.fotos.length === 0) return ln
+      const fotosSubidas = await Promise.all(ln.fotos.map(async (foto, idx) => {
+        if (!foto.file) return foto // ya subida o sin archivo
+        try {
+          const ext = foto.nombre.split('.').pop() || 'jpg'
+          const path = `${otNumero || 'sin-ot'}/${ln.tag || `linea-${idx}`}/${Date.now()}_fig${idx+1}.${ext}`
+          const { error } = await supabase.storage
+            .from('inspecciones-fotos')
+            .upload(path, foto.file, { cacheControl:'3600', upsert:false })
+          if (error) return { ...foto, file:undefined, url:'', error:error.message }
+          const { data } = supabase.storage.from('inspecciones-fotos').getPublicUrl(path)
+          return { caption:foto.caption, zona:foto.zona, nombre:foto.nombre, url:data.publicUrl }
+        } catch (e) {
+          return { caption:foto.caption, zona:foto.zona, nombre:foto.nombre, url:'', error:e.message }
+        }
+      }))
+      return { ...ln, fotos:fotosSubidas }
+    }))
+    return lineasConUrls
+  }
+
   async function guardar(estado) {
     if (!tipo) return setErrorGuardar('Selecciona el tipo de equipo')
     setGuardando(true); setErrorGuardar('')
@@ -930,6 +955,12 @@ export default function NuevoInforme() {
         procedimientos:   normas.procedimientos,
       }))
     } catch {}
+    // Subir fotos si hay líneas con fotos adjuntas
+    let lineasGuardar = lineas
+    if (tipo === 'TUBERIA' && lineas.some(l => l.fotos?.some(f => f.file))) {
+      try { lineasGuardar = await subirFotosLineas(lineas, general.ot_numero) }
+      catch {}
+    }
     const { data, error } = await supabase.from('informes').insert({
       tipo_equipo:         tipo,
       ot_numero:           general.ot_numero,
@@ -951,7 +982,7 @@ export default function NuevoInforme() {
         equipo_medicion:           equiposMedicion,
         inspectores_ot:            inspectoresOT,
         tanques,
-        lineas,
+        lineas: lineasGuardar,
       },
       end_aplicados:     endAplicados,
       mediciones,
@@ -2309,6 +2340,106 @@ export default function NuevoInforme() {
                       </table>
                     </div>
                   )}
+
+                  {/* ─ Evidencia fotográfica ─ */}
+                  <div style={{ marginTop:16 }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#475569' }}>
+                        📷 Evidencia fotográfica
+                        {ln.fotos.length > 0 && (
+                          <span style={{ marginLeft:8, fontSize:11, fontWeight:400, color:'#64748B' }}>
+                            {ln.fotos.length} foto{ln.fotos.length !== 1 ? 's' : ''} adjunta{ln.fotos.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      <label style={{ cursor:'pointer' }}>
+                        <input type="file" accept="image/*" multiple style={{ display:'none' }}
+                          onChange={e => {
+                            const archivos = Array.from(e.target.files)
+                            const nuevas = archivos.map(f => ({
+                              preview: URL.createObjectURL(f),
+                              file: f,
+                              caption: '',
+                              zona: '',
+                              nombre: f.name,
+                            }))
+                            setLineas(prev => prev.map((l,i) => i===lnIdx
+                              ? {...l, fotos:[...l.fotos, ...nuevas]} : l))
+                            e.target.value = ''
+                          }} />
+                        <span className="btn btn-secondary btn-sm" style={{ pointerEvents:'none' }}>
+                          + Agregar fotos
+                        </span>
+                      </label>
+                    </div>
+
+                    {ln.fotos.length === 0 ? (
+                      <label style={{ cursor:'pointer', display:'block' }}>
+                        <input type="file" accept="image/*" multiple style={{ display:'none' }}
+                          onChange={e => {
+                            const archivos = Array.from(e.target.files)
+                            const nuevas = archivos.map(f => ({
+                              preview: URL.createObjectURL(f),
+                              file: f,
+                              caption: '',
+                              zona: '',
+                              nombre: f.name,
+                            }))
+                            setLineas(prev => prev.map((l,i) => i===lnIdx
+                              ? {...l, fotos:[...l.fotos, ...nuevas]} : l))
+                            e.target.value = ''
+                          }} />
+                        <div style={{ border:'1.5px dashed #CBD5E1', borderRadius:8, padding:'20px',
+                          textAlign:'center', color:'#94A3B8', fontSize:12 }}>
+                          📷 Haz clic aquí o arrastra fotos desde el terreno
+                          <div style={{ fontSize:10, marginTop:4 }}>JPG, PNG — múltiples archivos permitidos</div>
+                        </div>
+                      </label>
+                    ) : (
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
+                        {ln.fotos.map((foto, fIdx) => (
+                          <div key={fIdx} style={{ border:'1px solid #E2E8F0', borderRadius:8,
+                            overflow:'hidden', background:'#F8FAFC' }}>
+                            {/* Thumbnail */}
+                            <div style={{ position:'relative' }}>
+                              <img src={foto.preview} alt={foto.caption || `Foto ${fIdx+1}`}
+                                style={{ width:'100%', height:110, objectFit:'cover', display:'block' }} />
+                              <button onClick={() => {
+                                const fotos = ln.fotos.filter((_,i) => i!==fIdx)
+                                setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, fotos} : l))
+                              }} style={{ position:'absolute', top:4, right:4,
+                                background:'rgba(0,0,0,0.65)', border:'none', borderRadius:'50%',
+                                width:20, height:20, cursor:'pointer', color:'#fff', fontSize:12,
+                                display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>
+                                ✕
+                              </button>
+                              <span style={{ position:'absolute', bottom:4, left:4,
+                                background:'rgba(0,0,0,0.65)', color:'#fff', fontSize:10,
+                                padding:'1px 7px', borderRadius:4, fontWeight:700 }}>
+                                Fig. {fIdx+1}
+                              </span>
+                            </div>
+                            {/* Metadatos */}
+                            <div style={{ padding:'6px 8px', display:'flex', flexDirection:'column', gap:4 }}>
+                              <input value={foto.zona} placeholder="Zona / spool ref. (ej: SP-02 codo)"
+                                onChange={e => {
+                                  const fotos = ln.fotos.map((f,i) => i===fIdx ? {...f, zona:e.target.value} : f)
+                                  setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, fotos} : l))
+                                }}
+                                style={{ fontSize:10, padding:'3px 5px' }} />
+                              <input value={foto.caption} placeholder="Descripción del hallazgo..."
+                                onChange={e => {
+                                  const fotos = ln.fotos.map((f,i) => i===fIdx ? {...f, caption:e.target.value} : f)
+                                  setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, fotos} : l))
+                                }}
+                                style={{ fontSize:10, padding:'3px 5px' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               ))}
 
