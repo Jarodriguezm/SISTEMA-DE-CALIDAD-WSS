@@ -1857,14 +1857,89 @@ export default function NuevoInforme() {
                               </td>
                               <td style={{ padding:'4px 6px' }}>
                                 {esMaterialPlastico(sp.material) ? (
-                                  <select value={sp.schedule}
-                                    onChange={e => {
-                                      const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:e.target.value} : s)
-                                      setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
-                                    }} style={{ fontSize:11, borderColor:'#86EFAC' }}>
-                                    <option value="">-- SDR --</option>
-                                    {SDR_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
-                                  </select>
+                                  <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                                    <select value={sp.schedule}
+                                      onChange={e => {
+                                        const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:e.target.value} : s)
+                                        setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                      }} style={{ fontSize:11, borderColor:'#86EFAC' }}>
+                                      <option value="">-- SDR --</option>
+                                      {SDR_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    {/* Calculadora inversa SDR: OD medido ÷ t medido */}
+                                    <details style={{ fontSize:10 }}>
+                                      <summary style={{ cursor:'pointer', color:'#15803D', fontWeight:600, userSelect:'none' }}>
+                                        🔢 No sé el SDR
+                                      </summary>
+                                      <div style={{ background:'#F0FDF4', border:'1px solid #86EFAC', borderRadius:6,
+                                        padding:'6px 8px', marginTop:4, minWidth:190 }}>
+                                        <div style={{ fontWeight:700, color:'#166534', marginBottom:4 }}>
+                                          Calcular SDR en terreno
+                                        </div>
+                                        <div style={{ color:'#374151', marginBottom:4, lineHeight:'1.4' }}>
+                                          1. Lee el sello impreso del caño<br/>
+                                          2. Si no: mide OD (cinta Pi) y espesor (UT en zona sin daño)
+                                        </div>
+                                        <div style={{ display:'flex', gap:4, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
+                                          <label style={{ fontWeight:600, color:'#166534' }}>
+                                            OD medido (mm)
+                                            <input type="number" placeholder="114.3"
+                                              value={sp._od_medido || ''}
+                                              onChange={e => {
+                                                const spools = ln.spools.map((s,i) => i===spIdx ? {...s, _od_medido:e.target.value} : s)
+                                                setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                              }}
+                                              style={{ display:'block', width:70, fontSize:11, marginTop:2 }} />
+                                          </label>
+                                          <label style={{ fontWeight:600, color:'#166534' }}>
+                                            t medido (mm)
+                                            <input type="number" placeholder="6.7"
+                                              value={sp._t_medido || ''}
+                                              onChange={e => {
+                                                const spools = ln.spools.map((s,i) => i===spIdx ? {...s, _t_medido:e.target.value} : s)
+                                                setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                              }}
+                                              style={{ display:'block', width:70, fontSize:11, marginTop:2 }} />
+                                          </label>
+                                        </div>
+                                        {/* Resultado del cálculo */}
+                                        {(() => {
+                                          const od = parseFloat(sp._od_medido)
+                                          const t  = parseFloat(sp._t_medido)
+                                          if (!od || !t || t <= 0) return null
+                                          const sdrCalc = od / t
+                                          // Buscar SDR estándar más cercano
+                                          const SDR_ESTANDAR = [7.3, 9, 11, 13.6, 17, 21, 26, 32.5, 41]
+                                          const nearest = SDR_ESTANDAR.reduce((a, b) =>
+                                            Math.abs(b - sdrCalc) < Math.abs(a - sdrCalc) ? b : a)
+                                          const sdrStr = `SDR ${nearest}`
+                                          const match = Math.abs(nearest - sdrCalc) < 1.5
+                                          return (
+                                            <div style={{ background:'#DCFCE7', border:'1px solid #4ADE80',
+                                              borderRadius:5, padding:'5px 8px' }}>
+                                              <div style={{ fontWeight:700, color:'#166534' }}>
+                                                SDR calculado = {sdrCalc.toFixed(1)}
+                                              </div>
+                                              <div style={{ color: match ? '#15803D' : '#B45309', fontSize:10, marginBottom:4 }}>
+                                                {match
+                                                  ? `✅ Corresponde a ${sdrStr} (ASTM F714)`
+                                                  : `⚠️ No coincide exactamente con ningún SDR estándar — más cercano: ${sdrStr}`}
+                                              </div>
+                                              {match && (
+                                                <button onClick={() => {
+                                                  const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:sdrStr} : s)
+                                                  setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                                }} style={{ fontSize:10, padding:'2px 8px', background:'#15803D',
+                                                  border:'none', borderRadius:4, color:'#fff', cursor:'pointer' }}>
+                                                  ✔ Usar {sdrStr}
+                                                </button>
+                                              )}
+                                            </div>
+                                          )
+                                        })()}
+                                      </div>
+                                    </details>
+                                  </div>
                                 ) : (
                                   <select value={sp.schedule}
                                     onChange={e => {
