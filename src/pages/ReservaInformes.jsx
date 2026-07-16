@@ -222,9 +222,12 @@ export default function ReservaInformes() {
       .then(({ data }) => {
         const eqs = (data || []).map(inf => {
           const de = inf.datos_equipo || {}
-          const tag = de.tag || de.numero_tag || de.nombre || `${inf.tipo_equipo}-${String(inf.id).slice(0,4)}`
-          const lineas = de.lineas || []
-          return { id: inf.id, tipo: inf.tipo_equipo, tag, lineas }
+          const lineas   = de.lineas || []
+          const elementos = de.elementos_izaje || []
+          const tag = inf.tipo_equipo === 'IZAJE'
+            ? (de.equipos_izaje_adicionales?.[0]?.tipo_equipo_izaje || `Izaje-${String(inf.id).slice(0,4)}`)
+            : (de.tag || de.numero_tag || de.nombre || `${inf.tipo_equipo}-${String(inf.id).slice(0,4)}`)
+          return { id: inf.id, tipo: inf.tipo_equipo, tag, lineas, elementos }
         })
         setEquiposOT(eqs)
         const cfg = {}
@@ -236,6 +239,17 @@ export default function ReservaInformes() {
       })
   }, [otDesdeOT, otsDisponibles])
 
+  // ── helper familia IZAJE ─────────────────────────────────────
+  function getFamIzaje(tipo) {
+    const hw = ['Grillete','Grillete conector','Cáncamo Giratorio','Cáncamo Fijo','Gancho']
+    const es = ['Eslinga Plana','Eslinga cadena','Eslinga cable de acero','Eslinga textil']
+    const gr = ['Grúa Puente','Grúa Pórtico','Grúa Horquilla','Grúa Articulada','Grúa Móvil','Aparejo diferencial']
+    if (hw.includes(tipo)) return 'Accesorios'
+    if (es.includes(tipo)) return 'Eslingas'
+    if (gr.includes(tipo)) return 'Equipos mayores'
+    return 'Otros'
+  }
+
   // ── calcular propuestas de informes ─────────────────────────
   function calcularPropuestas() {
     const props = []
@@ -244,6 +258,28 @@ export default function ReservaInformes() {
       if (cfg.incluir === false) continue
       if (eq.tipo === 'TK') {
         props.push({ descripcion: `Inspección Tanque · ${eq.tag}` })
+      } else if (eq.tipo === 'IZAJE') {
+        const g        = cfg.granularidad || 'todos'
+        const elementos = eq.elementos || []
+        if (g === 'todos') {
+          props.push({ descripcion: `Inspección Izaje · ${eq.tag}` })
+        } else if (g === 'familia') {
+          const fams = {}
+          elementos.forEach(el => {
+            const f = getFamIzaje(el.tipo)
+            if (!fams[f]) fams[f] = 0
+            fams[f]++
+          })
+          const keys = Object.keys(fams)
+          if (keys.length === 0) props.push({ descripcion: `Inspección Izaje · ${eq.tag}` })
+          else keys.forEach(f => props.push({ descripcion: `Inspección Izaje · ${f} (${fams[f]} ud${fams[f]!==1?'s':''})` }))
+        } else if (g === 'separar') {
+          const aptos = elementos.filter(el => el.resultado === 'CUMPLE')
+          const obs   = elementos.filter(el => el.resultado !== 'CUMPLE')
+          if (aptos.length > 0) props.push({ descripcion: `Certificado Izaje · ${aptos.length} elemento${aptos.length!==1?'s':''} aptos` })
+          if (obs.length > 0)   props.push({ descripcion: `Informe Izaje · ${obs.length} elemento${obs.length!==1?'s':''} observados` })
+          if (aptos.length === 0 && obs.length === 0) props.push({ descripcion: `Inspección Izaje · ${eq.tag}` })
+        }
       } else if (eq.tipo === 'TUBERIA') {
         const lineas = eq.lineas || []
         const g = cfg.granularidad || 'todas'
@@ -423,6 +459,21 @@ export default function ReservaInformes() {
                           const cfg = configEq[eq.id] || {}
                           const propCount = (() => {
                             if (!cfg.incluir) return 0
+                            if (eq.tipo === 'IZAJE') {
+                              const g = cfg.granularidad || 'todos'
+                              const els = eq.elementos || []
+                              if (g === 'todos') return 1
+                              if (g === 'familia') {
+                                const fams = new Set(els.map(el => getFamIzaje(el.tipo)))
+                                return Math.max(fams.size, 1)
+                              }
+                              if (g === 'separar') {
+                                const a = els.filter(el => el.resultado === 'CUMPLE').length
+                                const o = els.filter(el => el.resultado !== 'CUMPLE').length
+                                return Math.max((a>0?1:0)+(o>0?1:0), 1)
+                              }
+                              return 1
+                            }
                             if (eq.tipo !== 'TUBERIA') return 1
                             const lineas = eq.lineas || []; const g = cfg.granularidad || 'todas'
                             if (g === 'todas') return 1
@@ -463,6 +514,58 @@ export default function ReservaInformes() {
                                   </span>
                                 )}
                               </div>
+
+                              {/* Opciones granularidad IZAJE */}
+                              {eq.tipo === 'IZAJE' && cfg.incluir !== false && (
+                                <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid #EDE9FE' }}>
+                                  <div style={{ fontSize:11, fontWeight:700, color:'#5B21B6', marginBottom:8 }}>
+                                    ¿Cómo emitir los documentos?
+                                  </div>
+                                  {(() => {
+                                    const els = eq.elementos || []
+                                    const aptos = els.filter(e => e.resultado === 'CUMPLE').length
+                                    const obs   = els.filter(e => e.resultado !== 'CUMPLE').length
+                                    const fams  = new Set(els.map(e => getFamIzaje(e.tipo))).size
+                                    return (
+                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6 }}>
+                                        {[
+                                          { val:'todos',   label:'Un documento por todo', desc:`→ 1 DII · ${els.length} elemento${els.length!==1?'s':''}` },
+                                          { val:'familia', label:'Por familia de elemento', desc:`→ ${Math.max(fams,1)} DII · accesorios / eslingas / grúas` },
+                                          { val:'separar', label:'Separar aptos de observados', desc:`→ ${(aptos>0?1:0)+(obs>0?1:0)||1} DII · cert. + informe` },
+                                        ].map(opt => (
+                                          <label key={opt.val} style={{ display:'flex', alignItems:'flex-start', gap:8,
+                                            cursor:'pointer', padding:'8px 10px', borderRadius:8,
+                                            border: cfg.granularidad===opt.val ? '1.5px solid #7C3AED' : '1.5px solid var(--borde)',
+                                            background: cfg.granularidad===opt.val ? '#F5F3FF' : '#fff' }}>
+                                            <input type="radio" name={`gran-${eq.id}`} value={opt.val}
+                                              checked={cfg.granularidad===opt.val}
+                                              onChange={() => setConfigEq(c => ({...c,[eq.id]:{...(c[eq.id]||{}),granularidad:opt.val}}))}
+                                              style={{ marginTop:2, accentColor:'#7C3AED' }} />
+                                            <div>
+                                              <div style={{ fontSize:12, fontWeight:600, color:'#4C1D95' }}>{opt.label}</div>
+                                              <div style={{ fontSize:10, color:'var(--gris)' }}>{opt.desc}</div>
+                                            </div>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )
+                                  })()}
+                                  {/* Info de resultados actuales */}
+                                  {(eq.elementos||[]).length > 0 && (
+                                    <div style={{ marginTop:8, display:'flex', gap:12, fontSize:11 }}>
+                                      <span style={{ color:'#065F46', fontWeight:600 }}>
+                                        ✓ {(eq.elementos||[]).filter(e=>e.resultado==='CUMPLE').length} aptos
+                                      </span>
+                                      <span style={{ color:'#991B1B', fontWeight:600 }}>
+                                        ✗ {(eq.elementos||[]).filter(e=>e.resultado!=='CUMPLE'&&e.resultado).length} observados
+                                      </span>
+                                      <span style={{ color:'#64748B' }}>
+                                        {(eq.elementos||[]).filter(e=>!e.resultado).length} sin evaluar
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Opciones granularidad TUBERIA */}
                               {eq.tipo === 'TUBERIA' && cfg.incluir !== false && (
