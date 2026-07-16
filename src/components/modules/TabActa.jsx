@@ -558,10 +558,9 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
 
       let insErr = null
       for (let intento = 0; intento < 5; intento++) {
-        const codigo_acta = `D-${numero_acta}`
         const { error: e } = await supabase.from('actas_terreno').insert({
           numero_acta,
-          codigo_acta,
+          codigo_acta:        `D-${numero_acta}`,
           ot_numero:          ot.ot_numero,
           solicitante:        ot.cliente || '',
           sede_wss:           sede,
@@ -578,7 +577,7 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
       }
       if (insErr) throw insErr
 
-      onGuardada(codigo_acta)
+      onGuardada(`D-${numero_acta}`)
     } catch (e) {
       setError(e.message || 'Error al subir el acta')
     } finally {
