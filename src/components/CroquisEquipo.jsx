@@ -30,87 +30,85 @@ export function CroquisGancho({ data = {}, onChange }) {
       <div style={S.title}>Control Dimensional — Gancho (ASME B30.10)</div>
       <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
 
-        {/* SVG gancho — silueta cerrada tipo dibujo técnico */}
-        <div style={{ flex:'0 0 210px' }}>
-          <svg viewBox="0 0 210 265" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:210 }}>
+        {/* SVG gancho — arco abierto v4 */}
+        <div style={{ flex:'0 0 215px' }}>
+          <svg viewBox="0 0 226 276" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:215 }}>
 
-            {/* ── Vástago con rosca ── */}
-            <rect x="84" y="8" width="32" height="52" fill="#CBD5E1" stroke="#475569" strokeWidth="1.5"/>
-            {[14,20,26,32,38,44,50].map(y => (
-              <line key={y} x1="84" y1={y} x2="116" y2={y} stroke="#94A3B8" strokeWidth="0.8"/>
+            {/*
+              TÉCNICA: el cuerpo del gancho es un ARCO ABIERTO con trazo grueso.
+              Centro del círculo: (100, 140), radio 70.
+              Hombro (inicio): (112, 71)  — ángulo ≈ -80°
+              Punta  (fin):    ( 34, 116) — ángulo ≈ -160°
+              Barrido: 280° horario (large-arc=1, sweep=1)
+              Boca visible: los ~80° restantes entre punta y hombro.
+            */}
+
+            {/* ── CUERPO DEL GANCHO: tres capas de trazo ── */}
+            {/* 1) Borde exterior oscuro */}
+            <path d="M 112,71 A 70,70 0 1 1 34,116"
+              fill="none" stroke="#2D3E4E" strokeWidth="30" strokeLinecap="round"/>
+            {/* 2) Cuerpo principal (acero azul-gris) */}
+            <path d="M 112,71 A 70,70 0 1 1 34,116"
+              fill="none" stroke="#8AABBE" strokeWidth="25" strokeLinecap="round"/>
+            {/* 3) Resalte interior (da sensación cilíndrica) */}
+            <path d="M 110,74 A 63,63 0 1 1 38,112"
+              fill="none" stroke="#C4D4E0" strokeWidth="11" strokeLinecap="round"/>
+
+            {/* ── PESTILLO DE SEGURIDAD ── */}
+            {/* Cruza la boca desde la punta hasta el collar */}
+            <path d="M 34,116 Q 52,94 74,80"
+              fill="none" stroke="#2D3E4E" strokeWidth="7" strokeLinecap="round"/>
+            <path d="M 34,116 Q 52,94 74,80"
+              fill="none" stroke="#7A9BB0" strokeWidth="3.5" strokeLinecap="round"/>
+
+            {/* ── COLLAR / TUERCA (cubre el hombro del arco) ── */}
+            <rect x="74" y="62" width="52" height="14" rx="2" fill="#516070" stroke="#2D3E4E" strokeWidth="1.5"/>
+            <line x1="74" y1="66.5" x2="126" y2="66.5" stroke="#334155" strokeWidth="0.8"/>
+            <line x1="74" y1="71.5" x2="126" y2="71.5" stroke="#334155" strokeWidth="0.8"/>
+
+            {/* ── VÁSTAGO con rosca (encima del collar) ── */}
+            <rect x="86" y="8" width="28" height="56" fill="#8AABBE" stroke="#2D3E4E" strokeWidth="1.5"/>
+            {[14,20,26,32,38,44,50,56].map(y => (
+              <line key={y} x1="86" y1={y} x2="114" y2={y} stroke="#6A8BA0" strokeWidth="0.9"/>
             ))}
+            {/* Sombra derecha (volumen 3D) */}
+            <rect x="108" y="8" width="6" height="56" fill="#6A8BA0" stroke="none"/>
 
-            {/* ── Tuerca/collar ── */}
-            <rect x="76" y="58" width="48" height="13" rx="2" fill="#64748B" stroke="#334155" strokeWidth="1.5"/>
+            {/* ══ COTAS ══ */}
 
-            {/* ── Cuerpo del gancho: path cerrado con fillRule evenodd ──
-                Outer: contorno exterior del cuerpo
-                Inner: hueco interior (garganta) — la resta crea la abertura
-            ── */}
-            <path
-              fillRule="evenodd"
-              fill="#B8C5D6"
-              stroke="#334155"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              d={[
-                /* OUTER — sentido horario */
-                'M 84,71 L 116,71',
-                'C 142,71 163,93 163,124',
-                'C 163,158 141,186 110,193',
-                'C 79,200 50,182 44,153',
-                'C 38,124 56,100 82,93',
-                'C 83,90 84,82 84,71 Z',
-                /* INNER — sentido antihorario (garganta) */
-                'M 82,100',
-                'C 62,107 55,124 55,140',
-                'C 55,160 69,175 88,178',
-                'C 107,181 124,167 124,148',
-                'L 113,145',
-                'C 112,160 102,170 88,167',
-                'C 74,164 65,152 65,138',
-                'C 65,122 76,108 82,108 Z',
-              ].join(' ')}
-            />
+            {/* A: Abertura de garganta — ancho interior del arco en y=140 */}
+            {/* Pared int. izq.: x≈43  |  Pared int. der.: x≈157 */}
+            <line x1="43" y1="140" x2="157" y2="140"
+              stroke="#DC2626" strokeWidth="1.5" strokeDasharray="5,3"/>
+            <line x1="43"  y1="136" x2="43"  y2="144" stroke="#DC2626" strokeWidth="2"/>
+            <line x1="157" y1="136" x2="157" y2="144" stroke="#DC2626" strokeWidth="2"/>
+            <line x1="18"  y1="140" x2="43"  y2="140" stroke="#DC2626" strokeWidth="1"/>
+            <circle cx="12" cy="140" r="11" fill="#DC2626"/>
+            <text x="12" y="145" fill="#fff" fontSize="13" fontWeight="bold" textAnchor="middle">A</text>
 
-            {/* ── Sombra/profundidad lateral del cuerpo ── */}
-            <path
-              d="M 116,71 C 140,71 161,91 162,120 C 163,150 148,178 122,188 L 110,193 C 141,186 163,158 163,124 C 163,93 142,71 116,71 Z"
-              fill="#9FB0C4" stroke="none"
-            />
+            {/* B: Altura desde collar bottom (y=76) hasta borde ext. inferior del arco (y=222) */}
+            <line x1="192" y1="76" x2="192" y2="222"
+              stroke="#2563EB" strokeWidth="1.5" strokeDasharray="5,3"/>
+            <line x1="187" y1="76"  x2="197" y2="76"  stroke="#2563EB" strokeWidth="2"/>
+            <line x1="187" y1="222" x2="197" y2="222" stroke="#2563EB" strokeWidth="2"/>
+            {/* Guías desde el cuerpo */}
+            <line x1="126" y1="76"  x2="192" y2="76"  stroke="#2563EB" strokeWidth="0.6" strokeDasharray="2,5"/>
+            <line x1="100" y1="222" x2="192" y2="222" stroke="#2563EB" strokeWidth="0.6" strokeDasharray="2,5"/>
+            <line x1="192" y1="149" x2="204" y2="149" stroke="#2563EB" strokeWidth="1"/>
+            <circle cx="210" cy="149" r="11" fill="#2563EB"/>
+            <text x="210" y="154" fill="#fff" fontSize="13" fontWeight="bold" textAnchor="middle">B</text>
 
-            {/* ── Pestillo de seguridad ── */}
-            <path d="M 82,100 Q 60,108 54,128 Q 50,145 62,154"
-              fill="none" stroke="#334155" strokeWidth="5" strokeLinecap="round"/>
-            <path d="M 82,100 Q 60,108 54,128 Q 50,145 62,154"
-              fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round"/>
-
-            {/* ── Cota A: Abertura de garganta ── */}
-            <line x1="55" y1="140" x2="113" y2="140" stroke="#DC2626" strokeWidth="1.5" strokeDasharray="4,2"/>
-            <line x1="55" y1="136" x2="55" y2="144" stroke="#DC2626" strokeWidth="1.5"/>
-            <line x1="113" y1="136" x2="113" y2="144" stroke="#DC2626" strokeWidth="1.5"/>
-            <circle cx="30" cy="140" r="10" fill="#DC2626"/>
-            <text x="30" y="145" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">A</text>
-            <line x1="40" y1="140" x2="55" y2="140" stroke="#DC2626" strokeWidth="1"/>
-
-            {/* ── Cota B: Altura de base (cuerpo del gancho) ── */}
-            <line x1="173" y1="71" x2="173" y2="193" stroke="#2563EB" strokeWidth="1.5" strokeDasharray="4,2"/>
-            <line x1="169" y1="71" x2="177" y2="71" stroke="#2563EB" strokeWidth="1.5"/>
-            <line x1="169" y1="193" x2="177" y2="193" stroke="#2563EB" strokeWidth="1.5"/>
-            <circle cx="193" cy="132" r="10" fill="#2563EB"/>
-            <text x="193" y="137" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">B</text>
-            <line x1="173" y1="132" x2="183" y2="132" stroke="#2563EB" strokeWidth="1"/>
-
-            {/* ── Cota C: Ancho de base (collar) ── */}
-            <line x1="76" y1="225" x2="124" y2="225" stroke="#059669" strokeWidth="1.5" strokeDasharray="4,2"/>
-            <line x1="76" y1="221" x2="76" y2="229" stroke="#059669" strokeWidth="1.5"/>
-            <line x1="124" y1="221" x2="124" y2="229" stroke="#059669" strokeWidth="1.5"/>
-            {/* guías verticales del collar hasta cota C */}
-            <line x1="76" y1="71" x2="76" y2="222" stroke="#059669" strokeWidth="0.7" strokeDasharray="2,4"/>
-            <line x1="124" y1="71" x2="124" y2="222" stroke="#059669" strokeWidth="0.7" strokeDasharray="2,4"/>
-            <circle cx="100" cy="244" r="10" fill="#059669"/>
-            <text x="100" y="249" fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle">C</text>
-            <line x1="100" y1="225" x2="100" y2="234" stroke="#059669" strokeWidth="1"/>
+            {/* C: Ancho del collar (x=74 a x=126) */}
+            <line x1="74"  y1="248" x2="126" y2="248"
+              stroke="#059669" strokeWidth="1.5" strokeDasharray="5,3"/>
+            <line x1="74"  y1="243" x2="74"  y2="253" stroke="#059669" strokeWidth="2"/>
+            <line x1="126" y1="243" x2="126" y2="253" stroke="#059669" strokeWidth="2"/>
+            {/* Guías verticales desde el collar */}
+            <line x1="74"  y1="76" x2="74"  y2="245" stroke="#059669" strokeWidth="0.6" strokeDasharray="2,5"/>
+            <line x1="126" y1="76" x2="126" y2="245" stroke="#059669" strokeWidth="0.6" strokeDasharray="2,5"/>
+            <line x1="100" y1="248" x2="100" y2="252" stroke="#059669" strokeWidth="1"/>
+            <circle cx="100" cy="262" r="11" fill="#059669"/>
+            <text x="100" y="267" fill="#fff" fontSize="13" fontWeight="bold" textAnchor="middle">C</text>
           </svg>
           <p style={S.nota}>Referencia: ASME B30.10</p>
         </div>
@@ -401,46 +399,74 @@ export function CroquisTuberia({ data = {}, onChange }) {
       <div style={S.title}>Medición de Espesores — Tubería (UT Pulso-Eco)</div>
       <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
 
-        {/* SVG Isométrico tubería */}
+        {/* SVG tubería — croquis técnico v3 */}
         <div style={{ flex:'0 0 200px' }}>
-          <svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:200 }}>
-            {/* Tramo horizontal izquierdo */}
-            <rect x="10" y="88" width="70" height="24" rx="3" fill="#D1FAE5" stroke="#047857" strokeWidth="2"/>
-            {/* Codo superior */}
-            <path d="M 80 100 Q 100 100 100 80" fill="none" stroke="#047857" strokeWidth="24" strokeLinecap="round"/>
-            <path d="M 80 100 Q 100 100 100 80" fill="none" stroke="#D1FAE5" strokeWidth="18" strokeLinecap="round"/>
-            {/* Tramo vertical */}
-            <rect x="88" y="20" width="24" height="62" rx="3" fill="#D1FAE5" stroke="#047857" strokeWidth="2"/>
-            {/* Codo inferior */}
-            <path d="M 80 100 Q 100 100 100 120" fill="none" stroke="#047857" strokeWidth="24" strokeLinecap="round"/>
-            <path d="M 80 100 Q 100 100 100 120" fill="none" stroke="#D1FAE5" strokeWidth="18" strokeLinecap="round"/>
-            {/* Tramo horizontal derecho */}
-            <rect x="100" y="108" width="88" height="24" rx="3" fill="#D1FAE5" stroke="#047857" strokeWidth="2"/>
+          <svg viewBox="0 0 195 215" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:200 }}>
 
-            {/* Puntos de medición */}
-            {/* P1 en tramo recto izquierdo */}
-            <circle cx="40" cy="100" r="8" fill="#047857"/>
-            <text x="40" y="104" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P1</text>
-            {/* P2 en codo extradós */}
-            <circle cx="78" cy="78" r="8" fill="#059669"/>
-            <text x="78" y="82" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P2</text>
-            {/* P3 en codo intradós */}
-            <circle cx="100" cy="100" r="8" fill="#10B981"/>
-            <text x="100" y="104" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P3</text>
-            {/* P4 en tramo recto derecho */}
-            <circle cx="150" cy="120" r="8" fill="#047857"/>
-            <text x="150" y="124" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P4</text>
+            {/*
+              TÉCNICA: tuberías como trazo grueso, paleta gris acero.
+              Tramo horizontal: y=120, de x=12 a x=83
+              Codo 90°: arco radio=37, centro (120,120), de (83,120) a (120,83)
+              Tramo vertical: x=120, de y=83 a y=18
+            */}
 
-            {/* Flechas de flujo */}
-            <path d="M 22 97 L 30 100 L 22 103" fill="#047857"/>
-            <path d="M 110 107 L 118 120 L 113 117" fill="#047857"/>
-            <text x="20" y="150" fill="#047857" fontSize="10" fontWeight="bold">→ Flujo</text>
+            {/* ── BORDE EXTERIOR (sombra) ── */}
+            <line x1="12" y1="120" x2="83" y2="120"
+              fill="none" stroke="#1E293B" strokeWidth="26" strokeLinecap="square"/>
+            <path d="M 83,120 A 37,37 0 0 1 120,83"
+              fill="none" stroke="#1E293B" strokeWidth="26" strokeLinecap="round"/>
+            <line x1="120" y1="83" x2="120" y2="18"
+              fill="none" stroke="#1E293B" strokeWidth="26" strokeLinecap="square"/>
 
-            {/* Leyenda */}
-            <text x="10" y="175" fill="#475569" fontSize="9">Medir en:</text>
-            <text x="10" y="187" fill="#475569" fontSize="9">· Tramos rectos</text>
-            <text x="10" y="199" fill="#475569" fontSize="9">· Extradós e intradós</text>
-            <text x="10" y="211" fill="#475569" fontSize="9">· Tees y reducciones</text>
+            {/* ── CUERPO DE LA TUBERÍA (gris acero) ── */}
+            <line x1="12" y1="120" x2="83" y2="120"
+              fill="none" stroke="#64748B" strokeWidth="22" strokeLinecap="square"/>
+            <path d="M 83,120 A 37,37 0 0 1 120,83"
+              fill="none" stroke="#64748B" strokeWidth="22" strokeLinecap="round"/>
+            <line x1="120" y1="83" x2="120" y2="18"
+              fill="none" stroke="#64748B" strokeWidth="22" strokeLinecap="square"/>
+
+            {/* ── RESALTE SUPERIOR/LATERAL (efecto cilindro) ── */}
+            <line x1="12" y1="112" x2="83" y2="112"
+              fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="square" opacity="0.75"/>
+            <path d="M 83,112 A 29,29 0 0 1 112,83"
+              fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="round" opacity="0.75"/>
+            <line x1="112" y1="83" x2="112" y2="18"
+              fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="square" opacity="0.75"/>
+
+            {/* ── TAPAS (sección transversal en los extremos) ── */}
+            {/* Tapa izquierda */}
+            <ellipse cx="12" cy="120" rx="5" ry="11" fill="#94A3B8" stroke="#1E293B" strokeWidth="1.5"/>
+            {/* Tapa superior */}
+            <ellipse cx="120" cy="18" rx="11" ry="5" fill="#94A3B8" stroke="#1E293B" strokeWidth="1.5"/>
+
+            {/* ── PUNTOS DE MEDICIÓN ── */}
+            {/* P1: Tramo horizontal */}
+            <circle cx="45" cy="120" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
+            <text x="45" y="124" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P1</text>
+
+            {/* P2: Extradós del codo */}
+            <circle cx="86" cy="99" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
+            <text x="86" y="103" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P2</text>
+
+            {/* P3: Intradós del codo */}
+            <circle cx="107" cy="116" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
+            <text x="107" y="120" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P3</text>
+
+            {/* P4: Tramo vertical */}
+            <circle cx="120" cy="52" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
+            <text x="120" y="56" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P4</text>
+
+            {/* ── FLECHAS DE FLUJO ── */}
+            <polygon points="22,117 31,120 22,123" fill="#CBD5E1" opacity="0.9"/>
+            <polygon points="117,31 120,22 123,31" fill="#CBD5E1" opacity="0.9"/>
+
+            {/* ── LEYENDA ── */}
+            <text x="8" y="150" fill="#475569" fontSize="10" fontWeight="700">Flujo →</text>
+            <text x="8" y="164" fill="#64748B" fontSize="9">P1: Tramo recto</text>
+            <text x="8" y="176" fill="#64748B" fontSize="9">P2: Extradós codo</text>
+            <text x="8" y="188" fill="#64748B" fontSize="9">P3: Intradós codo</text>
+            <text x="8" y="200" fill="#64748B" fontSize="9">P4: Tramo vertical</text>
           </svg>
           <p style={S.nota}>Puntos según API 570<br/>Unidades en mm</p>
         </div>
