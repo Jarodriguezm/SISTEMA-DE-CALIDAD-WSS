@@ -325,6 +325,124 @@ function getTkChecklistKey(material, tipoInspeccion) {
   return `${material}-externo`   // preoperacional, externa_5, cert_ds43, retorno_servicio
 }
 
+// ── Configuración inspección TUBERÍA ─────────────────────────────────────────
+
+const TUB_TIPOS_INSPECCION = [
+  { id:'preoperacional',   icon:'🆕', label:'Pre-operacional / Nueva instalación', sub:'ASME B31.3 · API 570 · DS 43' },
+  { id:'ut_espesores',     icon:'📏', label:'Medición de espesores (UT)',           sub:'API 570 · ASME V Art. 5' },
+  { id:'lp',               icon:'🔵', label:'Líquidos Penetrantes (LP)',            sub:'ASTM E165 · ASME V Art. 6' },
+  { id:'pm',               icon:'🔴', label:'Partículas Magnéticas (PM)',           sub:'ASTM E709 · ASME V Art. 7' },
+  { id:'ph',               icon:'💧', label:'Prueba Hidrostática (PH)',             sub:'ASME B31.3 Párr.345 · API 570' },
+  { id:'contingencia',     icon:'⚠️', label:'Por demanda / Contingencia',          sub:'API 570 · API 579-1/FFS' },
+  { id:'post_reparacion',  icon:'🔧', label:'Post-reparación',                     sub:'API 570 · ASME V' },
+  { id:'retorno_servicio', icon:'▶️', label:'Retorno al servicio',                 sub:'API 570' },
+  { id:'integral',         icon:'🔬', label:'Inspección integral (múltiples END)', sub:'API 570 · ASME B31.3' },
+]
+
+const TUB_NORMAS_POR_TIPO = {
+  preoperacional:   'ASME B31.3 (Ed. 2022) · API 570 (Ed. 4, 2016) · ASME V (Ed. 2021) · DS 43/2015',
+  ut_espesores:     'API 570 (Ed. 4, 2016) · ASME V Art. 5 (Ed. 2021) · ASME B31.3 (Ed. 2022)',
+  lp:               'ASTM E165 (Ed. 2018) · ASTM E1417 (Ed. 2021) · ASME V Art. 6 (Ed. 2021)',
+  pm:               'ASTM E709 (Ed. 2021) · ASTM E1444 (Ed. 2016) · ASME V Art. 7 (Ed. 2021)',
+  ph:               'ASME B31.3 Párr. 345 (Ed. 2022) · API 570 (Ed. 4, 2016) · DS 43/2015',
+  contingencia:     'API 570 (Ed. 4, 2016) · API 579-1/ASME FFS-1 (Ed. 2016) · DS 43/2015',
+  post_reparacion:  'API 570 (Ed. 4, 2016) · ASME V (Ed. 2021) · AWS D1.1 (Ed. 2020)',
+  retorno_servicio: 'API 570 (Ed. 4, 2016) · ASME B31.3 (Ed. 2022)',
+  integral:         'API 570 (Ed. 4, 2016) · ASME B31.3 (Ed. 2022) · ASME V (Ed. 2021)',
+}
+
+const TUB_CHECKLIST = {
+  preoperacional: [
+    { id:'cert_mat',      label:'Certificados de material (MTR) disponibles' },
+    { id:'wps_pqr',       label:'WPS / PQR aplicable disponible' },
+    { id:'vt_sold',       label:'VT soldaduras circunferenciales' },
+    { id:'dimensional',   label:'Verificación dimensional (DN, espesor, longitud)' },
+    { id:'soporteria',    label:'Estado de soportería y fijaciones' },
+    { id:'accesorios',    label:'Estado accesorios (válvulas, bridas, juntas)' },
+    { id:'revestimiento', label:'Estado revestimiento / pintura / aislación' },
+    { id:'prueba_presion',label:'Prueba de presión realizada' },
+  ],
+  ut_espesores: [
+    { id:'rectas',        label:'Medición en tramos rectos' },
+    { id:'codos',         label:'Medición en codos (extradós / intradós)' },
+    { id:'tees',          label:'Medición en tees y ramales' },
+    { id:'reducciones',   label:'Medición en reducciones' },
+    { id:'zonas_crit',    label:'Zonas de corrosión preferencial identificadas' },
+    { id:'cui',           label:'Inspección bajo aislación (CUI) — si aplica' },
+  ],
+  lp: [
+    { id:'limpieza',      label:'Limpieza superficial previa (grado requerido)' },
+    { id:'penetrante',    label:'Aplicación penetrante (tiempo penetración cumplido)' },
+    { id:'remocion',      label:'Remoción exceso penetrante correcta' },
+    { id:'revelador',     label:'Aplicación revelador correcta' },
+    { id:'interpretacion',label:'Interpretación y evaluación de indicaciones' },
+    { id:'documentacion', label:'Discontinuidades documentadas y ubicadas' },
+  ],
+  pm: [
+    { id:'material_ferr', label:'Confirmado material ferromagnético' },
+    { id:'calibracion',   label:'Calibración yoquillo / bobina verificada' },
+    { id:'campo_long',    label:'Campo longitudinal aplicado' },
+    { id:'campo_circ',    label:'Campo circular aplicado' },
+    { id:'interpretacion',label:'Interpretación y evaluación de indicaciones' },
+    { id:'documentacion', label:'Discontinuidades documentadas y ubicadas' },
+  ],
+  ph: [
+    { id:'aislamiento',   label:'Aislamiento de sistemas adyacentes completado' },
+    { id:'instrumentos',  label:'Manómetros calibrados y verificados' },
+    { id:'presion_ok',    label:'Presión de prueba = 1.5 × Pdiseño confirmada' },
+    { id:'llenado',       label:'Llenado completo (sin vacíos de aire)' },
+    { id:'sostenida',     label:'Presión sostenida durante tiempo requerido' },
+    { id:'sin_fugas',     label:'Sin fugas en juntas / soldaduras / accesorios' },
+    { id:'despresurizado',label:'Despresurización controlada completada' },
+  ],
+  contingencia: [
+    { id:'zona_id',       label:'Zona afectada identificada y delimitada' },
+    { id:'dano_fuga',     label:'Tipo daño — Fuga / Filtración' },
+    { id:'dano_fisura',   label:'Tipo daño — Fisura / Grieta' },
+    { id:'dano_corr',     label:'Tipo daño — Corrosión acelerada / perforación' },
+    { id:'dano_deform',   label:'Tipo daño — Deformación / Impacto' },
+    { id:'ut_zona',       label:'UT en zona afectada' },
+    { id:'lp_pm_zona',    label:'LP / PM en zona afectada (si aplica)' },
+    { id:'ffs',           label:'Evaluación aptitud servicio (API 579-1 / FFS)' },
+    { id:'propagacion',   label:'Evaluación riesgo de propagación' },
+    { id:'apto',          label:'Apto para continuar operación' },
+  ],
+  post_reparacion: [
+    { id:'tipo_rep',      label:'Tipo reparación (sleeve / parche / reemplazo spool)' },
+    { id:'wps_pqr',       label:'WPS / PQR de reparación disponible' },
+    { id:'vt_rep',        label:'VT soldaduras de reparación' },
+    { id:'lp_pm_rep',     label:'LP / PM soldaduras reparación' },
+    { id:'ut_zona',       label:'UT zona reparada (verificación espesor)' },
+    { id:'hermeticidad',  label:'Prueba de hermeticidad zona reparada' },
+    { id:'revestimiento', label:'Revestimiento post-reparación aplicado' },
+    { id:'apto',          label:'Zona reparada apta para retornar al servicio' },
+  ],
+  retorno_servicio: [
+    { id:'tiempo_fuera',  label:'Tiempo fuera de servicio documentado' },
+    { id:'vt_general',    label:'Inspección visual general' },
+    { id:'ut_criticos',   label:'UT en puntos críticos / zonas corrosión conocida' },
+    { id:'soporteria',    label:'Estado de soportería' },
+    { id:'valvulas',      label:'Estado válvulas y accesorios' },
+    { id:'purga',         label:'Purga / limpieza antes de retornar' },
+    { id:'apto',          label:'Apto para retornar al servicio' },
+  ],
+  integral: [
+    { id:'iv',            label:'Inspección Visual (IV)' },
+    { id:'ut_esp',        label:'Medición de espesores UT' },
+    { id:'lp_sold',       label:'LP en soldaduras' },
+    { id:'pm_sold',       label:'PM en soldaduras (si aplica)' },
+    { id:'soporteria',    label:'Estado de soportería' },
+    { id:'valvulas',      label:'Estado válvulas y accesorios' },
+    { id:'revestimiento', label:'Estado revestimiento / pintura' },
+    { id:'cui',           label:'Inspección CUI (si aplica)' },
+    { id:'evaluacion',    label:'Evaluación general del sistema' },
+  ],
+}
+
+const DN_OPCIONES = ['1/2"','3/4"','1"','1¼"','1½"','2"','2½"','3"','4"','6"','8"','10"','12"','14"','16"','18"','20"','24"','30"','36"']
+const SCHEDULE_OPCIONES = ['Sch 5','Sch 10','Sch 20','Sch 40','Sch 80','Sch 120','Sch 160','STD','XS','XXS','XH','XXH']
+const SPOOL_MATERIALES = ['Acero Carbono A106-B','Acero Carbono A53','Acero Inox. 304 (A312)','Acero Inox. 316L (A312)','Acero Inox. 321 (A312)','Duplex 2205','HDPE','PVC','CPVC','Cobre','Aleación de Níquel','Otro']
+
 // ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
 
 function MultiSelect({ value, onChange, options, placeholder }) {
@@ -480,6 +598,29 @@ export default function NuevoInforme() {
   }
   function addTanque() { setTanques(prev => [...prev, initTanque()]) }
   function removeTanque(idx) { setTanques(prev => prev.filter((_, i) => i !== idx)) }
+
+  // ── Estado inspección TUBERÍA (múltiples líneas) ──────────────────────────
+  const initSpool = () => ({ id_spool:'', dn:'', schedule:'', material:'', longitud_m:'', ubicacion:'', estado:'' })
+  const initLinea = () => ({
+    tag:            '',
+    pid:            '',
+    fluido:         '',
+    temp_op:        '',
+    presion_op:     '',
+    tipoInspeccion: '',
+    motivo:         '',
+    spools:         [initSpool()],
+    medicionesUT:   [],
+    soldaduras:     [],
+    ph: { presion_diseno:'', presion_prueba:'', fluido_prueba:'Agua', temperatura:'', duracion_hrs:'', resultado:'' },
+    checklist:      {},
+  })
+  const [lineas, setLineas] = useState([initLinea()])
+  function updateLinea(idx, field, value) {
+    setLineas(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l))
+  }
+  function addLinea() { setLineas(prev => [...prev, initLinea()]) }
+  function removeLinea(idx) { setLineas(prev => prev.filter((_, i) => i !== idx)) }
 
   // Auto-cargar si hay ?ot= en la URL
   useEffect(() => {
@@ -745,6 +886,7 @@ export default function NuevoInforme() {
         equipo_medicion:           equiposMedicion,
         inspectores_ot:            inspectoresOT,
         tanques,
+        lineas,
       },
       end_aplicados:     endAplicados,
       mediciones,
@@ -1514,6 +1656,422 @@ export default function NuevoInforme() {
 
               <button className="btn btn-secondary" onClick={addTanque} style={{ width:'100%', cursor:'pointer' }}>
                 + Agregar otro tanque
+              </button>
+            </div>
+          )}
+
+          {/* ── PASO 5c: Inspección estructurada TUBERÍA — múltiples líneas ── */}
+          {tipo === 'TUBERIA' && (
+            <div style={S.seccion}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                <div style={S.seccionTitulo}>⑤c Inspección Técnica de Tuberías</div>
+                <button className="btn btn-secondary btn-sm" onClick={addLinea}>+ Agregar línea</button>
+              </div>
+
+              {lineas.map((ln, lnIdx) => (
+                <div key={lnIdx} style={{ border:'1.5px solid #CBD5E1', borderRadius:10, padding:18, marginBottom:20, background:'#FAFAFA' }}>
+
+                  {/* ─ Header línea ─ */}
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                    <span style={{ fontWeight:700, fontSize:13, color:'#0F172A' }}>
+                      📐 Línea / Tramo {lnIdx + 1}
+                    </span>
+                    <input placeholder="ID Línea / Tag (ej: LP-100-4&quot;-CS)"
+                      value={ln.tag}
+                      onChange={e => updateLinea(lnIdx, 'tag', e.target.value)}
+                      style={{ fontSize:12, fontFamily:'monospace', fontWeight:700, maxWidth:220 }} />
+                    {lineas.length > 1 && (
+                      <button onClick={() => removeLinea(lnIdx)}
+                        style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', color:'#DC2626',
+                          borderRadius:6, padding:'2px 10px', fontSize:12, cursor:'pointer', marginLeft:'auto' }}>
+                        ✕ Eliminar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ─ Datos generales línea ─ */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:14 }}>
+                    {[
+                      { id:'pid',        label:'P&ID / N° Isométrico' },
+                      { id:'fluido',     label:'Fluido transportado' },
+                      { id:'temp_op',    label:'T° operación (°C)' },
+                      { id:'presion_op', label:'P° operación (bar)' },
+                    ].map(f => (
+                      <label key={f.id} style={{ fontSize:12, fontWeight:600, color:'#475569' }}>
+                        {f.label}
+                        <input value={ln[f.id] || ''}
+                          onChange={e => updateLinea(lnIdx, f.id, e.target.value)}
+                          style={{ display:'block', width:'100%', marginTop:3 }} />
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* ─ Tipo de inspección ─ */}
+                  <div style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:'#475569', marginBottom:6 }}>
+                      Tipo de inspección
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
+                      {TUB_TIPOS_INSPECCION.map(ti => (
+                        <label key={ti.id} style={{
+                          display:'flex', flexDirection:'column', gap:2, padding:'8px 10px',
+                          border:`1.5px solid ${ln.tipoInspeccion === ti.id ? '#2563EB' : '#E2E8F0'}`,
+                          borderRadius:8, cursor:'pointer',
+                          background: ln.tipoInspeccion === ti.id ? '#EFF6FF' : '#fff',
+                        }}>
+                          <input type="radio" name={`tub-tipo-${lnIdx}`} value={ti.id}
+                            checked={ln.tipoInspeccion === ti.id}
+                            onChange={() => updateLinea(lnIdx, 'tipoInspeccion', ti.id)}
+                            style={{ display:'none' }} />
+                          <span style={{ fontSize:13, fontWeight:700 }}>{ti.icon} {ti.label}</span>
+                          <span style={{ fontSize:10, color:'#64748B' }}>{ti.sub}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ─ Badge normas ─ */}
+                  {ln.tipoInspeccion && TUB_NORMAS_POR_TIPO[ln.tipoInspeccion] && (
+                    <div style={{ fontSize:11, fontFamily:'monospace', color:'#1D4ED8', background:'#EFF6FF',
+                      border:'1px solid #BFDBFE', borderRadius:6, padding:'6px 10px', marginBottom:12 }}>
+                      📋 Normas aplicables: {TUB_NORMAS_POR_TIPO[ln.tipoInspeccion]}
+                    </div>
+                  )}
+
+                  {/* ─ Motivo (solo contingencia) ─ */}
+                  {ln.tipoInspeccion === 'contingencia' && (
+                    <label style={{ display:'block', marginBottom:12, fontSize:12, fontWeight:600, color:'#B45309' }}>
+                      ⚠️ Descripción del problema / contingencia
+                      <textarea rows={2} value={ln.motivo}
+                        onChange={e => updateLinea(lnIdx, 'motivo', e.target.value)}
+                        placeholder="Describir fuga, fisura, daño o evento que genera la inspección…"
+                        style={{ display:'block', width:'100%', marginTop:4, fontSize:12 }} />
+                    </label>
+                  )}
+
+                  {/* ─ Tabla de Spools / Tramos ─ */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#475569' }}>🔩 Spools / Tramos</div>
+                      <button className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          const updated = { ...ln, spools: [...ln.spools, initSpool()] }
+                          setLineas(prev => prev.map((l, i) => i === lnIdx ? updated : l))
+                        }}>
+                        + Spool
+                      </button>
+                    </div>
+                    <div style={{ overflowX:'auto' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                        <thead>
+                          <tr style={{ background:'#F1F5F9' }}>
+                            {['N° / ID Spool','DN (pulg)','Schedule','Material','Longitud (m)','Ubicación / Desc.','Estado',''].map(h => (
+                              <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color:'#475569', whiteSpace:'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ln.spools.map((sp, spIdx) => (
+                            <tr key={spIdx} style={{ borderBottom:'1px solid #E2E8F0' }}>
+                              <td style={{ padding:'4px 6px' }}>
+                                <input value={sp.id_spool}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, id_spool:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ width:90, fontSize:11 }} />
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                <select value={sp.dn}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, dn:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ fontSize:11 }}>
+                                  <option value="">--</option>
+                                  {DN_OPCIONES.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                <select value={sp.schedule}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ fontSize:11 }}>
+                                  <option value="">--</option>
+                                  {SCHEDULE_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                <select value={sp.material}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, material:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ fontSize:11 }}>
+                                  <option value="">--</option>
+                                  {SPOOL_MATERIALES.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                <input type="number" value={sp.longitud_m}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, longitud_m:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ width:70, fontSize:11 }} />
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                <input value={sp.ubicacion}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, ubicacion:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ width:130, fontSize:11 }} />
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                <select value={sp.estado}
+                                  onChange={e => {
+                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, estado:e.target.value} : s)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ fontSize:11 }}>
+                                  <option value="">--</option>
+                                  <option value="conforme">✅ Conforme</option>
+                                  <option value="observado">⚠️ Observado</option>
+                                  <option value="rechazado">❌ Rechazado</option>
+                                </select>
+                              </td>
+                              <td style={{ padding:'4px 6px' }}>
+                                {ln.spools.length > 1 && (
+                                  <button onClick={() => {
+                                    const spools = ln.spools.filter((_,i) => i !== spIdx)
+                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                  }} style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:13 }}>✕</button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* ─ Tabla de Mediciones UT (si aplica) ─ */}
+                  {['ut_espesores','preoperacional','contingencia','post_reparacion','retorno_servicio','integral'].includes(ln.tipoInspeccion) && (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#475569' }}>📏 Mediciones de Espesores UT</div>
+                        <button className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            const med = { spool_ref:'', punto:'', nominal_mm:'', medido_mm:'', minimo_mm:'', perdida_pct:'', tasa_mm_ano:'', estado:'' }
+                            setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, medicionesUT:[...l.medicionesUT, med]} : l))
+                          }}>+ Punto</button>
+                      </div>
+                      {ln.medicionesUT.length === 0 ? (
+                        <div style={{ fontSize:11, color:'#94A3B8', fontStyle:'italic' }}>Sin puntos de medición. Haz clic en "+ Punto" para agregar.</div>
+                      ) : (
+                        <div style={{ overflowX:'auto' }}>
+                          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                            <thead>
+                              <tr style={{ background:'#F0FDF4' }}>
+                                {['Spool Ref','Punto / Zona','Nominal (mm)','Medido (mm)','Mín. req. (mm)','% Pérdida','Tasa (mm/año)','Estado',''].map(h => (
+                                  <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ln.medicionesUT.map((m, mIdx) => {
+                                const pct = m.nominal_mm && m.medido_mm
+                                  ? (((parseFloat(m.nominal_mm) - parseFloat(m.medido_mm)) / parseFloat(m.nominal_mm)) * 100).toFixed(1)
+                                  : ''
+                                const ok = pct === '' || parseFloat(pct) < 20
+                                const upd = (field, val) => {
+                                  const medicionesUT = ln.medicionesUT.map((x,i) => i===mIdx ? {...x,[field]:val} : x)
+                                  setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, medicionesUT} : l))
+                                }
+                                return (
+                                  <tr key={mIdx} style={{ borderBottom:'1px solid #DCFCE7', background: pct !== '' && parseFloat(pct) >= 20 ? '#FEF2F2' : 'transparent' }}>
+                                    <td style={{ padding:'4px 6px' }}><input value={m.spool_ref} onChange={e=>upd('spool_ref',e.target.value)} style={{ width:80,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}><input value={m.punto} onChange={e=>upd('punto',e.target.value)} placeholder="Codo ext., Recto, Tee…" style={{ width:130,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}><input type="number" value={m.nominal_mm} onChange={e=>upd('nominal_mm',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}><input type="number" value={m.medido_mm} onChange={e=>upd('medido_mm',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}><input type="number" value={m.minimo_mm} onChange={e=>upd('minimo_mm',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px', fontWeight:700, color: ok ? '#166534' : '#DC2626' }}>{pct !== '' ? `${pct}%` : '—'}</td>
+                                    <td style={{ padding:'4px 6px' }}><input value={m.tasa_mm_ano} onChange={e=>upd('tasa_mm_ano',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}>
+                                      <select value={m.estado} onChange={e=>upd('estado',e.target.value)} style={{ fontSize:11 }}>
+                                        <option value="">--</option>
+                                        <option value="aceptable">✅ Aceptable</option>
+                                        <option value="alerta">⚠️ Alerta</option>
+                                        <option value="critico">❌ Crítico</option>
+                                      </select>
+                                    </td>
+                                    <td><button onClick={() => {
+                                      const medicionesUT = ln.medicionesUT.filter((_,i)=>i!==mIdx)
+                                      setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l,medicionesUT} : l))
+                                    }} style={{ background:'none',border:'none',color:'#DC2626',cursor:'pointer',fontSize:13 }}>✕</button></td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ─ Tabla LP / PM — juntas y soldaduras ─ */}
+                  {['lp','pm','preoperacional','post_reparacion','contingencia','integral'].includes(ln.tipoInspeccion) && (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#475569' }}>
+                          {['lp','pm'].includes(ln.tipoInspeccion)
+                            ? (ln.tipoInspeccion === 'lp' ? '🔵 Resultados LP por Junta / Soldadura' : '🔴 Resultados PM por Junta / Soldadura')
+                            : '🔵🔴 Resultados LP / PM por Junta / Soldadura'}
+                        </div>
+                        <button className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            const sold = { junta:'', spool_ref:'', tipo_junta:'', resultado:'', descripcion:'', disposicion:'' }
+                            setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, soldaduras:[...l.soldaduras, sold]} : l))
+                          }}>+ Junta</button>
+                      </div>
+                      {ln.soldaduras.length === 0 ? (
+                        <div style={{ fontSize:11, color:'#94A3B8', fontStyle:'italic' }}>Sin juntas. Haz clic en "+ Junta" para agregar.</div>
+                      ) : (
+                        <div style={{ overflowX:'auto' }}>
+                          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                            <thead>
+                              <tr style={{ background:'#FDF4FF' }}>
+                                {['N° Junta','Spool Ref','Tipo junta','Resultado','Descripción discontinuidad','Disposición',''].map(h => (
+                                  <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color:'#6B21A8', whiteSpace:'nowrap' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ln.soldaduras.map((s, sIdx) => {
+                                const upd = (field, val) => {
+                                  const soldaduras = ln.soldaduras.map((x,i) => i===sIdx ? {...x,[field]:val} : x)
+                                  setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, soldaduras} : l))
+                                }
+                                return (
+                                  <tr key={sIdx} style={{ borderBottom:'1px solid #F3E8FF' }}>
+                                    <td style={{ padding:'4px 6px' }}><input value={s.junta} onChange={e=>upd('junta',e.target.value)} style={{ width:70,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}><input value={s.spool_ref} onChange={e=>upd('spool_ref',e.target.value)} style={{ width:80,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}>
+                                      <select value={s.tipo_junta} onChange={e=>upd('tipo_junta',e.target.value)} style={{ fontSize:11 }}>
+                                        <option value="">--</option>
+                                        <option value="circunferencial">Circunferencial</option>
+                                        <option value="longitudinal">Longitudinal</option>
+                                        <option value="filete">Filete (fillet)</option>
+                                        <option value="socket">Socket weld</option>
+                                        <option value="brida">Unión a brida</option>
+                                      </select>
+                                    </td>
+                                    <td style={{ padding:'4px 6px' }}>
+                                      <select value={s.resultado} onChange={e=>upd('resultado',e.target.value)} style={{ fontSize:11 }}>
+                                        <option value="">--</option>
+                                        <option value="sd">✅ S/D — Sin discontinuidad</option>
+                                        <option value="cd">❌ C/D — Con discontinuidad</option>
+                                      </select>
+                                    </td>
+                                    <td style={{ padding:'4px 6px' }}><input value={s.descripcion} onChange={e=>upd('descripcion',e.target.value)} placeholder="Solo si C/D" style={{ width:160,fontSize:11 }}/></td>
+                                    <td style={{ padding:'4px 6px' }}>
+                                      <select value={s.disposicion} onChange={e=>upd('disposicion',e.target.value)} style={{ fontSize:11 }}>
+                                        <option value="">--</option>
+                                        <option value="aceptable">Aceptable</option>
+                                        <option value="reparar">Requiere reparación</option>
+                                        <option value="rechazado">Rechazado</option>
+                                      </select>
+                                    </td>
+                                    <td><button onClick={() => {
+                                      const soldaduras = ln.soldaduras.filter((_,i)=>i!==sIdx)
+                                      setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l,soldaduras} : l))
+                                    }} style={{ background:'none',border:'none',color:'#DC2626',cursor:'pointer',fontSize:13 }}>✕</button></td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ─ Prueba Hidrostática ─ */}
+                  {['ph','preoperacional','post_reparacion','integral'].includes(ln.tipoInspeccion) && (
+                    <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:8, padding:12, marginBottom:14 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#1D4ED8', marginBottom:10 }}>💧 Prueba Hidrostática / Presión</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
+                        {[
+                          { id:'presion_diseno',  label:'Presión diseño (bar)' },
+                          { id:'presion_prueba',  label:'P° prueba = 1.5×Pd (bar)' },
+                          { id:'fluido_prueba',   label:'Fluido de prueba' },
+                          { id:'temperatura',     label:'Temperatura fluido (°C)' },
+                          { id:'duracion_hrs',    label:'Duración (horas)' },
+                        ].map(f => (
+                          <label key={f.id} style={{ fontSize:12, fontWeight:600, color:'#1E40AF' }}>
+                            {f.label}
+                            <input value={ln.ph[f.id] || ''}
+                              onChange={e => {
+                                const ph = { ...ln.ph, [f.id]: e.target.value }
+                                setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, ph} : l))
+                              }}
+                              style={{ display:'block', width:'100%', marginTop:3, fontSize:12 }} />
+                          </label>
+                        ))}
+                        <label style={{ fontSize:12, fontWeight:600, color:'#1E40AF' }}>
+                          Resultado prueba
+                          <select value={ln.ph.resultado}
+                            onChange={e => {
+                              const ph = { ...ln.ph, resultado: e.target.value }
+                              setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, ph} : l))
+                            }}
+                            style={{ display:'block', width:'100%', marginTop:3, fontSize:12 }}>
+                            <option value="">-- Seleccionar --</option>
+                            <option value="aprueba">✅ APRUEBA</option>
+                            <option value="falla">❌ FALLA</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─ Checklist de inspección ─ */}
+                  {ln.tipoInspeccion && TUB_CHECKLIST[ln.tipoInspeccion] && (
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#475569', marginBottom:8 }}>
+                        ✔ Checklist — {TUB_TIPOS_INSPECCION.find(t=>t.id===ln.tipoInspeccion)?.label}
+                      </div>
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                        <thead>
+                          <tr style={{ background:'#F8FAFC' }}>
+                            <th style={{ padding:'6px 10px', textAlign:'left', color:'#64748B', fontWeight:600 }}>Ítem de verificación</th>
+                            {['Conforme','No conforme','N/A'].map(h => (
+                              <th key={h} style={{ padding:'6px 10px', textAlign:'center', color:'#64748B', fontWeight:600, whiteSpace:'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {TUB_CHECKLIST[ln.tipoInspeccion].map((item, iIdx) => (
+                            <tr key={item.id} style={{ borderBottom:'1px solid #F1F5F9', background: iIdx%2===0?'#FFFFFF':'#F8FAFC' }}>
+                              <td style={{ padding:'6px 10px', color:'#334155' }}>{item.label}</td>
+                              {['conforme','no_conforme','na'].map(val => (
+                                <td key={val} style={{ padding:'6px 10px', textAlign:'center' }}>
+                                  <input type="radio"
+                                    name={`tub-cl-${lnIdx}-${item.id}`}
+                                    checked={ln.checklist[item.id] === val}
+                                    onChange={() => {
+                                      const checklist = { ...ln.checklist, [item.id]: val }
+                                      setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l,checklist} : l))
+                                    }} />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <button className="btn btn-secondary" onClick={addLinea} style={{ width:'100%', cursor:'pointer' }}>
+                + Agregar otra línea / tramo
               </button>
             </div>
           )}
