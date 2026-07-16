@@ -473,6 +473,41 @@ function getAsmEspesor(dn, sch) {
   return row[sch] ?? null
 }
 
+// Tabla HDPE — OD externo (mm) en sistema IPS, según ASTM F714 / ISO 4427
+const HDPE_IPS_OD = {
+  '1/2"':3.34, '3/4"':26.67, '1"':33.40, '1¼"':42.16, '1½"':48.26,
+  '2"':60.33, '2½"':73.03, '3"':88.90, '4"':114.30, '6"':168.28,
+  '8"':219.08, '10"':273.05, '12"':323.85, '14"':355.60, '16"':406.40,
+  '18"':457.20, '20"':508.00, '24"':609.60, '30"':762.00, '36"':914.40,
+}
+// SDR disponibles para tuberías plásticas (ASTM D3035 / ASTM F714 / ISO 4427)
+const SDR_OPCIONES = ['SDR 7.3','SDR 9','SDR 11','SDR 13.6','SDR 17','SDR 21','SDR 26','SDR 32.5','SDR 41']
+
+function getSdrNumero(sdrStr) {
+  // extrae el número de "SDR 11" → 11
+  const m = sdrStr && sdrStr.match(/[\d.]+/)
+  return m ? parseFloat(m[0]) : null
+}
+function getHdpeEspesor(dn, sdr) {
+  // t = OD / SDR, redondeado a 2 decimales
+  const od = HDPE_IPS_OD[dn]
+  const sdrN = getSdrNumero(sdr)
+  if (!od || !sdrN) return null
+  return Math.round((od / sdrN) * 100) / 100
+}
+function esMaterialPlastico(material) {
+  return /hdpe|pvc|cpvc|polietileno|pp|pe/i.test(material || '')
+}
+// Función unificada: retorna {espesor, norma, tipo}
+function getNominalEspesor(dn, scheduleOrSdr, material) {
+  if (esMaterialPlastico(material)) {
+    const e = getHdpeEspesor(dn, scheduleOrSdr)
+    return e ? { espesor: e, norma: 'ASTM F714', tipo: 'SDR' } : null
+  }
+  const e = getAsmEspesor(dn, scheduleOrSdr)
+  return e ? { espesor: e, norma: 'ASME B36.10M', tipo: 'SCH' } : null
+}
+
 // ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
 
 function MultiSelect({ value, onChange, options, placeholder }) {
@@ -1795,8 +1830,8 @@ export default function NuevoInforme() {
                       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                         <thead>
                           <tr style={{ background:'#F1F5F9' }}>
-                            {['N° / ID Spool','DN (pulg)','Schedule','e nom. ASME (mm)','Material','Longitud (m)','Ubicación / Desc.','Estado',''].map(h => (
-                              <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color: h==='e nom. ASME (mm)' ? '#0369A1' : '#475569', whiteSpace:'nowrap' }}>{h}</th>
+                            {['N° / ID Spool','DN (pulg)','Sch / SDR','e nom. (mm)','Material','Longitud (m)','Ubicación / Desc.','Estado',''].map(h => (
+                              <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontWeight:600, color: h==='e nom. (mm)' ? '#0369A1' : '#475569', whiteSpace:'nowrap' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1821,21 +1856,40 @@ export default function NuevoInforme() {
                                 </select>
                               </td>
                               <td style={{ padding:'4px 6px' }}>
-                                <select value={sp.schedule}
-                                  onChange={e => {
-                                    const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:e.target.value} : s)
-                                    setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
-                                  }} style={{ fontSize:11 }}>
-                                  <option value="">--</option>
-                                  {SCHEDULE_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                                {esMaterialPlastico(sp.material) ? (
+                                  <select value={sp.schedule}
+                                    onChange={e => {
+                                      const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:e.target.value} : s)
+                                      setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                    }} style={{ fontSize:11, borderColor:'#86EFAC' }}>
+                                    <option value="">-- SDR --</option>
+                                    {SDR_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                ) : (
+                                  <select value={sp.schedule}
+                                    onChange={e => {
+                                      const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:e.target.value} : s)
+                                      setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                    }} style={{ fontSize:11 }}>
+                                    <option value="">-- Sch --</option>
+                                    {SCHEDULE_OPCIONES.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                )}
                               </td>
-                              {/* Espesor nominal ASME B36.10M — calculado automático */}
+                              {/* Espesor nominal calculado — ASME B36.10M (acero) o ASTM F714 (plástico) */}
                               <td style={{ padding:'4px 6px', textAlign:'center' }}>
                                 {(() => {
-                                  const e = getAsmEspesor(sp.dn, sp.schedule)
-                                  return e
-                                    ? <span style={{ fontWeight:700, color:'#0369A1', fontFamily:'monospace', fontSize:12 }}>{e} mm</span>
+                                  const res = getNominalEspesor(sp.dn, sp.schedule, sp.material)
+                                  return res
+                                    ? (
+                                      <span style={{ fontWeight:700, color: esMaterialPlastico(sp.material)?'#16A34A':'#0369A1',
+                                        fontFamily:'monospace', fontSize:12 }}>
+                                        {res.espesor} mm
+                                        <span style={{ fontSize:9, fontWeight:400, marginLeft:3, color:'#64748B' }}>
+                                          {res.norma}
+                                        </span>
+                                      </span>
+                                    )
                                     : <span style={{ color:'#94A3B8', fontSize:11 }}>—</span>
                                 })()}
                               </td>
@@ -1943,22 +1997,28 @@ export default function NuevoInforme() {
                                           {m.nominal_fuente === 'estimado' && (
                                             <span style={{ fontSize:9, color:'#D97706', fontWeight:700 }}>EST</span>
                                           )}
-                                          {m.nominal_fuente === 'asme' && (
-                                            <span style={{ fontSize:9, color:'#0369A1', fontWeight:700 }}>ASME</span>
+                                          {m.nominal_fuente && m.nominal_fuente !== 'estimado' && m.nominal_fuente !== 'manual' && (
+                                            <span style={{ fontSize:9, color: m.nominal_fuente.includes('F714')?'#15803D':'#0369A1', fontWeight:700 }}>
+                                              {m.nominal_fuente.includes('F714') ? 'F714' : 'B36.10M'}
+                                            </span>
                                           )}
                                         </div>
-                                        {/* Botón: calcular desde spool referenciado */}
+                                        {/* Botón: calcular desde spool referenciado — ASME B36.10M o ASTM F714 */}
                                         {(() => {
                                           const sp = ln.spools.find(s => s.id_spool && s.id_spool === m.spool_ref)
                                             ?? (ln.spools.length === 1 ? ln.spools[0] : null)
-                                          const eAsme = sp ? getAsmEspesor(sp.dn, sp.schedule) : null
+                                          const res = sp ? getNominalEspesor(sp.dn, sp.schedule, sp.material) : null
                                           return (
                                             <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
-                                              {eAsme && (
-                                                <button onClick={() => { upd('nominal_mm', String(eAsme)); upd('nominal_fuente','asme') }}
-                                                  style={{ fontSize:9, padding:'1px 5px', background:'#EFF6FF',
-                                                    border:'1px solid #93C5FD', borderRadius:4, cursor:'pointer', color:'#1D4ED8', whiteSpace:'nowrap' }}>
-                                                  ⬇ ASME {eAsme}mm
+                                              {res && (
+                                                <button onClick={() => { upd('nominal_mm', String(res.espesor)); upd('nominal_fuente', res.norma) }}
+                                                  style={{ fontSize:9, padding:'1px 5px',
+                                                    background: esMaterialPlastico(sp.material) ? '#F0FDF4' : '#EFF6FF',
+                                                    border: `1px solid ${esMaterialPlastico(sp.material) ? '#86EFAC' : '#93C5FD'}`,
+                                                    borderRadius:4, cursor:'pointer',
+                                                    color: esMaterialPlastico(sp.material) ? '#15803D' : '#1D4ED8',
+                                                    whiteSpace:'nowrap' }}>
+                                                  ⬇ {res.norma} {res.espesor}mm
                                                 </button>
                                               )}
                                               <button onClick={() => upd('nominal_fuente','estimado')}
