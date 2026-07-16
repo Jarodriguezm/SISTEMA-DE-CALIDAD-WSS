@@ -1913,27 +1913,52 @@ export default function NuevoInforme() {
                                           const nearest = SDR_ESTANDAR.reduce((a, b) =>
                                             Math.abs(b - sdrCalc) < Math.abs(a - sdrCalc) ? b : a)
                                           const sdrStr = `SDR ${nearest}`
-                                          const match = Math.abs(nearest - sdrCalc) < 1.5
-                                          return (
-                                            <div style={{ background:'#DCFCE7', border:'1px solid #4ADE80',
-                                              borderRadius:5, padding:'5px 8px' }}>
-                                              <div style={{ fontWeight:700, color:'#166534' }}>
-                                                SDR calculado = {sdrCalc.toFixed(1)}
+                                          const diff = Math.abs(nearest - sdrCalc)
+                                          const match = diff < 1.5
+                                          return match ? (
+                                            /* ── RESULTADO OK ── */
+                                            <div style={{ background:'#DCFCE7', border:'1px solid #4ADE80', borderRadius:6, padding:'6px 10px' }}>
+                                              <div style={{ fontWeight:700, color:'#166534', fontSize:11 }}>
+                                                SDR calculado = {sdrCalc.toFixed(1)} → {sdrStr}
                                               </div>
-                                              <div style={{ color: match ? '#15803D' : '#B45309', fontSize:10, marginBottom:4 }}>
-                                                {match
-                                                  ? `✅ Corresponde a ${sdrStr} (ASTM F714)`
-                                                  : `⚠️ No coincide exactamente con ningún SDR estándar — más cercano: ${sdrStr}`}
+                                              <div style={{ color:'#166534', fontSize:10, margin:'3px 0 6px' }}>
+                                                ✅ Corresponde a <strong>{sdrStr}</strong> (ASTM F714 / ISO 4427)
                                               </div>
-                                              {match && (
-                                                <button onClick={() => {
-                                                  const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:sdrStr} : s)
-                                                  setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
-                                                }} style={{ fontSize:10, padding:'2px 8px', background:'#15803D',
-                                                  border:'none', borderRadius:4, color:'#fff', cursor:'pointer' }}>
-                                                  ✔ Usar {sdrStr}
-                                                </button>
-                                              )}
+                                              <button onClick={() => {
+                                                const spools = ln.spools.map((s,i) => i===spIdx ? {...s, schedule:sdrStr} : s)
+                                                setLineas(prev => prev.map((l,i) => i===lnIdx ? {...l, spools} : l))
+                                              }} style={{ fontSize:10, padding:'3px 10px', background:'#15803D',
+                                                border:'none', borderRadius:4, color:'#fff', cursor:'pointer', marginBottom:4 }}>
+                                                ✔ Aplicar {sdrStr}
+                                              </button>
+                                              <div style={{ fontSize:10, color:'#166534', borderTop:'1px solid #86EFAC', paddingTop:4, marginTop:2 }}>
+                                                📋 <strong>Nota para el informe:</strong> SDR determinado en terreno mediante medición directa
+                                                OD = {sp._od_medido} mm / t = {sp._t_medido} mm (SDR calc. = {sdrCalc.toFixed(1)}).
+                                                Sello de fabricante no disponible o ilegible.
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            /* ── ADVERTENCIA: NO COINCIDE ── */
+                                            <div style={{ background:'#FEF3C7', border:'2px solid #F59E0B', borderRadius:6, padding:'8px 10px' }}>
+                                              <div style={{ fontWeight:700, color:'#92400E', fontSize:12, marginBottom:4 }}>
+                                                ⚠️ SDR calculado = {sdrCalc.toFixed(1)} — no coincide con ningún SDR estándar
+                                              </div>
+                                              <div style={{ fontSize:11, color:'#78350F', lineHeight:'1.5', marginBottom:6 }}>
+                                                El valor calculado ({sdrCalc.toFixed(1)}) no corresponde a ningún SDR normalizado
+                                                por ASTM F714 / ISO 4427. El más cercano sería <strong>{sdrStr}</strong> (diferencia: {diff.toFixed(1)}).
+                                              </div>
+                                              <div style={{ background:'#FDE68A', borderRadius:5, padding:'6px 8px', fontSize:10, color:'#78350F', lineHeight:'1.5' }}>
+                                                <strong>Acciones recomendadas antes de continuar:</strong><br/>
+                                                1. Verificar que el OD y espesor se midieron correctamente (al menos 3 lecturas).<br/>
+                                                2. Buscar sello del fabricante en otro tramo visible del mismo ramal.<br/>
+                                                3. Consultar P&ID, lista de materiales o al cliente.<br/>
+                                                4. Si persiste la duda, registrar espesor como <em>estimado en terreno</em> y documentar el hallazgo como observación en el informe.
+                                              </div>
+                                              <div style={{ fontSize:10, color:'#92400E', marginTop:6 }}>
+                                                📋 <strong>Dejar constancia en informe:</strong> SDR no identificado. OD medido = {sp._od_medido} mm,
+                                                t medido = {sp._t_medido} mm, SDR calc. = {sdrCalc.toFixed(1)}.
+                                                No coincide con estándar ASTM F714. Requiere verificación documental.
+                                              </div>
                                             </div>
                                           )
                                         })()}
