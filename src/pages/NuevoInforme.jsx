@@ -366,13 +366,23 @@ export default function NuevoInforme() {
   // Error de validación de hallazgo
   const [hallazgoDescError, setHallazgoDescError] = useState(false)
 
-  // ── Estado inspección TANQUE ─────────────────────────────────────────────
-  const [tkConfig, setTkConfig]           = useState({ material:'', orientacion:'', tipoInspeccion:'' })
-  const [tkGeom, setTkGeom]               = useState({})
-  const [tkChecklist, setTkChecklist]     = useState({})
-  const [tkMedicionesUT, setTkMedicionesUT] = useState([])
-  const [tkVerticalidad, setTkVerticalidad] = useState({ norte:'', sur:'', este:'', oeste:'' })
-  const [tkAsentamiento, setTkAsentamiento] = useState([])
+  // ── Estado inspección TANQUE (múltiples tanques) ─────────────────────────
+  const initTanque = () => ({
+    tag: '',
+    config:       { material:'', orientacion:'', tipoInspeccion:'' },
+    geom:         {},
+    checklist:    {},
+    medicionesUT: [],
+    verticalidad: { norte:'', sur:'', este:'', oeste:'' },
+    asentamiento: [],
+  })
+  const [tanques, setTanques] = useState([initTanque()])
+
+  function updateTanque(idx, field, value) {
+    setTanques(prev => prev.map((t, i) => i === idx ? { ...t, [field]: value } : t))
+  }
+  function addTanque() { setTanques(prev => [...prev, initTanque()]) }
+  function removeTanque(idx) { setTanques(prev => prev.filter((_, i) => i !== idx)) }
 
   // Auto-cargar si hay ?ot= en la URL
   useEffect(() => {
@@ -637,12 +647,7 @@ export default function NuevoInforme() {
         fotos_inspeccion:          fotosInspeccion,
         equipo_medicion:           equiposMedicion,
         inspectores_ot:            inspectoresOT,
-        tk_config:                 tkConfig,
-        tk_geom:                   tkGeom,
-        tk_checklist:              tkChecklist,
-        tk_mediciones_ut:          tkMedicionesUT,
-        tk_verticalidad:           tkVerticalidad,
-        tk_asentamiento:           tkAsentamiento,
+        tanques,
       },
       end_aplicados:     endAplicados,
       mediciones,
@@ -1062,226 +1067,329 @@ export default function NuevoInforme() {
             </div>
           )}
 
-          {/* ── PASO 5b: Inspección estructurada TANQUE ── */}
+          {/* ── PASO 5b: Inspección estructurada TANQUE — múltiples tanques ── */}
           {tipo === 'TANQUE' && (
             <div style={S.seccion}>
-              <div style={S.seccionTitulo}>⑤b Inspección Técnica de Tanque</div>
-
-              {/* ── Selectores: Material · Orientación · Tipo inspección ── */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16, marginBottom:20 }}>
-                {/* Material */}
-                <div>
-                  <label style={S.label}>Material del tanque</label>
-                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                    {['Acero','Plástico (PE/PP)','FRP'].map(m => (
-                      <button key={m} onClick={() => { setTkConfig(p=>({...p, material:m})); setTkChecklist({}) }}
-                        style={{ padding:'8px 12px', borderRadius:8,
-                          border:`2px solid ${tkConfig.material===m?'#1D4ED8':'#E2E8F0'}`,
-                          background: tkConfig.material===m?'#EFF6FF':'#fff',
-                          color: tkConfig.material===m?'#1D4ED8':'#475569',
-                          fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
-                        {m==='Acero'?'⚙️':m==='FRP'?'🔵':'🟡'} {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Orientación */}
-                <div>
-                  <label style={S.label}>Orientación</label>
-                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                    {[['vertical','🛢️ Vertical'],['horizontal','➡️ Horizontal']].map(([val,lbl]) => (
-                      <button key={val} onClick={() => { setTkConfig(p=>({...p, orientacion:val})); setTkGeom({}) }}
-                        style={{ padding:'8px 12px', borderRadius:8,
-                          border:`2px solid ${tkConfig.orientacion===val?'#047857':'#E2E8F0'}`,
-                          background: tkConfig.orientacion===val?'#D1FAE5':'#fff',
-                          color: tkConfig.orientacion===val?'#065F46':'#475569',
-                          fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
-                        {lbl}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Tipo inspección */}
-                <div>
-                  <label style={S.label}>Tipo de inspección</label>
-                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                    {[
-                      ['externa_5','🔍 Exterior — 5 años','API 653 + DS 43'],
-                      ['interna_10','🔬 Interior — 10 años','API 653 + DS 43'],
-                    ].map(([val,lbl,sub]) => (
-                      <button key={val} onClick={() => { setTkConfig(p=>({...p, tipoInspeccion:val})); setTkChecklist({}) }}
-                        style={{ padding:'8px 12px', borderRadius:8,
-                          border:`2px solid ${tkConfig.tipoInspeccion===val?'#7C3AED':'#E2E8F0'}`,
-                          background: tkConfig.tipoInspeccion===val?'#EDE9FE':'#fff',
-                          color: tkConfig.tipoInspeccion===val?'#5B21B6':'#475569',
-                          fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
-                        {lbl}
-                        <div style={{ fontSize:10, fontWeight:400, marginTop:2,
-                          color: tkConfig.tipoInspeccion===val?'#7C3AED':'#94A3B8' }}>{sub}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                <div style={S.seccionTitulo}>⑤b Inspección Técnica de Tanques</div>
+                <button className="btn btn-secondary btn-sm" onClick={addTanque}>+ Agregar tanque</button>
               </div>
 
-              {/* Badge normas */}
-              {tkConfig.material && (
-                <div style={{ background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:8,
-                  padding:'8px 14px', marginBottom:16, fontSize:11, color:'#0369A1' }}>
-                  📋 <strong>Normas aplicables:</strong> {TK_NORMAS[tkConfig.material]}
-                </div>
-              )}
+              {tanques.map((tk, tkIdx) => (
+                <div key={tkIdx} style={{ border:'1.5px solid #CBD5E1', borderRadius:10, padding:18, marginBottom:20, background:'#FAFAFA' }}>
 
-              {/* ── Datos geométricos ── */}
-              {tkConfig.orientacion && (
-                <>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
-                    letterSpacing:'.5px', marginBottom:10, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
-                    Datos geométricos — Tanque {tkConfig.orientacion==='vertical'?'Vertical':'Horizontal'}
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
-                    {TK_GEOM_FIELDS[tkConfig.orientacion].map(f => (
-                      <div key={f.id}>
-                        <label style={S.label}>{f.label}</label>
-                        {f.type==='select' ? (
-                          <select className="input" value={tkGeom[f.id]||''}
-                            onChange={e => setTkGeom(p=>({...p,[f.id]:e.target.value}))}>
-                            <option value="">— Seleccionar —</option>
-                            {f.ops.map(o=><option key={o} value={o}>{o}</option>)}
-                          </select>
-                        ) : (
-                          <input className="input" type={f.type} value={tkGeom[f.id]||''}
-                            onChange={e => setTkGeom(p=>({...p,[f.id]:e.target.value}))} />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* ── Checklist visual ── */}
-              {tkConfig.material && tkConfig.tipoInspeccion && (() => {
-                const key = `${tkConfig.material}-${tkConfig.tipoInspeccion==='externa_5'?'externo':'interno'}`
-                const items = TK_CHECKLIST[key] || []
-                if (!items.length) return null
-                return (
-                  <>
-                    <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
-                      letterSpacing:'.5px', marginBottom:10, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
-                      Checklist inspección visual — {tkConfig.tipoInspeccion==='externa_5'?'Exterior':'Interior'}
+                  {/* Header tanque */}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <span style={{ fontSize:13, fontWeight:800, color:'#1E3A5F',
+                        background:'#EFF6FF', border:'1.5px solid #BFDBFE',
+                        borderRadius:6, padding:'3px 12px' }}>
+                        🛢️ Tanque #{tkIdx + 1}
+                      </span>
+                      <input className="input" value={tk.tag}
+                        onChange={e => updateTanque(tkIdx, 'tag', e.target.value)}
+                        placeholder="Tag / Código (ej: TK-201)"
+                        style={{ fontSize:12, fontFamily:'monospace', fontWeight:700, maxWidth:180 }} />
                     </div>
-                    <div style={{ overflowX:'auto', marginBottom:20 }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                        <thead>
-                          <tr style={{ background:'linear-gradient(135deg,#1A3A5C,#185FA5)', color:'#fff' }}>
-                            <th style={S.th}>Ítem de inspección</th>
-                            <th style={{ ...S.th, textAlign:'center', width:100 }}>Conforme</th>
-                            <th style={{ ...S.th, textAlign:'center', width:110 }}>No conforme</th>
-                            <th style={{ ...S.th, textAlign:'center', width:70 }}>N/A</th>
-                            <th style={{ ...S.th, width:210 }}>Observación</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((item, rowIdx) => {
-                            const res = tkChecklist[item.id]?.resultado || ''
-                            const obs = tkChecklist[item.id]?.obs || ''
-                            return (
-                              <tr key={item.id} style={{ background: rowIdx%2===0?'#fff':'#F8FAFC' }}>
-                                <td style={{ ...S.td, fontWeight:500 }}>{item.label}</td>
-                                {['CONFORME','NO_CONFORME','NA'].map(v => (
-                                  <td key={v} style={{ ...S.td, textAlign:'center' }}>
-                                    <input type="radio" name={`tk_${item.id}`} value={v} checked={res===v}
-                                      onChange={() => setTkChecklist(p=>({...p,[item.id]:{...(p[item.id]||{}),resultado:v}}))}
-                                      style={{ accentColor:v==='CONFORME'?'#16A34A':v==='NO_CONFORME'?'#DC2626':'#94A3B8', width:16, height:16 }} />
-                                  </td>
-                                ))}
-                                <td style={S.tdInput}>
-                                  <input className="input" value={obs} placeholder="Observación..."
-                                    onChange={e => setTkChecklist(p=>({...p,[item.id]:{...(p[item.id]||{}),obs:e.target.value}}))}
-                                    style={{ fontSize:11 }} />
-                                </td>
+                    {tanques.length > 1 && (
+                      <button onClick={() => removeTanque(tkIdx)}
+                        style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', color:'#DC2626',
+                          borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                        🗑️ Eliminar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ── Selectores: Material · Orientación · Tipo inspección ── */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, marginBottom:18 }}>
+                    <div>
+                      <label style={S.label}>Material</label>
+                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                        {['Acero','Plástico (PE/PP)','FRP'].map(m => (
+                          <button key={m}
+                            onClick={() => updateTanque(tkIdx, 'config', { ...tk.config, material:m })}
+                            style={{ padding:'7px 10px', borderRadius:7,
+                              border:`2px solid ${tk.config.material===m?'#1D4ED8':'#E2E8F0'}`,
+                              background: tk.config.material===m?'#EFF6FF':'#fff',
+                              color: tk.config.material===m?'#1D4ED8':'#475569',
+                              fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
+                            {m==='Acero'?'⚙️':m==='FRP'?'🔵':'🟡'} {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={S.label}>Orientación</label>
+                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                        {[['vertical','🛢️ Vertical'],['horizontal','➡️ Horizontal']].map(([val,lbl]) => (
+                          <button key={val}
+                            onClick={() => updateTanque(tkIdx, 'config', { ...tk.config, orientacion:val })}
+                            style={{ padding:'7px 10px', borderRadius:7,
+                              border:`2px solid ${tk.config.orientacion===val?'#047857':'#E2E8F0'}`,
+                              background: tk.config.orientacion===val?'#D1FAE5':'#fff',
+                              color: tk.config.orientacion===val?'#065F46':'#475569',
+                              fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={S.label}>Tipo de inspección</label>
+                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                        {[['externa_5','🔍 Exterior — 5 años','API 653 + DS 43'],
+                          ['interna_10','🔬 Interior — 10 años','API 653 + DS 43']].map(([val,lbl,sub]) => (
+                          <button key={val}
+                            onClick={() => updateTanque(tkIdx, 'config', { ...tk.config, tipoInspeccion:val })}
+                            style={{ padding:'7px 10px', borderRadius:7,
+                              border:`2px solid ${tk.config.tipoInspeccion===val?'#7C3AED':'#E2E8F0'}`,
+                              background: tk.config.tipoInspeccion===val?'#EDE9FE':'#fff',
+                              color: tk.config.tipoInspeccion===val?'#5B21B6':'#475569',
+                              fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'left' }}>
+                            {lbl}
+                            <div style={{ fontSize:10, fontWeight:400, marginTop:1,
+                              color: tk.config.tipoInspeccion===val?'#7C3AED':'#94A3B8' }}>{sub}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Badge normas */}
+                  {tk.config.material && (
+                    <div style={{ background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:7,
+                      padding:'7px 12px', marginBottom:14, fontSize:11, color:'#0369A1' }}>
+                      📋 <strong>Normas:</strong> {TK_NORMAS[tk.config.material]}
+                    </div>
+                  )}
+
+                  {/* ── Datos geométricos ── */}
+                  {tk.config.orientacion && (
+                    <>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
+                        letterSpacing:'.5px', marginBottom:8, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
+                        Datos geométricos — {tk.config.orientacion==='vertical'?'Vertical':'Horizontal'}
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
+                        {TK_GEOM_FIELDS[tk.config.orientacion].map(f => (
+                          <div key={f.id}>
+                            <label style={S.label}>{f.label}</label>
+                            {f.type==='select' ? (
+                              <select className="input" value={tk.geom[f.id]||''}
+                                onChange={e => updateTanque(tkIdx,'geom',{...tk.geom,[f.id]:e.target.value})}>
+                                <option value="">— Seleccionar —</option>
+                                {f.ops.map(o=><option key={o} value={o}>{o}</option>)}
+                              </select>
+                            ) : (
+                              <input className="input" type={f.type} value={tk.geom[f.id]||''}
+                                onChange={e => updateTanque(tkIdx,'geom',{...tk.geom,[f.id]:e.target.value})} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Checklist visual ── */}
+                  {tk.config.material && tk.config.tipoInspeccion && (() => {
+                    const key = `${tk.config.material}-${tk.config.tipoInspeccion==='externa_5'?'externo':'interno'}`
+                    const items = TK_CHECKLIST[key] || []
+                    if (!items.length) return null
+                    return (
+                      <>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
+                          letterSpacing:'.5px', marginBottom:8, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
+                          Checklist — {tk.config.tipoInspeccion==='externa_5'?'Exterior':'Interior'}
+                        </div>
+                        <div style={{ overflowX:'auto', marginBottom:16 }}>
+                          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                            <thead>
+                              <tr style={{ background:'linear-gradient(135deg,#1A3A5C,#185FA5)', color:'#fff' }}>
+                                <th style={S.th}>Ítem de inspección</th>
+                                <th style={{ ...S.th, textAlign:'center', width:95 }}>Conforme</th>
+                                <th style={{ ...S.th, textAlign:'center', width:105 }}>No conforme</th>
+                                <th style={{ ...S.th, textAlign:'center', width:65 }}>N/A</th>
+                                <th style={{ ...S.th, width:200 }}>Observación</th>
                               </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                      <div style={{ display:'flex', gap:16, marginTop:8, fontSize:11 }}>
-                        <span style={{ color:'#065F46', fontWeight:700 }}>✓ {Object.values(tkChecklist).filter(v=>v?.resultado==='CONFORME').length} conformes</span>
-                        <span style={{ color:'#DC2626', fontWeight:700 }}>✗ {Object.values(tkChecklist).filter(v=>v?.resultado==='NO_CONFORME').length} no conformes</span>
-                        <span style={{ color:'#94A3B8' }}>N/A: {Object.values(tkChecklist).filter(v=>v?.resultado==='NA').length}</span>
-                      </div>
-                    </div>
-                  </>
-                )
-              })()}
+                            </thead>
+                            <tbody>
+                              {items.map((item, rowIdx) => {
+                                const res = tk.checklist[item.id]?.resultado || ''
+                                const obs = tk.checklist[item.id]?.obs || ''
+                                return (
+                                  <tr key={item.id} style={{ background:rowIdx%2===0?'#fff':'#F8FAFC' }}>
+                                    <td style={{ ...S.td, fontWeight:500 }}>{item.label}</td>
+                                    {['CONFORME','NO_CONFORME','NA'].map(v => (
+                                      <td key={v} style={{ ...S.td, textAlign:'center' }}>
+                                        <input type="radio" name={`tk${tkIdx}_${item.id}`} value={v} checked={res===v}
+                                          onChange={() => updateTanque(tkIdx,'checklist',{...tk.checklist,[item.id]:{...(tk.checklist[item.id]||{}),resultado:v}})}
+                                          style={{ accentColor:v==='CONFORME'?'#16A34A':v==='NO_CONFORME'?'#DC2626':'#94A3B8', width:15, height:15 }} />
+                                      </td>
+                                    ))}
+                                    <td style={S.tdInput}>
+                                      <input className="input" value={obs} placeholder="Observación..."
+                                        onChange={e => updateTanque(tkIdx,'checklist',{...tk.checklist,[item.id]:{...(tk.checklist[item.id]||{}),obs:e.target.value}})}
+                                        style={{ fontSize:11 }} />
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                          <div style={{ display:'flex', gap:14, marginTop:6, fontSize:11 }}>
+                            <span style={{ color:'#065F46', fontWeight:700 }}>✓ {Object.values(tk.checklist).filter(v=>v?.resultado==='CONFORME').length} conformes</span>
+                            <span style={{ color:'#DC2626', fontWeight:700 }}>✗ {Object.values(tk.checklist).filter(v=>v?.resultado==='NO_CONFORME').length} no conformes</span>
+                            <span style={{ color:'#94A3B8' }}>N/A: {Object.values(tk.checklist).filter(v=>v?.resultado==='NA').length}</span>
+                          </div>
+                        </div>
+                      </>
+                    )
+                  })()}
 
-              {/* ── Mediciones UT ── */}
-              {tkConfig.material && tkConfig.tipoInspeccion && (
-                <>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
-                      letterSpacing:'.5px', borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
-                      Medición de espesores — Ultrasonido (UT)
-                      {tkConfig.material!=='Acero' && (
-                        <span style={{ fontSize:10, color:'#92400E', marginLeft:8, fontWeight:400, textTransform:'none' }}>
-                          {tkConfig.material==='FRP'?'(UT especializado / coin tap)':'(UT especializado / emisión acústica)'}
-                        </span>
+                  {/* ── Mediciones UT ── */}
+                  {tk.config.material && tk.config.tipoInspeccion && (
+                    <>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
+                          letterSpacing:'.5px', borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
+                          Medición de espesores — UT
+                          {tk.config.material!=='Acero' && (
+                            <span style={{ fontSize:10, color:'#92400E', marginLeft:6, fontWeight:400, textTransform:'none' }}>
+                              {tk.config.material==='FRP'?'(UT especializado / coin tap)':'(UT especializado / emisión acústica)'}
+                            </span>
+                          )}
+                        </div>
+                        <button className="btn btn-secondary btn-sm"
+                          onClick={() => updateTanque(tkIdx,'medicionesUT',[...tk.medicionesUT,{zona:'',nominal_mm:'',medido_mm:'',minimo_mm:'',obs:''}])}>
+                          + Agregar punto
+                        </button>
+                      </div>
+                      {tk.medicionesUT.length===0 ? (
+                        <div style={{ color:'var(--gris)', fontSize:12, padding:'10px 0', textAlign:'center',
+                          borderTop:'1px dashed #E2E8F0', marginBottom:14 }}>
+                          Sin mediciones — clic en "+ Agregar punto"
+                        </div>
+                      ) : (
+                        <div style={{ overflowX:'auto', marginBottom:14 }}>
+                          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                            <thead>
+                              <tr style={{ background:'#F8FAFC' }}>
+                                {['Zona / Punto','E. nominal (mm)','E. medido (mm)','E. mín. req. (mm)','% Pérdida','Estado','Obs.',''].map(h=>(
+                                  <th key={h} style={{ padding:'6px 9px', fontSize:11, fontWeight:700, color:'#64748B',
+                                    textAlign:'left', border:'1px solid #E2E8F0', whiteSpace:'nowrap' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tk.medicionesUT.map((m,mi) => {
+                                const pct = m.nominal_mm&&m.medido_mm ? (((+m.nominal_mm-+m.medido_mm)/+m.nominal_mm)*100).toFixed(1) : '—'
+                                const bajoMin = m.minimo_mm&&m.medido_mm&&+m.medido_mm<+m.minimo_mm
+                                const estado = !m.medido_mm?'—':bajoMin?'🔴 Rechazado':parseFloat(pct)>20?'🟡 Alerta':'🟢 OK'
+                                const upd = (field,val) => updateTanque(tkIdx,'medicionesUT',tk.medicionesUT.map((x,j)=>j===mi?{...x,[field]:val}:x))
+                                return (
+                                  <tr key={mi} style={{ background:mi%2===0?'#fff':'#F8FAFC' }}>
+                                    <td style={S.tdInput}><input className="input" value={m.zona} onChange={e=>upd('zona',e.target.value)} placeholder="Anillo 1 / Techo / Fondo" style={{ fontSize:11 }} /></td>
+                                    <td style={S.tdInput}><input className="input" type="number" value={m.nominal_mm} onChange={e=>upd('nominal_mm',e.target.value)} placeholder="12.5" style={{ fontSize:11, width:65 }} /></td>
+                                    <td style={S.tdInput}><input className="input" type="number" value={m.medido_mm} onChange={e=>upd('medido_mm',e.target.value)} placeholder="11.8" style={{ fontSize:11, width:65 }} /></td>
+                                    <td style={S.tdInput}><input className="input" type="number" value={m.minimo_mm} onChange={e=>upd('minimo_mm',e.target.value)} placeholder="9.0" style={{ fontSize:11, width:65 }} /></td>
+                                    <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', fontSize:11, fontWeight:700,
+                                      color:pct!=='—'&&parseFloat(pct)>20?'#991B1B':parseFloat(pct)>10?'#92400E':'#065F46' }}>
+                                      {pct!=='—'?`${pct}%`:'—'}
+                                    </td>
+                                    <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', fontSize:11, fontWeight:600 }}>{estado}</td>
+                                    <td style={S.tdInput}><input className="input" value={m.obs} onChange={e=>upd('obs',e.target.value)} placeholder="Obs." style={{ fontSize:11 }} /></td>
+                                    <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
+                                      <button onClick={()=>updateTanque(tkIdx,'medicionesUT',tk.medicionesUT.filter((_,j)=>j!==mi))}
+                                        style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:14 }}>✕</button>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       )}
-                    </div>
+                    </>
+                  )}
+
+                  {/* ── Verticalidad (solo verticales) ── */}
+                  {tk.config.orientacion==='vertical' && (
+                    <>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
+                        letterSpacing:'.5px', marginBottom:8, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
+                        Verticalidad — 4 puntos cardinales
+                        <span style={{ fontSize:10, color:'#64748B', fontWeight:400, marginLeft:8, textTransform:'none' }}>
+                          Tolerancia API 653: H/100{tk.geom.altura_m?` = ${(+tk.geom.altura_m/100*1000).toFixed(0)} mm`:''}
+                        </span>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:14 }}>
+                        {[['norte','Norte (N)'],['sur','Sur (S)'],['este','Este (E)'],['oeste','Oeste (O)']].map(([dir,lbl]) => {
+                          const tol = tk.geom.altura_m ? +tk.geom.altura_m/100*1000 : null
+                          const val = +tk.verticalidad[dir]
+                          const fuera = tol && val && val > tol
+                          return (
+                            <div key={dir}>
+                              <label style={S.label}>{lbl} (mm)</label>
+                              <input className="input" type="number" value={tk.verticalidad[dir]}
+                                onChange={e=>updateTanque(tkIdx,'verticalidad',{...tk.verticalidad,[dir]:e.target.value})}
+                                placeholder="ej: 45"
+                                style={{ borderColor:fuera?'#EF4444':undefined }} />
+                              {fuera && <div style={{ fontSize:10, color:'#DC2626', marginTop:2 }}>⚠ Excede {tol.toFixed(0)} mm</div>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Asentamiento ── */}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
+                      letterSpacing:'.5px', borderLeft:'3px solid #185FA5', paddingLeft:8 }}>Asentamiento</div>
                     <button className="btn btn-secondary btn-sm"
-                      onClick={() => setTkMedicionesUT(p=>[...p,{zona:'',nominal_mm:'',medido_mm:'',minimo_mm:'',obs:''}])}>
+                      onClick={()=>updateTanque(tkIdx,'asentamiento',[...tk.asentamiento,{punto:'',cota_mm:'',diferencia_mm:'',estado:''}])}>
                       + Agregar punto
                     </button>
                   </div>
-                  {tkMedicionesUT.length===0 ? (
-                    <div style={{ color:'var(--gris)', fontSize:13, padding:'12px 0', textAlign:'center',
-                      borderTop:'1px dashed #E2E8F0', marginBottom:20 }}>
-                      Sin mediciones. Haz clic en "+ Agregar punto".
+                  {tk.asentamiento.length===0 ? (
+                    <div style={{ color:'var(--gris)', fontSize:12, padding:'10px 0', textAlign:'center', borderTop:'1px dashed #E2E8F0' }}>
+                      Sin puntos — clic en "+ Agregar punto"
                     </div>
                   ) : (
-                    <div style={{ overflowX:'auto', marginBottom:20 }}>
+                    <div style={{ overflowX:'auto' }}>
                       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                         <thead>
                           <tr style={{ background:'#F8FAFC' }}>
-                            {['Zona / Punto','E. nominal (mm)','E. medido (mm)','E. mín. req. (mm)','% Pérdida','Estado','Obs.',''].map(h=>(
-                              <th key={h} style={{ padding:'7px 10px', fontSize:11, fontWeight:700, color:'#64748B',
-                                textAlign:'left', border:'1px solid #E2E8F0', whiteSpace:'nowrap' }}>{h}</th>
+                            {['Punto','Cota medida (mm)','Diferencia (mm)','Estado',''].map(h=>(
+                              <th key={h} style={{ padding:'6px 9px', fontSize:11, fontWeight:700, color:'#64748B',
+                                textAlign:'left', border:'1px solid #E2E8F0' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {tkMedicionesUT.map((m,i) => {
-                            const pct = m.nominal_mm && m.medido_mm
-                              ? (((+m.nominal_mm - +m.medido_mm) / +m.nominal_mm)*100).toFixed(1) : '—'
-                            const bajoMin = m.minimo_mm && m.medido_mm && +m.medido_mm < +m.minimo_mm
-                            const estado = !m.medido_mm ? '—' : bajoMin ? '🔴 Rechazado' : parseFloat(pct)>20 ? '🟡 Alerta' : '🟢 OK'
+                          {tk.asentamiento.map((a,ai) => {
+                            const updA = (field,val) => updateTanque(tkIdx,'asentamiento',tk.asentamiento.map((x,j)=>j===ai?{...x,[field]:val}:x))
                             return (
-                              <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
-                                <td style={S.tdInput}><input className="input" value={m.zona}
-                                  onChange={e=>setTkMedicionesUT(p=>p.map((x,j)=>j===i?{...x,zona:e.target.value}:x))}
-                                  placeholder="Anillo 1 / Techo / Fondo" style={{ fontSize:11 }} /></td>
-                                <td style={S.tdInput}><input className="input" type="number" value={m.nominal_mm}
-                                  onChange={e=>setTkMedicionesUT(p=>p.map((x,j)=>j===i?{...x,nominal_mm:e.target.value}:x))}
-                                  placeholder="12.5" style={{ fontSize:11, width:70 }} /></td>
-                                <td style={S.tdInput}><input className="input" type="number" value={m.medido_mm}
-                                  onChange={e=>setTkMedicionesUT(p=>p.map((x,j)=>j===i?{...x,medido_mm:e.target.value}:x))}
-                                  placeholder="11.8" style={{ fontSize:11, width:70 }} /></td>
-                                <td style={S.tdInput}><input className="input" type="number" value={m.minimo_mm}
-                                  onChange={e=>setTkMedicionesUT(p=>p.map((x,j)=>j===i?{...x,minimo_mm:e.target.value}:x))}
-                                  placeholder="9.0" style={{ fontSize:11, width:70 }} /></td>
-                                <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', fontSize:11, fontWeight:700,
-                                  color:pct!=='—'&&parseFloat(pct)>20?'#991B1B':parseFloat(pct)>10?'#92400E':'#065F46' }}>
-                                  {pct!=='—'?`${pct}%`:'—'}
+                              <tr key={ai} style={{ background:ai%2===0?'#fff':'#F8FAFC' }}>
+                                <td style={S.tdInput}>
+                                  <select className="input" value={a.punto} onChange={e=>updA('punto',e.target.value)} style={{ fontSize:11, minWidth:70 }}>
+                                    <option value="">—</option>
+                                    {['N','NE','E','SE','S','SW','O','NO','Centro'].map(pt=><option key={pt} value={pt}>{pt}</option>)}
+                                  </select>
                                 </td>
-                                <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', fontSize:11, fontWeight:600 }}>{estado}</td>
-                                <td style={S.tdInput}><input className="input" value={m.obs}
-                                  onChange={e=>setTkMedicionesUT(p=>p.map((x,j)=>j===i?{...x,obs:e.target.value}:x))}
-                                  placeholder="Observación" style={{ fontSize:11 }} /></td>
+                                <td style={S.tdInput}><input className="input" type="number" value={a.cota_mm} onChange={e=>updA('cota_mm',e.target.value)} placeholder="0.0" style={{ fontSize:11, width:95 }} /></td>
+                                <td style={S.tdInput}><input className="input" type="number" value={a.diferencia_mm} onChange={e=>updA('diferencia_mm',e.target.value)} placeholder="0.0" style={{ fontSize:11, width:95 }} /></td>
+                                <td style={S.tdInput}>
+                                  <select className="input" value={a.estado} onChange={e=>updA('estado',e.target.value)} style={{ fontSize:11 }}>
+                                    <option value="">—</option>
+                                    <option value="OK">✅ Dentro tolerancia</option>
+                                    <option value="ALERTA">⚠️ Alerta</option>
+                                    <option value="CRÍTICO">🔴 Crítico</option>
+                                  </select>
+                                </td>
                                 <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
-                                  <button onClick={()=>setTkMedicionesUT(p=>p.filter((_,j)=>j!==i))}
-                                    style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:15 }}>✕</button>
+                                  <button onClick={()=>updateTanque(tkIdx,'asentamiento',tk.asentamiento.filter((_,j)=>j!==ai))}
+                                    style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:14 }}>✕</button>
                                 </td>
                               </tr>
                             )
@@ -1290,102 +1398,12 @@ export default function NuevoInforme() {
                       </table>
                     </div>
                   )}
-                </>
-              )}
+                </div>
+              ))}
 
-              {/* ── Verticalidad (solo tanques verticales) ── */}
-              {tkConfig.orientacion==='vertical' && (
-                <>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
-                    letterSpacing:'.5px', marginBottom:10, borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
-                    Medición de verticalidad — 4 puntos cardinales
-                    <span style={{ fontSize:10, color:'#64748B', fontWeight:400, marginLeft:8, textTransform:'none' }}>
-                      Tolerancia API 653: H/100{tkGeom.altura_m ? ` = ${(+tkGeom.altura_m/100*1000).toFixed(0)} mm` : ''}
-                    </span>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
-                    {[['norte','Norte (N)'],['sur','Sur (S)'],['este','Este (E)'],['oeste','Oeste (O)']].map(([dir,lbl]) => {
-                      const tol = tkGeom.altura_m ? +tkGeom.altura_m/100*1000 : null
-                      const val = +tkVerticalidad[dir]
-                      const fuera = tol && val && val > tol
-                      return (
-                        <div key={dir}>
-                          <label style={S.label}>{lbl} (mm)</label>
-                          <input className="input" type="number" value={tkVerticalidad[dir]}
-                            onChange={e=>setTkVerticalidad(p=>({...p,[dir]:e.target.value}))}
-                            placeholder="ej: 45"
-                            style={{ borderColor: fuera?'#EF4444':undefined }} />
-                          {fuera && <div style={{ fontSize:10, color:'#DC2626', marginTop:2 }}>⚠ Excede tolerancia ({tol.toFixed(0)} mm)</div>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-
-              {/* ── Asentamiento ── */}
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'#1A3A5C', textTransform:'uppercase',
-                  letterSpacing:'.5px', borderLeft:'3px solid #185FA5', paddingLeft:8 }}>
-                  Medición de asentamiento
-                </div>
-                <button className="btn btn-secondary btn-sm"
-                  onClick={()=>setTkAsentamiento(p=>[...p,{punto:'',cota_mm:'',diferencia_mm:'',estado:''}])}>
-                  + Agregar punto
-                </button>
-              </div>
-              {tkAsentamiento.length===0 ? (
-                <div style={{ color:'var(--gris)', fontSize:13, padding:'12px 0', textAlign:'center', borderTop:'1px dashed #E2E8F0' }}>
-                  Sin puntos. Haz clic en "+ Agregar punto".
-                </div>
-              ) : (
-                <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                    <thead>
-                      <tr style={{ background:'#F8FAFC' }}>
-                        {['Punto','Cota medida (mm)','Diferencia (mm)','Estado',''].map(h=>(
-                          <th key={h} style={{ padding:'7px 10px', fontSize:11, fontWeight:700, color:'#64748B',
-                            textAlign:'left', border:'1px solid #E2E8F0' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tkAsentamiento.map((a,i) => (
-                        <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
-                          <td style={S.tdInput}>
-                            <select className="input" value={a.punto}
-                              onChange={e=>setTkAsentamiento(p=>p.map((x,j)=>j===i?{...x,punto:e.target.value}:x))}
-                              style={{ fontSize:11, minWidth:70 }}>
-                              <option value="">—</option>
-                              {['N','NE','E','SE','S','SW','O','NO','Centro'].map(pt=><option key={pt} value={pt}>{pt}</option>)}
-                            </select>
-                          </td>
-                          <td style={S.tdInput}><input className="input" type="number" value={a.cota_mm}
-                            onChange={e=>setTkAsentamiento(p=>p.map((x,j)=>j===i?{...x,cota_mm:e.target.value}:x))}
-                            placeholder="0.0" style={{ fontSize:11, width:100 }} /></td>
-                          <td style={S.tdInput}><input className="input" type="number" value={a.diferencia_mm}
-                            onChange={e=>setTkAsentamiento(p=>p.map((x,j)=>j===i?{...x,diferencia_mm:e.target.value}:x))}
-                            placeholder="0.0" style={{ fontSize:11, width:100 }} /></td>
-                          <td style={S.tdInput}>
-                            <select className="input" value={a.estado}
-                              onChange={e=>setTkAsentamiento(p=>p.map((x,j)=>j===i?{...x,estado:e.target.value}:x))}
-                              style={{ fontSize:11 }}>
-                              <option value="">—</option>
-                              <option value="OK">✅ Dentro tolerancia</option>
-                              <option value="ALERTA">⚠️ Alerta</option>
-                              <option value="CRÍTICO">🔴 Crítico</option>
-                            </select>
-                          </td>
-                          <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
-                            <button onClick={()=>setTkAsentamiento(p=>p.filter((_,j)=>j!==i))}
-                              style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:15 }}>✕</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <button className="btn btn-secondary" onClick={addTanque} style={{ width:'100%', cursor:'pointer' }}>
+                + Agregar otro tanque
+              </button>
             </div>
           )}
 
