@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { encolarInforme } from '../lib/offlineDB'
+import CroquisEquipo from '../components/CroquisEquipo'
 
 // ── Configuración por tipo de equipo ──────────────────────────────────────────
 
@@ -645,6 +646,8 @@ export default function NuevoInforme() {
   const [equiposIzaje, setEquiposIzaje] = useState([{}])
   // Error de validación de hallazgo
   const [hallazgoDescError, setHallazgoDescError] = useState(false)
+  // Datos visuales de croquis (mediciones + control dimensional)
+  const [datosVisuales, setDatosVisuales] = useState({})
 
   // ── Estado inspección TANQUE (múltiples tanques) ─────────────────────────
   const initTanque = () => ({
@@ -985,6 +988,7 @@ export default function NuevoInforme() {
         inspectores_ot:            inspectoresOT,
         tanques,
         lineas: lineasGuardar,
+        croquis: datosVisuales,
       },
       end_aplicados:     endAplicados,
       mediciones,
@@ -2475,6 +2479,29 @@ export default function NuevoInforme() {
               <button className="btn btn-secondary" onClick={addLinea} style={{ width:'100%', cursor:'pointer' }}>
                 + Agregar otra línea / tramo
               </button>
+            </div>
+          )}
+
+          {/* ── PASO 5d: Croquis y Mediciones Visuales ── */}
+          {(tipo === 'TANQUE' || tipo === 'TUBERIA' || tipo === 'ESTRUCTURA') && (
+            <div style={S.seccion}>
+              <div style={S.seccionTitulo}>⑤d Croquis y Registro de Mediciones</div>
+              <CroquisEquipo
+                tipo={tipo}
+                data={datosVisuales}
+                onChange={setDatosVisuales}
+              />
+            </div>
+          )}
+          {tipo === 'IZAJE' && elementosIzaje.some(el => getFamiliaIzaje(el.tipo) === 'hardware') && (
+            <div style={S.seccion}>
+              <div style={S.seccionTitulo}>⑤d Control Dimensional — Elementos de Izaje</div>
+              <CroquisEquipo
+                tipo="IZAJE"
+                tipoIzaje={elementosIzaje.find(el => getFamiliaIzaje(el.tipo) === 'hardware')?.tipo}
+                data={datosVisuales}
+                onChange={setDatosVisuales}
+              />
             </div>
           )}
 
