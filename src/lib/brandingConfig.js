@@ -37,10 +37,10 @@ export const BRAND = {
 
   // ── Acreditación INN ─────────────────────────────────────────────────
   inn: {
-    numero:       'INN-XXXX',                 // Número de acreditación
-    alcance:      'Ensayos No Destructivos',
+    numero:       'O1376 y 377',              // Acreditación INN-Chile
+    alcance:      'Organismo de Inspección Industrial',
     norma:        'ISO/IEC 17020:2012',
-    vigencia:     '2026-12-31',               // Actualizar según certificado
+    vigencia:     '2026-12-31',               // Actualizar según certificado vigente
   },
 }
 
