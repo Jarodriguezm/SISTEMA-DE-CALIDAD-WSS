@@ -399,74 +399,116 @@ export function CroquisTuberia({ data = {}, onChange }) {
       <div style={S.title}>Medición de Espesores — Tubería (UT Pulso-Eco)</div>
       <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
 
-        {/* SVG tubería — croquis técnico v3 */}
+        {/* SVG tubería — codo real v5: path relleno con extradós/intradós geométricamente correctos */}
         <div style={{ flex:'0 0 200px' }}>
           <svg viewBox="0 0 195 215" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:200 }}>
-
             {/*
-              TÉCNICA: tuberías como trazo grueso, paleta gris acero.
-              Tramo horizontal: y=120, de x=12 a x=83
-              Codo 90°: arco radio=37, centro (120,120), de (83,120) a (120,83)
-              Tramo vertical: x=120, de y=83 a y=18
+              GEOMETRÍA DEL CODO 90°:
+              Línea de centro horizontal: y=120, de x=12 a x=83
+              Línea de centro vertical:   x=120, de y=18 a y=83
+              Radio de codo (centroline): R=37
+              Radio visual de la tubería: d=13  (diámetro visual = 26 px)
+              Esquina interior del codo:  (83, 83)
+
+              Arco EXTERIOR (extradós): centro (83,83), radio R+d=50
+                Desde (83,133) hasta (133,83) — barrido CCW sweep=0
+
+              Arco INTERIOR (intradós): centro (83,83), radio R-d=24
+                Desde (107,83) hasta (83,107) — barrido CW sweep=1
+
+              Path del cuerpo del codo:
+                M 83,133  → inicio en pared inferior del tramo horizontal
+                A 50,50 0 0 0 133,83  → arco exterior CCW hasta pared derecha del tramo vertical
+                L 107,83  → cara de corte del tramo vertical (derecha → izquierda)
+                A 24,24 0 0 1 83,107  → arco interior CW hasta pared superior del tramo horizontal
+                Z → cierra: cara de corte del tramo horizontal (arriba → abajo)
             */}
 
-            {/* ── BORDE EXTERIOR (sombra) ── */}
-            <line x1="12" y1="120" x2="83" y2="120"
-              fill="none" stroke="#1E293B" strokeWidth="26" strokeLinecap="square"/>
-            <path d="M 83,120 A 37,37 0 0 1 120,83"
-              fill="none" stroke="#1E293B" strokeWidth="26" strokeLinecap="round"/>
-            <line x1="120" y1="83" x2="120" y2="18"
-              fill="none" stroke="#1E293B" strokeWidth="26" strokeLinecap="square"/>
+            <defs>
+              {/* Gradiente tubería horizontal: oscuro-claro-oscuro (efecto cilindro) */}
+              <linearGradient id="tub_h" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor="#0F172A"/>
+                <stop offset="18%"  stopColor="#334155"/>
+                <stop offset="40%"  stopColor="#C4D4DF"/>
+                <stop offset="56%"  stopColor="#8AABBE"/>
+                <stop offset="80%"  stopColor="#334155"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </linearGradient>
+              {/* Gradiente tubería vertical */}
+              <linearGradient id="tub_v" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%"   stopColor="#0F172A"/>
+                <stop offset="18%"  stopColor="#334155"/>
+                <stop offset="40%"  stopColor="#C4D4DF"/>
+                <stop offset="56%"  stopColor="#8AABBE"/>
+                <stop offset="80%"  stopColor="#334155"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </linearGradient>
+              {/* Gradiente codo: radial desde extradós (brillante) hacia esquina interior (oscuro) */}
+              <radialGradient id="tub_codo" cx="75%" cy="75%" r="70%" gradientUnits="objectBoundingBox">
+                <stop offset="0%"   stopColor="#C4D4DF"/>
+                <stop offset="35%"  stopColor="#7A9BB0"/>
+                <stop offset="65%"  stopColor="#334155"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </radialGradient>
+            </defs>
 
-            {/* ── CUERPO DE LA TUBERÍA (gris acero) ── */}
-            <line x1="12" y1="120" x2="83" y2="120"
-              fill="none" stroke="#64748B" strokeWidth="22" strokeLinecap="square"/>
-            <path d="M 83,120 A 37,37 0 0 1 120,83"
-              fill="none" stroke="#64748B" strokeWidth="22" strokeLinecap="round"/>
-            <line x1="120" y1="83" x2="120" y2="18"
-              fill="none" stroke="#64748B" strokeWidth="22" strokeLinecap="square"/>
+            {/* ── TRAMO HORIZONTAL ── */}
+            <rect x="12" y="107" width="71" height="26" fill="url(#tub_h)"/>
+            <line x1="12" y1="107" x2="83" y2="107" stroke="#080E14" strokeWidth="1.2"/>
+            <line x1="12" y1="133" x2="83" y2="133" stroke="#080E14" strokeWidth="1.2"/>
 
-            {/* ── RESALTE SUPERIOR/LATERAL (efecto cilindro) ── */}
-            <line x1="12" y1="112" x2="83" y2="112"
-              fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="square" opacity="0.75"/>
-            <path d="M 83,112 A 29,29 0 0 1 112,83"
-              fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="round" opacity="0.75"/>
-            <line x1="112" y1="83" x2="112" y2="18"
-              fill="none" stroke="#CBD5E1" strokeWidth="8" strokeLinecap="square" opacity="0.75"/>
+            {/* ── TRAMO VERTICAL ── */}
+            <rect x="107" y="18" width="26" height="65" fill="url(#tub_v)"/>
+            <line x1="107" y1="18" x2="107" y2="83" stroke="#080E14" strokeWidth="1.2"/>
+            <line x1="133" y1="18" x2="133" y2="83" stroke="#080E14" strokeWidth="1.2"/>
 
-            {/* ── TAPAS (sección transversal en los extremos) ── */}
-            {/* Tapa izquierda */}
-            <ellipse cx="12" cy="120" rx="5" ry="11" fill="#94A3B8" stroke="#1E293B" strokeWidth="1.5"/>
-            {/* Tapa superior */}
-            <ellipse cx="120" cy="18" rx="11" ry="5" fill="#94A3B8" stroke="#1E293B" strokeWidth="1.5"/>
+            {/* ── CODO 90° — path relleno (extradós + intradós reales) ── */}
+            <path
+              d="M 83,133 A 50,50 0 0 0 133,83 L 107,83 A 24,24 0 0 1 83,107 Z"
+              fill="url(#tub_codo)"
+              stroke="#080E14"
+              strokeWidth="1.5"
+            />
+
+            {/* ── TAPA IZQUIERDA (vista sección transversal) ── */}
+            <ellipse cx="12" cy="120" rx="5" ry="13" fill="#2D3E4E" stroke="#080E14" strokeWidth="1.5"/>
+            <ellipse cx="12" cy="120" rx="3.5" ry="9"   fill="#475569"/>
+            <ellipse cx="12" cy="120" rx="2"   ry="5.5" fill="#050A0F"/>
+
+            {/* ── TAPA SUPERIOR ── */}
+            <ellipse cx="120" cy="18" rx="13" ry="5"   fill="#2D3E4E" stroke="#080E14" strokeWidth="1.5"/>
+            <ellipse cx="120" cy="18" rx="9"  ry="3.5" fill="#475569"/>
+            <ellipse cx="120" cy="18" rx="5.5" ry="2"  fill="#050A0F"/>
+
+            {/* ── FLECHAS DE FLUJO ── */}
+            <polygon points="22,117 31,120 22,123" fill="#8AABBE" opacity="0.8"/>
+            <polygon points="117,28 120,18 123,28" fill="#8AABBE" opacity="0.8"/>
 
             {/* ── PUNTOS DE MEDICIÓN ── */}
             {/* P1: Tramo horizontal */}
-            <circle cx="45" cy="120" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
+            <circle cx="45" cy="120" r="9" fill="#1E3A5F"/>
             <text x="45" y="124" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P1</text>
 
-            {/* P2: Extradós del codo */}
-            <circle cx="86" cy="99" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
-            <text x="86" y="103" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P2</text>
+            {/* P2: Extradós — sobre el arco exterior, ~45° desde esquina interior (83+35,83+35)≈(118,118) */}
+            <line x1="118" y1="118" x2="130" y2="132" stroke="#fff" strokeWidth="1" opacity="0.5"/>
+            <circle cx="138" cy="139" r="9" fill="#1E3A5F"/>
+            <text x="138" y="143" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P2</text>
 
-            {/* P3: Intradós del codo */}
-            <circle cx="107" cy="116" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
-            <text x="107" y="120" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P3</text>
+            {/* P3: Intradós — arco interior ~45° desde (83,83): (83+17,83+17)=(100,100) */}
+            <line x1="100" y1="100" x2="91" y2="89" stroke="#fff" strokeWidth="1" opacity="0.5"/>
+            <circle cx="85" cy="80" r="9" fill="#1E3A5F"/>
+            <text x="85" y="84" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P3</text>
 
             {/* P4: Tramo vertical */}
-            <circle cx="120" cy="52" r="9" fill="#1E3A5F" stroke="#fff" strokeWidth="2"/>
-            <text x="120" y="56" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P4</text>
-
-            {/* ── FLECHAS DE FLUJO ── */}
-            <polygon points="22,117 31,120 22,123" fill="#CBD5E1" opacity="0.9"/>
-            <polygon points="117,31 120,22 123,31" fill="#CBD5E1" opacity="0.9"/>
+            <circle cx="120" cy="50" r="9" fill="#1E3A5F"/>
+            <text x="120" y="54" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P4</text>
 
             {/* ── LEYENDA ── */}
-            <text x="8" y="150" fill="#475569" fontSize="10" fontWeight="700">Flujo →</text>
-            <text x="8" y="164" fill="#64748B" fontSize="9">P1: Tramo recto</text>
-            <text x="8" y="176" fill="#64748B" fontSize="9">P2: Extradós codo</text>
-            <text x="8" y="188" fill="#64748B" fontSize="9">P3: Intradós codo</text>
-            <text x="8" y="200" fill="#64748B" fontSize="9">P4: Tramo vertical</text>
+            <text x="8" y="155" fill="#475569" fontSize="10" fontWeight="700">Flujo →</text>
+            <text x="8" y="168" fill="#64748B" fontSize="9">P1: Tramo recto</text>
+            <text x="8" y="180" fill="#64748B" fontSize="9">P2: Extradós codo</text>
+            <text x="8" y="192" fill="#64748B" fontSize="9">P3: Intradós codo</text>
+            <text x="8" y="204" fill="#64748B" fontSize="9">P4: Tramo vertical</text>
           </svg>
           <p style={S.nota}>Puntos según API 570<br/>Unidades en mm</p>
         </div>
@@ -668,7 +710,243 @@ export function CroquisPlancha({ data = {}, onChange }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 5. Selector principal — elige el croquis según tipo
+// 5. SPOOL — Isométrico prefabricado con flanges y codo real
+// ════════════════════════════════════════════════════════════════════════════
+
+export function CroquisSpool({ data = {}, onChange }) {
+  const puntos = data.puntos || [
+    { id:'P1', zona:'Tramo horizontal', nominal:'', medido:'' },
+    { id:'P2', zona:'Extradós codo',    nominal:'', medido:'' },
+    { id:'P3', zona:'Intradós codo',    nominal:'', medido:'' },
+    { id:'P4', zona:'Tramo vertical',   nominal:'', medido:'' },
+  ]
+
+  function setPunto(i, field, val) {
+    const p = puntos.map((pt, j) => j === i ? { ...pt, [field]: val } : pt)
+    onChange({ ...data, puntos: p })
+  }
+  function addPunto() {
+    onChange({ ...data, puntos: [...puntos, { id:`P${puntos.length + 1}`, zona:'', nominal:'', medido:'' }] })
+  }
+  function removePunto(i) {
+    onChange({ ...data, puntos: puntos.filter((_, j) => j !== i) })
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={S.title}>Medición de Espesores — Spool (UT Pulso-Eco)</div>
+      <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
+
+        {/* SVG Spool con flanges y codo real */}
+        <div style={{ flex:'0 0 210px' }}>
+          <svg viewBox="0 0 210 215" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:210 }}>
+            {/*
+              SPOOL N°1 — Geometría:
+              Línea de centro horizontal: y=130, de x=30 a x=113
+              Línea de centro vertical:   x=153, de y=48 a y=90
+              Codo 90°: esquina interior (113, 90), R=40, d=10
+              Arco exterior (R+d=50): (113,140) → (163,90), CCW sweep=0
+              Arco interior (R-d=30): (143,90) → (113,120), CW sweep=1
+
+              Bridas: raised-face, con 4 agujeros de perno
+                Brida izquierda: x=12–29, cy=130, OD±22
+                Brida superior:  y=36–50, cx=153, OD±22
+            */}
+
+            <defs>
+              <linearGradient id="sp_h" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor="#0F172A"/>
+                <stop offset="20%"  stopColor="#334155"/>
+                <stop offset="42%"  stopColor="#C4D4DF"/>
+                <stop offset="58%"  stopColor="#8AABBE"/>
+                <stop offset="80%"  stopColor="#334155"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </linearGradient>
+              <linearGradient id="sp_v" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%"   stopColor="#0F172A"/>
+                <stop offset="20%"  stopColor="#334155"/>
+                <stop offset="42%"  stopColor="#C4D4DF"/>
+                <stop offset="58%"  stopColor="#8AABBE"/>
+                <stop offset="80%"  stopColor="#334155"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </linearGradient>
+              <radialGradient id="sp_codo" cx="75%" cy="75%" r="70%" gradientUnits="objectBoundingBox">
+                <stop offset="0%"   stopColor="#C4D4DF"/>
+                <stop offset="38%"  stopColor="#7A9BB0"/>
+                <stop offset="68%"  stopColor="#334155"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </radialGradient>
+              <linearGradient id="sp_fl_v" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%"   stopColor="#0F172A"/>
+                <stop offset="28%"  stopColor="#4A6878"/>
+                <stop offset="52%"  stopColor="#8AABBE"/>
+                <stop offset="75%"  stopColor="#4A6878"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </linearGradient>
+              <linearGradient id="sp_fl_h" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor="#0F172A"/>
+                <stop offset="28%"  stopColor="#4A6878"/>
+                <stop offset="52%"  stopColor="#8AABBE"/>
+                <stop offset="75%"  stopColor="#4A6878"/>
+                <stop offset="100%" stopColor="#0F172A"/>
+              </linearGradient>
+            </defs>
+
+            {/* ── BRIDA IZQUIERDA (raised-face) ── */}
+            <rect x="12" y="108" width="18" height="44" rx="1"
+              fill="url(#sp_fl_v)" stroke="#080E14" strokeWidth="1.5"/>
+            {/* Cara levantada (raised face) */}
+            <rect x="13.5" y="118" width="15" height="24"
+              fill="#6B8BA0" stroke="#080E14" strokeWidth="0.8"/>
+            {/* 4 pernos */}
+            {[111,119,141,149].map(cy => (
+              <circle key={cy} cx="21" cy={cy} r="2.5" fill="#080E14"/>
+            ))}
+            {/* Vista de cara / bore */}
+            <ellipse cx="12" cy="130" rx="4.5" ry="22" fill="#2D3E4E" stroke="#080E14" strokeWidth="1.5"/>
+            <ellipse cx="12" cy="130" rx="3"   ry="16" fill="#475569"/>
+            <ellipse cx="12" cy="130" rx="1.8" ry="10" fill="#050A0F"/>
+
+            {/* ── TRAMO HORIZONTAL ── */}
+            <rect x="30" y="120" width="83" height="20" fill="url(#sp_h)"/>
+            <line x1="30" y1="120" x2="113" y2="120" stroke="#080E14" strokeWidth="1"/>
+            <line x1="30" y1="140" x2="113" y2="140" stroke="#080E14" strokeWidth="1"/>
+
+            {/* ── TRAMO VERTICAL ── */}
+            <rect x="143" y="50" width="20" height="40" fill="url(#sp_v)"/>
+            <line x1="143" y1="50" x2="143" y2="90" stroke="#080E14" strokeWidth="1"/>
+            <line x1="163" y1="50" x2="163" y2="90" stroke="#080E14" strokeWidth="1"/>
+
+            {/* ── CODO 90° real — path relleno ──
+                Esquina interior: (113, 90)
+                Outer arc r=50: (113,140)→(163,90) CCW sweep=0
+                Inner arc r=30: (143,90)→(113,120) CW sweep=1  */}
+            <path
+              d="M 113,140 A 50,50 0 0 0 163,90 L 143,90 A 30,30 0 0 1 113,120 Z"
+              fill="url(#sp_codo)"
+              stroke="#080E14"
+              strokeWidth="1.5"
+            />
+
+            {/* ── BRIDA SUPERIOR (raised-face) ── */}
+            <rect x="131" y="36" width="44" height="14" rx="1"
+              fill="url(#sp_fl_h)" stroke="#080E14" strokeWidth="1.5"/>
+            {/* Cara levantada */}
+            <rect x="141" y="37.5" width="24" height="11"
+              fill="#6B8BA0" stroke="#080E14" strokeWidth="0.8"/>
+            {/* 4 pernos */}
+            {[134,142,164,172].map(cx => (
+              <circle key={cx} cx={cx} cy="43" r="2.5" fill="#080E14"/>
+            ))}
+            {/* Vista de cara / bore */}
+            <ellipse cx="153" cy="36" rx="22" ry="4.5" fill="#2D3E4E" stroke="#080E14" strokeWidth="1.5"/>
+            <ellipse cx="153" cy="36" rx="16" ry="3"   fill="#475569"/>
+            <ellipse cx="153" cy="36" rx="10" ry="1.8" fill="#050A0F"/>
+
+            {/* ── FLECHAS DE FLUJO ── */}
+            <polygon points="40,127 50,130 40,133" fill="#8AABBE" opacity="0.8"/>
+            <polygon points="150,58 153,48 156,58" fill="#8AABBE" opacity="0.8"/>
+
+            {/* ── PUNTOS DE MEDICIÓN ── */}
+            {/* P1: horizontal */}
+            <circle cx="70" cy="130" r="9" fill="#1E3A5F"/>
+            <text x="70" y="134" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P1</text>
+            {/* P2: extradós (113+35,90+35)=(148,125) */}
+            <line x1="147" y1="124" x2="160" y2="138" stroke="#fff" strokeWidth="1" opacity="0.5"/>
+            <circle cx="168" cy="145" r="9" fill="#1E3A5F"/>
+            <text x="168" y="149" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P2</text>
+            {/* P3: intradós (113+21,90+21)=(134,111), label arriba-izq */}
+            <line x1="132" y1="109" x2="122" y2="99" stroke="#fff" strokeWidth="1" opacity="0.5"/>
+            <circle cx="116" cy="92" r="9" fill="#1E3A5F"/>
+            <text x="116" y="96" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P3</text>
+            {/* P4: vertical */}
+            <circle cx="153" cy="68" r="9" fill="#1E3A5F"/>
+            <text x="153" y="72" fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle">P4</text>
+
+            {/* ── ETIQUETAS TÉCNICAS ── */}
+            <text x="8"  y="162" fill="#475569" fontSize="9.5" fontWeight="700">Spool N°1</text>
+            <text x="8"  y="175" fill="#64748B" fontSize="8.5">Mat: A106-B · Sch 40</text>
+            <text x="8"  y="187" fill="#64748B" fontSize="8.5">OD: 168.3 mm · WT: 7.11 mm</text>
+            <text x="8"  y="200" fill="#64748B" fontSize="8.5">Bridas: ASME B16.5 · 150 lb RF</text>
+            <text x="8"  y="211" fill="#94A3B8" fontSize="7.5" fontStyle="italic">Ref: ISO 15614</text>
+
+            {/* Etiquetas bridas */}
+            <text x="10" y="98" fill="#64748B" fontSize="7.5" textAnchor="middle">BRIDA</text>
+            <text x="10" y="107" fill="#64748B" fontSize="7.5" textAnchor="middle">RF</text>
+            <text x="153" y="26" fill="#64748B" fontSize="7.5" textAnchor="middle">BRIDA RF</text>
+          </svg>
+          <p style={S.nota}>Puntos según API 570<br/>Unidades en mm</p>
+        </div>
+
+        {/* Tabla de puntos */}
+        <div style={{ flex:1, minWidth:300 }}>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, width:50 }}>Punto</th>
+                  <th style={S.th}>Zona / Descripción</th>
+                  <th style={{ ...S.th, width:100 }}>Nominal (mm)</th>
+                  <th style={{ ...S.th, width:100 }}>Medido (mm)</th>
+                  <th style={{ ...S.th, width:36 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {puntos.map((pt, i) => {
+                  const nom = parseFloat(pt.nominal)
+                  const med = parseFloat(pt.medido)
+                  const bajo = !isNaN(nom) && !isNaN(med) && med < nom * 0.875
+                  return (
+                    <tr key={i}>
+                      <td style={S.td}>
+                        <input style={{ ...S.input, width:44, fontWeight:700 }}
+                          value={pt.id} onChange={e => setPunto(i, 'id', e.target.value)} />
+                      </td>
+                      <td style={S.td}>
+                        <input style={{ ...S.input, textAlign:'left' }}
+                          value={pt.zona} onChange={e => setPunto(i, 'zona', e.target.value)}
+                          placeholder="ej: Codo 90° extradós" />
+                      </td>
+                      <td style={S.td}>
+                        <input style={{ ...S.input }} type="number" step="0.1"
+                          value={pt.nominal} onChange={e => setPunto(i, 'nominal', e.target.value)}
+                          placeholder="—" />
+                      </td>
+                      <td style={{ ...S.td, background: bajo ? '#FEF2F2' : '#fff' }}>
+                        <input style={{ ...S.input, color: bajo ? '#DC2626' : '#1E293B', fontWeight: bajo ? 700 : 400 }}
+                          type="number" step="0.1"
+                          value={pt.medido} onChange={e => setPunto(i, 'medido', e.target.value)}
+                          placeholder="—" />
+                      </td>
+                      <td style={{ ...S.td, textAlign:'center' }}>
+                        <button onClick={() => removePunto(i)}
+                          style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:14, padding:2 }}>
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:10 }}>
+            <button onClick={addPunto} style={S.btnSec}>+ Agregar punto</button>
+            <span style={{ fontSize:11, color:'#94A3B8' }}>
+              🔴 Rojo = espesor &lt; 87.5% nominal (API 570)
+            </span>
+          </div>
+          <div style={{ marginTop:10, padding:'8px 12px', background:'#F0FDF4', borderRadius:8, border:'1px solid #BBF7D0', fontSize:11, color:'#166534' }}>
+            <b>Nota:</b> Datos de especificación (Mat/OD/WT) son editables en el encabezado del informe.
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 6. Selector principal — elige el croquis según tipo
 // ════════════════════════════════════════════════════════════════════════════
 
 export default function CroquisEquipo({ tipo, tipoIzaje, data = {}, onChange }) {
@@ -680,6 +958,9 @@ export default function CroquisEquipo({ tipo, tipoIzaje, data = {}, onChange }) 
   }
   if (tipo === 'TUBERIA') {
     return <CroquisTuberia data={data.mediciones_ut || {}} onChange={v => onChange({ ...data, mediciones_ut: v })} />
+  }
+  if (tipo === 'SPOOL') {
+    return <CroquisSpool data={data.mediciones_ut || {}} onChange={v => onChange({ ...data, mediciones_ut: v })} />
   }
   if (tipo === 'ESTRUCTURA') {
     return <CroquisPlancha data={data.mediciones_ut || {}} onChange={v => onChange({ ...data, mediciones_ut: v })} />
