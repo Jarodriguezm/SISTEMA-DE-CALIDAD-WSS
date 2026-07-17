@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
 import { supabase } from '../../lib/supabase'
+import ChatWidget from '../chat/ChatWidget'
 
 // ── Iconos SVG inline ─────────────────────────────────────────────────────
 // Basado en Heroicons (MIT). Trazo consistente strokeWidth=1.5.
@@ -386,6 +387,9 @@ export default function Layout({ children }) {
           {children}
         </main>
       </div>
+
+      {/* Asistente IA flotante — disponible en toda la app */}
+      <ChatWidget />
     </div>
   )
 }
