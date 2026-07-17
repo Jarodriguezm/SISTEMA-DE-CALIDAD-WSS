@@ -4,6 +4,7 @@
 // ============================================================
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/AuthContext'
 
 const API_URL    = '/api/chat'
 const MAX_LOOPS  = 4   // máximo de rondas tool → respuesta antes de cortar
@@ -62,6 +63,7 @@ const TOOL_LABEL = {
 
 // ═══════════════════════════════════════════════════════════════════════════
 export default function ChatWidget() {
+  const { usuario } = useAuth()
   const [abierto,       setAbierto]       = useState(false)
   const [mensajes,      setMensajes]      = useState([])    // { id, rol, texto, imagen? }
   const [historialAPI,  setHistorialAPI]  = useState([])    // formato OpenAI
@@ -94,14 +96,13 @@ export default function ChatWidget() {
     setContextoCargado(true)
 
     async function cargarContexto() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        const { data: perfil }   = await supabase
-          .from('usuarios')
-          .select('nombre, rol, sede')
-          .eq('id', user?.id)
-          .single()
+      // Nombre desde el contexto de auth (ya disponible, sin query extra)
+      const nombre     = usuario?.nombre?.split(' ')[0] || usuario?.email?.split('@')[0] || 'usuario'
+      const nombreFull = usuario?.nombre || ''
+      const rol        = usuario?.rol    || ''
+      const sede       = usuario?.sede   || ''
 
+      try {
         const [{ count: totalOTs }, { count: pendientes }, { count: proximas }] = await Promise.all([
           supabase.from('v_portal_ots_listado').select('*', { count: 'exact', head: true }),
           supabase.from('v_portal_ots_listado').select('*', { count: 'exact', head: true })
@@ -112,32 +113,28 @@ export default function ChatWidget() {
         ])
 
         const ctx = [
-          perfil?.nombre && `Usuario: ${perfil.nombre}`,
-          perfil?.rol    && `Rol: ${perfil.rol}`,
-          perfil?.sede   && `Sede: ${perfil.sede}`,
+          nombreFull && `Usuario: ${nombreFull}`,
+          rol        && `Rol: ${rol}`,
+          sede       && `Sede: ${sede}`,
           `Fecha: ${new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
-          totalOTs    != null && `OTs totales en sistema: ${totalOTs}`,
-          pendientes  != null && `OTs pendientes de asignación: ${pendientes}`,
-          proximas    != null && `Asignaciones próximas (7 días): ${proximas}`,
+          totalOTs   != null && `OTs totales en sistema: ${totalOTs}`,
+          pendientes != null && `OTs pendientes de asignación: ${pendientes}`,
+          proximas   != null && `Asignaciones próximas (7 días): ${proximas}`,
         ].filter(Boolean).join('\n')
 
         setContexto(ctx)
-
-        const nombre = perfil?.nombre?.split(' ')[0] || 'usuario'
-        setMensajes([{
-          id: 0,
-          rol: 'ia',
-          texto: `Hola ${nombre}. Soy el asistente IA de WSS. Puedo ayudarte con procedimientos de inspección, búsqueda de OTs y asignaciones, análisis de documentos técnicos y más. ¿En qué te puedo ayudar?`
-        }])
-
       } catch {
-        setContexto('Usuario autenticado en WSS.')
-        setMensajes([{
-          id: 0,
-          rol: 'ia',
-          texto: 'Hola. Soy el asistente IA de WSS. ¿En qué te puedo ayudar?'
-        }])
+        setContexto([
+          nombreFull && `Usuario: ${nombreFull}`,
+          rol        && `Rol: ${rol}`,
+        ].filter(Boolean).join('\n') || 'Usuario autenticado en WSS.')
       }
+
+      setMensajes([{
+        id: 0,
+        rol: 'ia',
+        texto: `Hola ${nombre}. Soy el asistente IA de WSS. Puedo ayudarte con procedimientos de inspección, búsqueda de OTs y asignaciones, análisis de documentos técnicos y más. ¿En qué te puedo ayudar?`
+      }])
     }
 
     cargarContexto()
