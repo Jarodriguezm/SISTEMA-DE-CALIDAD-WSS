@@ -133,7 +133,7 @@ export default function ChatWidget() {
       setMensajes([{
         id: 0,
         rol: 'ia',
-        texto: `Hola ${nombre}. Soy el asistente IA de WSS. Puedo ayudarte con procedimientos de inspección, búsqueda de OTs y asignaciones, análisis de documentos técnicos y más. ¿En qué te puedo ayudar?`
+        texto: `Hola ${nombre}, soy María, tu asistente de WSS. Puedo ayudarte con procedimientos de inspección, búsqueda de OTs y asignaciones, análisis de documentos técnicos y más. ¿En qué te puedo ayudar?`
       }])
     }
 
@@ -299,7 +299,7 @@ export default function ChatWidget() {
               <div style={S.avatarIA}><IcRobot /></div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', lineHeight: 1 }}>
-                  Asistente WSS
+                  María · Asistente WSS
                 </div>
                 <div style={{ fontSize: 11, color: '#22C55E', display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }}/>
