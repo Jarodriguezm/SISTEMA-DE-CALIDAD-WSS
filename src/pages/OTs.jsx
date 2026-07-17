@@ -1,83 +1,84 @@
+// ============================================================
+// OTs.jsx — Órdenes de Trabajo
+// Diseño enterprise: SummaryStrip + FilterBar + tabla moderna
+// ============================================================
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, rpc, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import ModalCrearOT from '../components/modules/ModalCrearOT'
+import {
+  StatusBadge, SedeBadge, ProgressBar, PersonList,
+  RowActions, EmptyState, Pagination, TableSkeleton, SummaryStrip,
+  TH, TD, PAGE_CARD, SELECT_STYLE, fmtFecha,
+} from '../components/ui/WssUI'
 
-const ESTADOS = ['', 'Pendiente de asignación', 'Sin inspector', 'Asignado', 'Asignada', 'Acta cargada', 'Informe cargado', 'Informe enviado', 'Factura cargada', 'Cerrada documentalmente']
-const SEDES = ['', 'ANF', 'SCL', 'CCP']
+// ── Constantes ────────────────────────────────────────────────────────────
+const ESTADOS = [
+  'Pendiente de asignación','Sin inspector','Asignado','Asignada',
+  'En proceso','Acta cargada','Informe cargado','Informe enviado',
+  'Factura cargada','Cerrada documentalmente',
+]
+const SEDES = ['ANF','SCL','CCP']
 
-function badgeEstado(estado) {
-  const mapa = {
-    'Pendiente de asignación': 'badge-red',
-    'Sin inspector': 'badge-red',
-    'Asignado': 'badge-amber',
-    'Asignada': 'badge-amber',
-    'En proceso': 'badge-blue',
-    'Acta cargada': 'badge-blue',
-    'Informe cargado': 'badge-green',
-    'Informe enviado': 'badge-green',
-    'Factura cargada': 'badge-green',
-    'Cerrada documentalmente': 'badge-green',
-  }
-  return mapa[estado] || 'badge-gray'
+const GRUPOS = {
+  pendientes:  ['Pendiente de asignación','Sin inspector'],
+  asignadas:   ['Asignado','Asignada'],
+  en_proceso:  ['En proceso','Acta cargada','Informe cargado'],
+  finalizadas: ['Informe enviado','Factura cargada','Cerrada documentalmente'],
 }
+const POR_PAGINA = 25
 
+// ═══════════════════════════════════════════════════════════════════════════
 export default function OTs() {
-  const { usuario, esAdmin, esComercial, esSupervisor } = useAuth()
+  const { usuario, esAdmin, esComercial } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
-  const [ots, setOTs] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [error, setError] = useState('')
-  const [busqueda, setBusqueda] = useState('')
-  const [filtroSede, setFiltroSede] = useState(searchParams.get('sede') || '')
-  const [filtroEstado, setFiltroEstado] = useState(searchParams.get('estado') || '')
-  const filtroDocs    = searchParams.get('docs')    // 'pendientes' | 'cargados' | null
-  const estadosParam  = searchParams.get('estados') // lista separada por comas desde Dashboard
-  const labelParam    = searchParams.get('label')   // etiqueta para mostrar en header
-  const filtroEstadosMulti = estadosParam ? estadosParam.split(',').map(s => s.trim()) : null
-  const [pagina, setPagina] = useState(0)
-  const [mostrarModalCrear, setMostrarModalCrear] = useState(false)
-  const [mensajeExito, setMensajeExito] = useState('')
-  const POR_PAGINA = 25
+  // Estado
+  const [ots, setOTs]                     = useState([])
+  const [cargando, setCargando]           = useState(true)
+  const [error, setError]                 = useState('')
+  const [busqueda, setBusqueda]           = useState('')
+  const [filtroSede, setFiltroSede]       = useState(searchParams.get('sede') || '')
+  const [filtroEstado, setFiltroEstado]   = useState(searchParams.get('estado') || '')
+  const [filtroResumen, setFiltroResumen] = useState(null)
+  const [pagina, setPagina]               = useState(0)
+  const [mostrarModal, setMostrarModal]   = useState(false)
+  const [mensajeExito, setMensajeExito]   = useState('')
+
+  // Parámetros de URL (desde Dashboard)
+  const filtroDocs           = searchParams.get('docs')
+  const estadosParam         = searchParams.get('estados')
+  const labelParam           = searchParams.get('label')
+  const filtroEstadosMulti   = estadosParam ? estadosParam.split(',').map(s => s.trim()) : null
 
   const puedeCrearOT  = esAdmin() || esComercial()
   const puedeEliminar = esAdmin() || esComercial()
 
+  // ── Carga de datos ──────────────────────────────────────────────────────
   const cargarOTs = useCallback(async () => {
     try {
-      setCargando(true)
-      setError('')
-
+      setCargando(true); setError('')
       let data
       try {
         data = await rpc('obtener_ots_para_usuario', { p_email: usuario?.email })
       } catch {
-        const result = await supabase
-          .from('v_portal_ots_listado')
-          .select('*')
-          .order('fecha_creacion', { ascending: false })
-        if (result.error) throw result.error
-        data = result.data
+        const res = await supabase.from('v_portal_ots_listado').select('*').order('fecha_creacion', { ascending: false })
+        if (res.error) throw res.error
+        data = res.data
       }
-
       setOTs(data || [])
-    } catch (err) {
-      setError(mensajeError(err))
-    } finally {
-      setCargando(false)
-    }
+    } catch (e) { setError(mensajeError(e)) }
+    finally     { setCargando(false) }
   }, [usuario?.email])
 
-  useEffect(() => {
-    cargarOTs()
-  }, [cargarOTs])
+  useEffect(() => { cargarOTs() }, [cargarOTs])
 
+  // ── Acciones ────────────────────────────────────────────────────────────
   function handleOTCreada(otNumero) {
-    setMostrarModalCrear(false)
-    setMensajeExito(`✅ OT ${otNumero} creada correctamente`)
+    setMostrarModal(false)
+    setMensajeExito(`OT ${otNumero} creada correctamente`)
     cargarOTs()
     setTimeout(() => setMensajeExito(''), 4000)
   }
@@ -87,74 +88,95 @@ export default function OTs() {
     try {
       const { error: err } = await supabase.from('ots').delete().eq('ot_numero', ot.ot_numero)
       if (err) throw err
-      setMensajeExito(`🗑️ OT ${ot.ot_numero} eliminada`)
+      setMensajeExito(`OT ${ot.ot_numero} eliminada`)
       cargarOTs()
       setTimeout(() => setMensajeExito(''), 4000)
-    } catch (e) {
-      setError(`Error al eliminar: ${e.message}`)
-    }
+    } catch (e) { setError(`Error al eliminar: ${e.message}`) }
   }
 
-  // Filtrado local
+  function limpiarFiltros() {
+    setBusqueda(''); setFiltroSede(''); setFiltroEstado(''); setFiltroResumen(null); setPagina(0)
+  }
+
+  function handleResumen(key) {
+    setFiltroResumen(key); if (key) setFiltroEstado(''); setPagina(0)
+  }
+
+  // ── Filtrado ─────────────────────────────────────────────────────────────
   const otsFiltradas = ots.filter(o => {
     const q = busqueda.toLowerCase()
     const progreso = Number(o.progreso || 0)
-    const matchBusqueda = !q || [o.ot_numero, o.cliente, o.supervisor, o.inspector, o.comercial]
+    const matchQ = !q || [o.ot_numero, o.cliente, o.supervisor, o.inspector, o.comercial, o.tipo_servicio, o.servicio_contratado]
       .some(v => String(v || '').toLowerCase().includes(q))
     const matchSede = !filtroSede || o.sede === filtroSede
-    const matchEstado = (!filtroEstado && !filtroEstadosMulti)
-      || (filtroEstadosMulti ? filtroEstadosMulti.includes(o.estado) : false)
-      || (filtroEstado ? (o.estado || '').toLowerCase().includes(filtroEstado.toLowerCase()) : false)
+    const matchEstado = filtroResumen
+      ? (GRUPOS[filtroResumen] || []).includes(o.estado)
+      : filtroEstadosMulti
+      ? filtroEstadosMulti.includes(o.estado)
+      : filtroEstado
+      ? (o.estado || '').toLowerCase().includes(filtroEstado.toLowerCase())
+      : true
     const matchDocs = !filtroDocs
       || (filtroDocs === 'pendientes' && progreso < 100 && o.estado !== 'Cerrada documentalmente')
       || (filtroDocs === 'cargados'   && progreso === 100)
-    return matchBusqueda && matchSede && matchEstado && matchDocs
+    return matchQ && matchSede && matchEstado && matchDocs
   })
 
-  const otsVisibles = otsFiltradas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA)
+  const otsVisibles  = otsFiltradas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA)
   const totalPaginas = Math.ceil(otsFiltradas.length / POR_PAGINA)
+  const hayFiltros   = !!(busqueda || filtroSede || filtroEstado || filtroResumen)
+
+  // ── Summary strip (sobre datos sin filtrar) ───────────────────────────
+  const summaryItems = [
+    { key: null,          label: 'Total',       count: ots.length,                                                              color: '#1E3A5F' },
+    { key: 'pendientes',  label: 'Pendientes',  count: ots.filter(o => GRUPOS.pendientes.includes(o.estado)).length,           color: '#DC2626' },
+    { key: 'asignadas',   label: 'Asignadas',   count: ots.filter(o => GRUPOS.asignadas.includes(o.estado)).length,            color: '#D97706' },
+    { key: 'en_proceso',  label: 'En proceso',  count: ots.filter(o => GRUPOS.en_proceso.includes(o.estado)).length,           color: '#3B82F6' },
+    { key: 'finalizadas', label: 'Finalizadas', count: ots.filter(o => GRUPOS.finalizadas.includes(o.estado)).length,          color: '#22C55E' },
+  ]
 
   return (
-    <div>
-      {/* Modal Crear OT */}
-      {mostrarModalCrear && (
-        <ModalCrearOT
-          onClose={() => setMostrarModalCrear(false)}
-          onCreada={handleOTCreada}
-        />
+    <div style={{ maxWidth: 1440 }}>
+
+      {/* Modal crear OT */}
+      {mostrarModal && (
+        <ModalCrearOT onClose={() => setMostrarModal(false)} onCreada={handleOTCreada} />
       )}
 
-      {/* Header */}
-      <div className="flex-between" style={{ marginBottom: 20 }}>
+      {/* ── Encabezado de página ───────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1>Órdenes de Trabajo
-            {labelParam && (
-              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: 'var(--azul)', background: '#EFF6FF', padding: '2px 10px', borderRadius: 20 }}>
-                {labelParam}
-              </span>
-            )}
-            {filtroDocs === 'pendientes' && (
-              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: '#7C3AED', background: '#EDE9FE', padding: '2px 10px', borderRadius: 20 }}>
-                Docs Pendientes
-              </span>
-            )}
-            {filtroDocs === 'cargados' && (
-              <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 500, color: '#0891B2', background: '#E0F2FE', padding: '2px 10px', borderRadius: 20 }}>
-                Docs Cargados
-              </span>
-            )}
-          </h1>
-          <p className="text-sm" style={{ marginTop: 4 }}>
-            {otsFiltradas.length} OT{otsFiltradas.length !== 1 ? 's' : ''} encontradas
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              Órdenes de Trabajo
+            </h1>
+            {labelParam && <span style={CHIP_BLUE}>{labelParam}</span>}
+            {filtroDocs === 'pendientes' && <span style={CHIP_PURPLE}>Documentos pendientes</span>}
+            {filtroDocs === 'cargados'   && <span style={CHIP_TEAL}>Documentos cargados</span>}
+          </div>
+          <p style={{ fontSize: 13, color: '#64748B', marginTop: 5 }}>
+            {cargando ? 'Cargando…' : `${otsFiltradas.length} ${otsFiltradas.length === 1 ? 'orden' : 'órdenes'} encontradas`}
+            {!cargando && ots.length !== otsFiltradas.length && ` · ${ots.length} total`}
           </p>
         </div>
-        <div className="flex gap-8">
-          <button className="btn btn-secondary btn-sm" onClick={cargarOTs}>
-            ↻ Actualizar
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={cargarOTs}
+            disabled={cargando}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            {cargando
+              ? <><span className="spinner spinner-sm"/>Cargando…</>
+              : <><IcRefresh />Actualizar</>}
           </button>
           {puedeCrearOT && (
-            <button className="btn btn-primary btn-sm" onClick={() => setMostrarModalCrear(true)}>
-              + Nueva OT
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => setMostrarModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <IcPlus /> Nueva OT
             </button>
           )}
         </div>
@@ -162,175 +184,241 @@ export default function OTs() {
 
       {/* Mensaje éxito */}
       {mensajeExito && (
-        <div className="alert alert-ok" style={{ marginBottom: 16 }}>
+        <div className="alert alert-success" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
           {mensajeExito}
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="card" style={{ marginBottom: 16, padding: '14px 18px' }}>
-        <div className="grid" style={{ alignItems: 'end' }}>
-          <div className="col-6 field">
-            <label>Buscar</label>
+      {/* ── Tarjeta principal ──────────────────────────────────────────── */}
+      <div style={PAGE_CARD}>
+
+        {/* Summary strip */}
+        {!cargando && ots.length > 0 && (
+          <SummaryStrip items={summaryItems} activeKey={filtroResumen} onSelect={handleResumen} />
+        )}
+
+        {/* Barra de filtros */}
+        <div style={{ display: 'flex', gap: 10, padding: '12px 16px', borderBottom: '1px solid #F1F5F9', background: '#FAFBFC', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Búsqueda */}
+          <div style={{ position: 'relative', flex: 3, minWidth: 220 }}>
+            <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
             <input
-              className="input"
-              placeholder="OT, cliente, supervisor, inspector..."
+              style={{ ...INPUT_STYLE, paddingLeft: 34 }}
+              placeholder="Buscar por OT, cliente, inspector o supervisor…"
               value={busqueda}
               onChange={e => { setBusqueda(e.target.value); setPagina(0) }}
             />
           </div>
-          <div className="col-3 field">
-            <label>Sede</label>
-            <select className="select" value={filtroSede} onChange={e => { setFiltroSede(e.target.value); setPagina(0) }}>
-              {SEDES.map(s => <option key={s} value={s}>{s || 'Todas las sedes'}</option>)}
-            </select>
-          </div>
-          <div className="col-3 field">
-            <label>Estado</label>
-            <select className="select" value={filtroEstado} onChange={e => { setFiltroEstado(e.target.value); setPagina(0) }}>
-              {ESTADOS.map(s => <option key={s} value={s}>{s || 'Todos los estados'}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: 16 }}>
-          {error}
-          <button className="btn btn-secondary btn-sm" onClick={cargarOTs} style={{ marginLeft: 12 }}>
-            Reintentar
-          </button>
-        </div>
-      )}
-
-      {/* Loading */}
-      {cargando && <div className="loading-bar" style={{ marginBottom: 16 }} />}
-
-      {/* Tabla */}
-      {!cargando && (
-        <>
-          {otsVisibles.length === 0 ? (
-            <div className="empty-state">
-              {busqueda || filtroSede || filtroEstado
-                ? 'No hay OTs con esos filtros'
-                : 'No hay órdenes de trabajo registradas'}
-            </div>
-          ) : (
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="tabla">
-                  <thead>
-                    <tr>
-                      <th>OT</th>
-                      <th>Cliente</th>
-                      <th>Sede</th>
-                      <th>Estado</th>
-                      <th>Avance</th>
-                      <th>Supervisor</th>
-                      <th>Inspector</th>
-                      <th>Creación</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {otsVisibles.map(ot => (
-                      <FilaOT
-                        key={ot.id || ot.ot_numero}
-                        ot={ot}
-                        puedeEliminar={puedeEliminar}
-                        onVerDetalle={() => navigate(`/ots/${ot.ot_numero}`)}
-                        onEliminar={() => eliminarOT(ot)}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Paginación */}
-              {totalPaginas > 1 && (
-                <div className="flex-between" style={{ padding: '12px 18px', borderTop: '1px solid var(--borde)' }}>
-                  <span className="text-sm">
-                    Página {pagina + 1} de {totalPaginas} · {otsFiltradas.length} OTs
-                  </span>
-                  <div className="flex gap-8">
-                    <button className="btn btn-ghost btn-sm" onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={pagina === 0}>
-                      ← Anterior
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={pagina >= totalPaginas - 1}>
-                      Siguiente →
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* Sede */}
+          <select
+            style={{ ...SELECT_STYLE, flex: 1, minWidth: 130, color: filtroSede ? '#0F172A' : '#94A3B8' }}
+            value={filtroSede}
+            onChange={e => { setFiltroSede(e.target.value); setPagina(0) }}
+          >
+            <option value="">Todas las sedes</option>
+            {SEDES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {/* Estado */}
+          <select
+            style={{ ...SELECT_STYLE, flex: 1.5, minWidth: 160, color: filtroEstado ? '#0F172A' : '#94A3B8' }}
+            value={filtroEstado}
+            onChange={e => { setFiltroEstado(e.target.value); setFiltroResumen(null); setPagina(0) }}
+          >
+            <option value="">Todos los estados</option>
+            {ESTADOS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {/* Limpiar */}
+          {hayFiltros && (
+            <button
+              onClick={limpiarFiltros}
+              style={{ ...CLEAR_BTN, flexShrink: 0 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              Limpiar
+            </button>
           )}
-        </>
-      )}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="alert alert-error" style={{ margin: '12px 16px' }}>
+            {error}
+            <button className="btn btn-secondary btn-sm" onClick={cargarOTs} style={{ marginLeft: 12 }}>Reintentar</button>
+          </div>
+        )}
+
+        {/* Contenido */}
+        {cargando ? (
+          <TableSkeleton rows={7} cols={9} />
+        ) : otsVisibles.length === 0 ? (
+          <EmptyState
+            title={hayFiltros ? 'No encontramos órdenes con estos filtros' : 'No hay órdenes de trabajo registradas'}
+            desc={hayFiltros ? 'Prueba cambiando el estado, la sede o el texto de búsqueda.' : undefined}
+            onClear={hayFiltros ? limpiarFiltros : undefined}
+          />
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 880 }}>
+              <colgroup>
+                <col style={{ width: 118 }} />
+                <col />
+                <col style={{ width: 74 }} />
+                <col style={{ width: 168 }} />
+                <col style={{ width: 118 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 94 }} />
+                <col style={{ width: 96 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={TH}>OT</th>
+                  <th style={TH}>Cliente</th>
+                  <th style={TH}>Sede</th>
+                  <th style={TH}>Estado</th>
+                  <th style={TH}>Avance</th>
+                  <th style={TH}>Supervisor</th>
+                  <th style={TH}>Inspector</th>
+                  <th style={TH}>Creación</th>
+                  <th style={{ ...TH, textAlign: 'right' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {otsVisibles.map(ot => (
+                  <FilaOT
+                    key={ot.id || ot.ot_numero}
+                    ot={ot}
+                    puedeEliminar={puedeEliminar}
+                    onVerDetalle={() => navigate(`/ots/${ot.ot_numero}`)}
+                    onEliminar={() => eliminarOT(ot)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Paginación */}
+        <Pagination
+          pagina={pagina}
+          totalPaginas={totalPaginas}
+          totalRegistros={otsFiltradas.length}
+          porPagina={POR_PAGINA}
+          onChange={setPagina}
+        />
+      </div>
     </div>
   )
 }
 
+// ── Fila de la tabla ───────────────────────────────────────────────────────
 function FilaOT({ ot, puedeEliminar, onVerDetalle, onEliminar }) {
-  const progreso = Number(ot.progreso || 0)
-
+  const [hover, setHover] = useState(false)
   return (
-    <tr>
-      <td>
-        <span style={{ fontWeight: 700, color: 'var(--azul)', fontFamily: 'monospace' }}>
-          {ot.ot_numero}
-        </span>
+    <tr
+      style={{ background: hover ? '#F8FAFC' : '#fff', transition: 'background .1s' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {/* OT */}
+      <td style={TD}>
+        <button
+          onClick={onVerDetalle}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}
+        >
+          <span style={{ fontFamily: "'Cascadia Code','JetBrains Mono',Menlo,monospace", fontSize: 12, fontWeight: 700, color: '#1E3A5F', letterSpacing: '.3px' }}>
+            {ot.ot_numero}
+          </span>
+        </button>
       </td>
-      <td>
-        <div style={{ fontWeight: 600 }}>{ot.cliente}</div>
-        <div className="text-sm">{ot.tipo_servicio || ot.servicio_contratado || ''}</div>
-      </td>
-      <td>
-        <span className="badge badge-blue">{ot.sede}</span>
-      </td>
-      <td>
-        <span className={`badge ${badgeEstado(ot.estado)}`}>{ot.estado}</span>
-      </td>
-      <td style={{ minWidth: 100 }}>
-        <div className="progress-track">
-          <div
-            className={`progress-fill ${progreso >= 100 ? 'completa' : ''}`}
-            style={{ width: `${progreso}%` }}
-          />
+
+      {/* Cliente + servicio */}
+      <td style={{ ...TD, overflow: 'hidden' }}>
+        <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#0F172A' }}>
+          {ot.cliente || '—'}
         </div>
-        <div className="text-sm" style={{ textAlign: 'right', marginTop: 3 }}>{progreso}%</div>
+        {(ot.tipo_servicio || ot.servicio_contratado) && (
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {ot.tipo_servicio || ot.servicio_contratado}
+          </div>
+        )}
       </td>
-      <td>{ot.supervisor || '—'}</td>
-      <td>{ot.inspector || '—'}</td>
-      <td className="text-sm">{ot.fecha_creacion ? new Date(ot.fecha_creacion).toLocaleDateString('es-CL') : '—'}</td>
-      <td>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={onVerDetalle}>
-            Ver detalle
-          </button>
-          {puedeEliminar && (
-            <button
-              onClick={onEliminar}
-              title="Eliminar OT"
-              style={{
-                background: 'none',
-                border: '1px solid #FCA5A5',
-                borderRadius: 6,
-                color: '#DC2626',
-                cursor: 'pointer',
-                padding: '4px 7px',
-                fontSize: 14,
-                lineHeight: 1,
-                transition: 'all .15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-            >
-              🗑
-            </button>
-          )}
-        </div>
+
+      {/* Sede */}
+      <td style={TD}>
+        <SedeBadge sede={ot.sede} />
+      </td>
+
+      {/* Estado */}
+      <td style={TD}>
+        <StatusBadge estado={ot.estado} />
+      </td>
+
+      {/* Avance */}
+      <td style={TD}>
+        <ProgressBar value={ot.progreso} />
+      </td>
+
+      {/* Supervisor */}
+      <td style={{ ...TD, overflow: 'hidden' }}>
+        <PersonList text={ot.supervisor} max={1} />
+      </td>
+
+      {/* Inspector */}
+      <td style={{ ...TD, overflow: 'hidden' }}>
+        <PersonList text={ot.inspector} max={2} />
+      </td>
+
+      {/* Fecha */}
+      <td style={{ ...TD, whiteSpace: 'nowrap', fontSize: 12, color: '#64748B' }}>
+        {fmtFecha(ot.fecha_creacion)}
+      </td>
+
+      {/* Acciones */}
+      <td style={{ ...TD, textAlign: 'right' }}>
+        <RowActions
+          onView={onVerDetalle}
+          onDelete={onEliminar}
+          canDelete={puedeEliminar}
+          viewLabel="Ver"
+        />
       </td>
     </tr>
   )
 }
+
+// ── Iconos inline ──────────────────────────────────────────────────────────
+const IcRefresh = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+  </svg>
+)
+const IcPlus = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14M5 12h14"/>
+  </svg>
+)
+
+// ── Estilos locales ────────────────────────────────────────────────────────
+const INPUT_STYLE = {
+  width: '100%', height: 36,
+  paddingRight: 12, paddingLeft: 12,
+  border: '1.5px solid #E2E8F0', borderRadius: 7,
+  fontSize: 13, color: '#0F172A', background: '#fff',
+  fontFamily: 'inherit', outline: 'none',
+}
+
+const CLEAR_BTN = {
+  display: 'flex', alignItems: 'center', gap: 5,
+  padding: '6px 12px', borderRadius: 7,
+  border: '1.5px solid #E2E8F0', background: '#fff',
+  fontSize: 12, fontWeight: 500, color: '#64748B',
+  cursor: 'pointer', fontFamily: 'inherit',
+}
+
+const CHIP_BLUE   = { fontSize: 11, fontWeight: 600, color: '#1E40AF', background: '#EFF6FF', padding: '3px 10px', borderRadius: 99, border: '1px solid #BFDBFE' }
+const CHIP_PURPLE = { fontSize: 11, fontWeight: 600, color: '#5B21B6', background: '#F5F3FF', padding: '3px 10px', borderRadius: 99, border: '1px solid #DDD6FE' }
+const CHIP_TEAL   = { fontSize: 11, fontWeight: 600, color: '#0F766E', background: '#F0FDFA', padding: '3px 10px', borderRadius: 99, border: '1px solid #99F6E4' }
