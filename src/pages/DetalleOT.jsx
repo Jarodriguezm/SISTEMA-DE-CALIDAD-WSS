@@ -101,27 +101,34 @@ export default function DetalleOT() {
       setCargando(true)
       setError('')
 
-      // Cargar OT desde vista — usamos maybeSingle para tolerar vistas con JOINs que duplican filas
+      // Cargar OT — primero desde la tabla ots directamente,
+      // luego complementar con la vista si está disponible
       const { data: otRows, error: otErr } = await supabase
-        .from('v_portal_ot_detalle')
+        .from('ots')
         .select('*')
         .eq('ot_numero', numero)
         .limit(1)
 
       if (otErr) throw otErr
-      const otData = Array.isArray(otRows) ? otRows[0] : otRows
-      if (!otData) throw new Error('No se encontró la OT ' + numero)
+      const otBase = Array.isArray(otRows) ? otRows[0] : otRows
+      if (!otBase) throw new Error(`No se encontró la OT "${numero}"`)
 
-      const { data: otExtra } = await supabase
-        .from('ots')
-        .select('carpetas_drive, carpeta_drive_url')
-        .eq('ot_numero', numero)
-        .maybeSingle()
+      // Intentar complementar con la vista (puede tener campos calculados)
+      let otVista = null
+      try {
+        const { data: vRows } = await supabase
+          .from('v_portal_ot_detalle')
+          .select('*')
+          .eq('ot_numero', numero)
+          .limit(1)
+        otVista = Array.isArray(vRows) ? vRows[0] : vRows
+      } catch (_) { /* si la vista falla, seguimos con los datos base */ }
 
       setOT({
-        ...otData,
-        carpetas_drive:    otExtra?.carpetas_drive    || otData.carpetas_drive    || {},
-        carpeta_drive_url: otExtra?.carpeta_drive_url || otData.carpeta_drive_url || null,
+        ...otBase,
+        ...(otVista || {}),
+        carpetas_drive:    otBase.carpetas_drive    || otVista?.carpetas_drive    || {},
+        carpeta_drive_url: otBase.carpeta_drive_url || otVista?.carpeta_drive_url || null,
       })
 
       const [docs, asigs, actsData, resData] = await Promise.allSettled([
