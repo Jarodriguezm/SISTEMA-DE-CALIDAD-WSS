@@ -23,6 +23,8 @@ export default function Usuarios() {
   const [editando, setEditando]       = useState(null)   // usuario en edición
   const [guardando, setGuardando]     = useState(false)
   const [mensajeExito, setMensajeExito] = useState('')
+  const [mostrarInactivos, setMostrarInactivos] = useState(false)
+  const [desactivando, setDesactivando] = useState(null)
   // Crear usuario
   const NUEVO_VACIO = { nombre:'', apellido:'', email:'', password:'', rol:'INSPECTOR', sede:'SCL', telefono_whatsapp:'' }
   const [creando, setCreando]           = useState(false)
@@ -108,7 +110,24 @@ export default function Usuarios() {
     }
   }
 
+  async function toggleActivo(u) {
+    if (!window.confirm(u.activo
+      ? `¿Desactivar a ${u.nombre} ${u.apellido || ''}? No podrá iniciar sesión ni aparecerá en listas.`
+      : `¿Reactivar a ${u.nombre} ${u.apellido || ''}?`
+    )) return
+    try {
+      setDesactivando(u.id)
+      const { error: err } = await supabase.from('usuarios').update({ activo: !u.activo }).eq('id', u.id)
+      if (err) throw err
+      setMensajeExito(`✅ ${u.nombre} ${u.activo ? 'desactivado' : 'reactivado'} correctamente`)
+      cargar()
+      setTimeout(() => setMensajeExito(''), 4000)
+    } catch (e) { setError(mensajeError(e)) }
+    finally { setDesactivando(null) }
+  }
+
   const filtrados = usuarios.filter(u => {
+    if (!mostrarInactivos && !u.activo) return false
     const q = busqueda.toLowerCase()
     return !q || [u.nombre, u.apellido, u.email, u.rol, u.sede]
       .some(v => String(v || '').toLowerCase().includes(q))
@@ -283,7 +302,11 @@ export default function Usuarios() {
             {filtrados.length} usuario{filtrados.length !== 1 ? 's' : ''} registrados
           </p>
         </div>
-        <div style={{ display:'flex', gap:8 }}>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'#64748B', cursor:'pointer' }}>
+            <input type="checkbox" checked={mostrarInactivos} onChange={e => setMostrarInactivos(e.target.checked)} />
+            Mostrar inactivos
+          </label>
           <button className="btn btn-primary btn-sm" onClick={() => { setCreando(true); setErrorCrear('') }}>
             + Nuevo usuario
           </button>
@@ -372,9 +395,24 @@ export default function Usuarios() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setEditando({ ...u })}>
-                      ✏ Editar
-                    </button>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setEditando({ ...u })}>
+                        ✏ Editar
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        disabled={desactivando === u.id}
+                        onClick={() => toggleActivo(u)}
+                        style={{
+                          background: u.activo ? '#FEE2E2' : '#D1FAE5',
+                          color: u.activo ? '#991B1B' : '#065F46',
+                          border: 'none', cursor:'pointer', borderRadius:6,
+                          padding:'4px 10px', fontSize:12, fontWeight:600,
+                        }}
+                      >
+                        {desactivando === u.id ? '...' : u.activo ? '✕ Desactivar' : '✓ Reactivar'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
