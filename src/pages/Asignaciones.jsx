@@ -31,15 +31,27 @@ export default function Asignaciones() {
       setCargando(true); setError('')
       let q = supabase
         .from('asignaciones')
-        .select('*, ots!ot_id(ot_numero)')
+        .select('*')
         .order('fecha_inspeccion', { ascending: false })
         .limit(500)
       if (filtroEstado) q = q.eq('estado', filtroEstado)
       if (filtroDesde)  q = q.gte('fecha_inspeccion', filtroDesde)
       if (filtroHasta)  q = q.lte('fecha_inspeccion', filtroHasta)
-      const { data, error: err } = await q
+      const { data: asignRows, error: err } = await q
       if (err) throw err
-      setDatos(data || [])
+
+      // Obtener ot_numero por separado para evitar ambigüedad de FK en PostgREST
+      const otIds = [...new Set((asignRows || []).map(a => a.ot_id).filter(Boolean))]
+      let otNumeros = {}
+      if (otIds.length > 0) {
+        const { data: otsRows } = await supabase
+          .from('ots')
+          .select('id, ot_numero')
+          .in('id', otIds)
+        for (const ot of (otsRows || [])) otNumeros[ot.id] = ot.ot_numero
+      }
+
+      setDatos((asignRows || []).map(a => ({ ...a, ot_numero: otNumeros[a.ot_id] || null })))
     } catch (e) { setError(mensajeError(e)) }
     finally     { setCargando(false) }
   }, [filtroEstado, filtroDesde, filtroHasta])
@@ -58,7 +70,7 @@ export default function Asignaciones() {
 
   // Filtrado local (sobre resultado de Supabase)
   const filtrados = datos.filter(a => {
-    const matchBusqueda = !busqueda || [a.ots?.ot_numero, a.inspectores_asignados, a.supervisor, a.descripcion_actividad, a.tipos_inspeccion]
+    const matchBusqueda = !busqueda || [a.ot_numero, a.inspectores_asignados, a.supervisor, a.descripcion_actividad, a.tipos_inspeccion]
       .some(v => String(v || '').toLowerCase().includes(busqueda.toLowerCase()))
     const matchResumen = !filtroResumen || (a.estado || 'Programada') === filtroResumen
     return matchBusqueda && matchResumen
@@ -202,7 +214,7 @@ export default function Asignaciones() {
               </thead>
               <tbody>
                 {visibles.map((a, i) => (
-                  <FilaAsig key={a.id || i} a={a} onVerOT={a.ots?.ot_numero ? () => navigate(`/ots/${a.ots.ot_numero}`) : null} />
+                  <FilaAsig key={a.id || i} a={a} onVerOT={a.ot_numero ? () => navigate(`/ots/${a.ot_numero}`) : null} />
                 ))}
               </tbody>
             </table>
@@ -238,13 +250,13 @@ function FilaAsig({ a, onVerOT }) {
     >
       {/* OT */}
       <td style={TD}>
-        {a.ots?.ot_numero ? (
+        {a.ot_numero ? (
           <button
             onClick={onVerOT}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}
           >
             <span style={{ fontFamily: "'Cascadia Code','JetBrains Mono',Menlo,monospace", fontSize: 12, fontWeight: 700, color: '#1E3A5F', letterSpacing: '.3px' }}>
-              {a.ots.ot_numero}
+              {a.ot_numero}
             </span>
             {a.cliente && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{a.cliente}</div>}
           </button>
