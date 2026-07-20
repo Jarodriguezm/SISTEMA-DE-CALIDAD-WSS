@@ -564,8 +564,8 @@ export default function TabAsignaciones({ ot }) {
       const [{ data: eq }, { data: proc }, { data: insp }, { data: veh }] = await Promise.all([
         supabase.from('equipos').select('id,equipo_instrumento,codigo').eq('activo',true).order('equipo_instrumento'),
         supabase.from('catalogo_procedimientos').select('id,nombre,codigo').eq('activo',true).order('codigo'),
-        supabase.from('v_usuarios_portal').select('nombre_completo,email,telefono_whatsapp,rol')
-          .in('rol',['INSPECTOR','SUPERVISOR','ADMIN']).order('nombre_completo'),
+        supabase.from('v_usuarios_portal').select('nombre_completo,email,telefono_whatsapp,rol,activo')
+          .in('rol',['INSPECTOR','SUPERVISOR','ADMIN']).eq('activo', true).order('nombre_completo'),
         supabase.from('vehiculos').select('id,patente,descripcion').eq('activo',true).order('patente'),
       ])
       setEquipos(eq||[]); setProcedimientos(proc||[]); setInspectores(insp||[]); setVehiculos(veh||[])
