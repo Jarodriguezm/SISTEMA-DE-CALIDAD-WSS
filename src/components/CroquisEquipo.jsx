@@ -156,47 +156,318 @@ export function CroquisGancho({ data = {}, onChange }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. TANQUE — Grilla UT configurable P × E + techo + fondo
+// 2. TANQUE — Grilla UT configurable P × E + tipos de tanque
 // ════════════════════════════════════════════════════════════════════════════
 
 function initGrid(nP, nE) {
   return Array.from({ length: nP }, () => Array(nE).fill(''))
 }
 
-export function CroquisTanque({ data = {}, onChange }) {
-  const nP     = data.n_puntos   || 6
-  const nE     = data.n_ejes     || 4
-  const manto  = data.manto      || initGrid(nP, nE)
-  const techo  = data.techo      || Array(nE).fill('')
-  const fondo  = data.fondo      || Array(nE).fill('')
+// ── Configuración por tipo ─────────────────────────────────────────────────
+const TIPO_TK = {
+  vertical: {
+    label:        'Vertical cilíndrico',
+    labelFilas:   'Puntos',
+    labelCols:    'Ejes',
+    filaLabel:    i => `P${i + 1}`,
+    colLabel:     j => `E${j + 1}`,
+    tieneSup:     true,
+    tieneInf:     true,
+    labelSup:     'Techo',
+    labelInf:     'Fondo',
+    nota:         'API 650 · Pulso-eco · mm',
+  },
+  horizontal: {
+    label:        'Horizontal cilíndrico',
+    labelFilas:   'Generatrices',
+    labelCols:    'Secciones',
+    filaLabel:    i => `G${i + 1}`,
+    colLabel:     j => `S${j + 1}`,
+    tieneSup:     true,
+    tieneInf:     true,
+    labelSup:     'Cabezal IZQ',
+    labelInf:     'Cabezal DER',
+    nota:         'API 510 · Pulso-eco · mm',
+  },
+  conico: {
+    label:        'Cónico (fondo cónico)',
+    labelFilas:   'Puntos',
+    labelCols:    'Ejes',
+    filaLabel:    i => `P${i + 1}`,
+    colLabel:     j => `E${j + 1}`,
+    tieneSup:     true,
+    tieneInf:     true,
+    labelSup:     'Techo',
+    labelInf:     'Cono',
+    nota:         'API 650 · Pulso-eco · mm',
+  },
+  techo_flotante: {
+    label:        'Techo flotante',
+    labelFilas:   'Puntos',
+    labelCols:    'Ejes',
+    filaLabel:    i => `P${i + 1}`,
+    colLabel:     j => `E${j + 1}`,
+    tieneSup:     false,
+    tieneInf:     true,
+    labelSup:     null,
+    labelInf:     'Fondo',
+    nota:         'API 650 Anexo C · Pulso-eco · mm',
+  },
+}
 
+// ── SVG: Tanque Vertical ──────────────────────────────────────────────────
+function SvgVertical({ nP, nE }) {
+  const maxP = Math.min(nP, 9)
+  const maxE = Math.min(nE, 6)
+  return (
+    <svg viewBox="0 0 180 268" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:180 }}>
+      {/* Techo cónico */}
+      <polygon points="90,12 30,46 150,46" fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
+      <text x="90" y="38" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">TECHO</text>
+      {/* Manto */}
+      <rect x="30" y="46" width="120" height="165" fill="#EFF6FF" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Ejes verticales */}
+      {Array.from({ length: maxE }, (_, i) => {
+        const x = 30 + (i + 1) * 120 / (maxE + 1)
+        return (
+          <g key={i}>
+            <line x1={x} y1="46" x2={x} y2="211" stroke="#93C5FD" strokeWidth="1" strokeDasharray="4,3"/>
+            <text x={x} y="43" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">E{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Puntos P */}
+      {Array.from({ length: maxP }, (_, i) => {
+        const y = 46 + (i + 1) * 165 / (maxP + 1)
+        return (
+          <g key={i}>
+            <line x1="22" y1={y} x2="30" y2={y} stroke="#1D4ED8" strokeWidth="1.5"/>
+            <text x="20" y={y + 4} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="end">P{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Fondo */}
+      <ellipse cx="90" cy="211" rx="60" ry="13" fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
+      <text x="90" y="233" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">FONDO</text>
+      {Array.from({ length: maxE }, (_, i) => {
+        const x = 30 + (i + 1) * 120 / (maxE + 1)
+        return <text key={i} x={x} y="228" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">E{i+1}</text>
+      })}
+    </svg>
+  )
+}
+
+// ── SVG: Tanque Horizontal ────────────────────────────────────────────────
+function SvgHorizontal({ nP, nE }) {
+  const maxG = Math.min(nP, 8)  // generatrices = filas
+  const maxS = Math.min(nE, 6)  // secciones = columnas
+  const bx = 45, by = 50, bw = 138, bh = 88
+  const cy = by + bh / 2   // centro Y = 94
+  const ry = bh / 2        // 44
+
+  return (
+    <svg viewBox="0 0 240 190" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:220 }}>
+      {/* Cuerpo */}
+      <rect x={bx} y={by} width={bw} height={bh} fill="#EFF6FF" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Cabezal IZQ */}
+      <ellipse cx={bx} cy={cy} rx="20" ry={ry} fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Cabezal DER */}
+      <ellipse cx={bx + bw} cy={cy} rx="20" ry={ry} fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Labels cabezales */}
+      <text x={bx - 24} y={cy - ry - 4} fill="#1D4ED8" fontSize="8" fontWeight="bold" textAnchor="middle">CAB.</text>
+      <text x={bx - 24} y={cy - ry + 5} fill="#1D4ED8" fontSize="8" fontWeight="bold" textAnchor="middle">IZQ</text>
+      <text x={bx + bw + 24} y={cy - ry - 4} fill="#1D4ED8" fontSize="8" fontWeight="bold" textAnchor="middle">CAB.</text>
+      <text x={bx + bw + 24} y={cy - ry + 5} fill="#1D4ED8" fontSize="8" fontWeight="bold" textAnchor="middle">DER</text>
+      {/* Secciones longitudinales */}
+      {Array.from({ length: maxS }, (_, i) => {
+        const x = bx + (i + 1) * bw / (maxS + 1)
+        return (
+          <g key={i}>
+            <line x1={x} y1={by} x2={x} y2={by + bh} stroke="#93C5FD" strokeWidth="1" strokeDasharray="4,3"/>
+            <text x={x} y={by - 4} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">S{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Generatrices (posiciones reloj en sección transversal derecha) */}
+      {Array.from({ length: maxG }, (_, i) => {
+        const ang = (i * 360 / maxG) - 90
+        const rad = ang * Math.PI / 180
+        const ox = 195, gx = ox + Math.cos(rad) * 20, gy = cy + Math.sin(rad) * 20
+        return (
+          <g key={i}>
+            <circle cx={gx} cy={gy} r="3" fill="#1D4ED8"/>
+            <text
+              x={gx + (Math.cos(rad) > 0 ? 8 : -8)}
+              y={gy + 4}
+              fill="#1D4ED8" fontSize="8" fontWeight="bold"
+              textAnchor={Math.cos(rad) > 0 ? 'start' : 'end'}
+            >G{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Círculo sección transversal */}
+      <circle cx="195" cy={cy} r="22" fill="none" stroke="#93C5FD" strokeWidth="1.5" strokeDasharray="3,2"/>
+      <text x="195" y={by - 4} fill="#64748B" fontSize="7.5" textAnchor="middle">Secc.</text>
+      {/* Silletas */}
+      <polygon points={`${bx+15},${by+bh} ${bx+5},${by+bh+22} ${bx+40},${by+bh+22} ${bx+30},${by+bh}`}
+        fill="#DBEAFE" stroke="#1D4ED8" strokeWidth="1.5"/>
+      <polygon points={`${bx+bw-30},${by+bh} ${bx+bw-40},${by+bh+22} ${bx+bw-5},${by+bh+22} ${bx+bw-15},${by+bh}`}
+        fill="#DBEAFE" stroke="#1D4ED8" strokeWidth="1.5"/>
+      <line x1={bx} y1={by+bh+22} x2={bx+45} y2={by+bh+22} stroke="#1D4ED8" strokeWidth="2"/>
+      <line x1={bx+bw-45} y1={by+bh+22} x2={bx+bw} y2={by+bh+22} stroke="#1D4ED8" strokeWidth="2"/>
+    </svg>
+  )
+}
+
+// ── SVG: Tanque Cónico ────────────────────────────────────────────────────
+function SvgConico({ nP, nE }) {
+  const maxP = Math.min(nP, 8)
+  const maxE = Math.min(nE, 6)
+  return (
+    <svg viewBox="0 0 180 285" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:180 }}>
+      {/* Techo plano */}
+      <ellipse cx="90" cy="38" rx="60" ry="13" fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
+      <text x="90" y="30" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">TECHO</text>
+      {/* Manto */}
+      <rect x="30" y="38" width="120" height="150" fill="#EFF6FF" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Ejes */}
+      {Array.from({ length: maxE }, (_, i) => {
+        const x = 30 + (i + 1) * 120 / (maxE + 1)
+        return (
+          <g key={i}>
+            <line x1={x} y1="38" x2={x} y2="188" stroke="#93C5FD" strokeWidth="1" strokeDasharray="4,3"/>
+            <text x={x} y="34" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">E{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Puntos P */}
+      {Array.from({ length: maxP }, (_, i) => {
+        const y = 38 + (i + 1) * 150 / (maxP + 1)
+        return (
+          <g key={i}>
+            <line x1="22" y1={y} x2="30" y2={y} stroke="#1D4ED8" strokeWidth="1.5"/>
+            <text x="20" y={y + 4} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="end">P{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Cono inferior */}
+      <path d="M 30,188 L 150,188 L 90,252 Z" fill="#DBEAFE" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Líneas de ejes en el cono */}
+      {Array.from({ length: maxE }, (_, i) => {
+        const x = 30 + (i + 1) * 120 / (maxE + 1)
+        return <line key={i} x1={x} y1="188" x2="90" y2="252" stroke="#93C5FD" strokeWidth="0.8" strokeDasharray="3,3" opacity="0.6"/>
+      })}
+      <text x="90" y="238" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">CONO</text>
+      <text x="90" y="268" fill="#64748B" fontSize="8" textAnchor="middle">fondo cónico</text>
+    </svg>
+  )
+}
+
+// ── SVG: Techo Flotante ──────────────────────────────────────────────────
+function SvgTechoFlotante({ nP, nE }) {
+  const maxP = Math.min(nP, 9)
+  const maxE = Math.min(nE, 6)
+  const my = 18, mh = 195  // manto Y y alto
+  const tfY = my + mh * 0.38  // nivel del techo flotante (~92)
+
+  return (
+    <svg viewBox="0 0 180 268" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:180 }}>
+      {/* Manto */}
+      <rect x="30" y={my} width="120" height={mh} fill="#EFF6FF" stroke="#1D4ED8" strokeWidth="2"/>
+      {/* Shell topes (top rim) */}
+      <rect x="26" y={my - 6} width="128" height="10" rx="2" fill="#93C5FD" stroke="#1D4ED8" strokeWidth="1.5"/>
+      <text x="90" y={my - 10} fill="#1D4ED8" fontSize="8" textAnchor="middle">Shell / Virola</text>
+      {/* Ejes verticales */}
+      {Array.from({ length: maxE }, (_, i) => {
+        const x = 30 + (i + 1) * 120 / (maxE + 1)
+        return (
+          <g key={i}>
+            <line x1={x} y1={my} x2={x} y2={my + mh} stroke="#93C5FD" strokeWidth="1" strokeDasharray="4,3"/>
+            <text x={x} y={my + 10} fill="#1D4ED8" fontSize="8" fontWeight="bold" textAnchor="middle">E{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Techo flotante */}
+      <rect x="34" y={tfY - 5} width="112" height="10" rx="3"
+        fill="#FDE68A" stroke="#B45309" strokeWidth="2"/>
+      <text x="90" y={tfY + 3} fill="#92400E" fontSize="8" fontWeight="bold" textAnchor="middle">TECHO FLOTANTE</text>
+      {/* Flecha indica flotación */}
+      <text x="19" y={tfY + 4} fill="#B45309" fontSize="13" textAnchor="middle">↕</text>
+      {/* Nivel producto */}
+      <line x1="34" y1={tfY + 8} x2="146" y2={tfY + 8} stroke="#60A5FA" strokeWidth="1" strokeDasharray="3,2" opacity="0.7"/>
+      {/* Pontones (esquemático) */}
+      <rect x="36" y={tfY - 4} width="16" height="8" rx="2" fill="#F59E0B" stroke="#B45309" strokeWidth="1"/>
+      <rect x="128" y={tfY - 4} width="16" height="8" rx="2" fill="#F59E0B" stroke="#B45309" strokeWidth="1"/>
+      {/* Puntos P en el manto */}
+      {Array.from({ length: maxP }, (_, i) => {
+        const y = my + 14 + (i + 1) * (mh - 14) / (maxP + 1)
+        return (
+          <g key={i}>
+            <line x1="22" y1={y} x2="30" y2={y} stroke="#1D4ED8" strokeWidth="1.5"/>
+            <text x="20" y={y + 4} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="end">P{i+1}</text>
+          </g>
+        )
+      })}
+      {/* Fondo */}
+      <ellipse cx="90" cy={my + mh} rx="60" ry="13" fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
+      <text x="90" y={my + mh + 22} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">FONDO</text>
+      {Array.from({ length: maxE }, (_, i) => {
+        const x = 30 + (i + 1) * 120 / (maxE + 1)
+        return <text key={i} x={x} y={my + mh + 14} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">E{i+1}</text>
+      })}
+    </svg>
+  )
+}
+
+const SVG_POR_TIPO = {
+  vertical:       SvgVertical,
+  horizontal:     SvgHorizontal,
+  conico:         SvgConico,
+  techo_flotante: SvgTechoFlotante,
+}
+
+// ── Componente principal ──────────────────────────────────────────────────
+export function CroquisTanque({ data = {}, onChange }) {
+  const tipo   = data.tipo_tanque  || 'vertical'
+  const cfg    = TIPO_TK[tipo]     || TIPO_TK.vertical
+  const SvgCmp = SVG_POR_TIPO[tipo] || SvgVertical
+
+  const nP    = data.n_puntos || 6
+  const nE    = data.n_ejes   || 4
+  const manto = data.manto    || initGrid(nP, nE)
+  const techo = data.techo    || Array(nE).fill('')
+  const fondo = data.fondo    || Array(nE).fill('')
+
+  function setTipo(t) {
+    onChange({ ...data, tipo_tanque: t })
+  }
   function setNP(v) {
     const n = Math.max(1, Math.min(20, parseInt(v) || 1))
-    const newManto = Array.from({ length: n }, (_, i) => manto[i] || Array(nE).fill(''))
-    onChange({ ...data, n_puntos: n, manto: newManto })
+    onChange({ ...data, n_puntos: n, manto: Array.from({ length: n }, (_, i) => manto[i] || Array(nE).fill('')) })
   }
   function setNE(v) {
     const n = Math.max(1, Math.min(12, parseInt(v) || 1))
-    const newManto = manto.map(row => Array.from({ length: n }, (_, i) => row[i] || ''))
-    const newTecho = Array.from({ length: n }, (_, i) => techo[i] || '')
-    const newFondo = Array.from({ length: n }, (_, i) => fondo[i] || '')
-    onChange({ ...data, n_ejes: n, manto: newManto, techo: newTecho, fondo: newFondo })
+    onChange({
+      ...data, n_ejes: n,
+      manto: manto.map(row => Array.from({ length: n }, (_, i) => row[i] || '')),
+      techo: Array.from({ length: n }, (_, i) => techo[i] || ''),
+      fondo: Array.from({ length: n }, (_, i) => fondo[i] || ''),
+    })
   }
   function setCelda(zona, row, col, val) {
     if (zona === 'manto') {
-      const m = manto.map((r, i) => i === row ? r.map((c, j) => j === col ? val : c) : r)
-      onChange({ ...data, manto: m })
+      onChange({ ...data, manto: manto.map((r, i) => i === row ? r.map((c, j) => j === col ? val : c) : r) })
     } else {
       const arr = zona === 'techo' ? [...techo] : [...fondo]
       arr[col] = val
       onChange({ ...data, [zona]: arr })
     }
   }
-  function setEspesorNominal(v) { onChange({ ...data, espesor_nominal: v }) }
-  function setEspesorMinimo(v)  { onChange({ ...data, espesor_minimo: v }) }
 
-  const ejeLabels = Array.from({ length: nE }, (_, i) => `E${i + 1}`)
-  const pLabels   = Array.from({ length: nP }, (_, i) => `P${i + 1}`)
+  const colLabels  = Array.from({ length: nE }, (_, j) => cfg.colLabel(j))
+  const filaLabels = Array.from({ length: nP }, (_, i) => cfg.filaLabel(i))
+  const nominal    = parseFloat(data.espesor_nominal) || null
+  const minimo     = parseFloat(data.espesor_minimo)  || null
 
   return (
     <div style={S.card}>
@@ -204,127 +475,121 @@ export function CroquisTanque({ data = {}, onChange }) {
 
       <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start', marginBottom:20 }}>
 
-        {/* SVG tanque cilíndrico */}
-        <div style={{ flex:'0 0 180px' }}>
-          <svg viewBox="0 0 180 260" xmlns="http://www.w3.org/2000/svg" style={{ width:'100%', maxWidth:180 }}>
-            {/* Techo */}
-            <ellipse cx="90" cy="38" rx="60" ry="14" fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
-            <text x="90" y="30" fill="#1D4ED8" fontSize="10" fontWeight="bold" textAnchor="middle">TECHO</text>
-            {/* Manto */}
-            <rect x="30" y="38" width="120" height="170" fill="#EFF6FF" stroke="#1D4ED8" strokeWidth="2"/>
-            {/* Ejes verticales en el manto */}
-            {[0,1,2,3].slice(0,nE).map((_, i) => {
-              const x = 30 + (i + 1) * 120 / (nE + 1)
-              return (
-                <g key={i}>
-                  <line x1={x} y1="38" x2={x} y2="208" stroke="#93C5FD" strokeWidth="1" strokeDasharray="4,3"/>
-                  <text x={x} y="34" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">{`E${i+1}`}</text>
-                </g>
-              )
-            })}
-            {/* Puntos P en el manto */}
-            {Array.from({ length: Math.min(nP, 8) }, (_, i) => {
-              const y = 38 + (i + 1) * 170 / (Math.min(nP, 8) + 1)
-              return (
-                <g key={i}>
-                  <line x1="25" y1={y} x2="30" y2={y} stroke="#1D4ED8" strokeWidth="1.5"/>
-                  <text x="22" y={y + 4} fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="end">{`P${i+1}`}</text>
-                </g>
-              )
-            })}
-            {/* Fondo */}
-            <ellipse cx="90" cy="208" rx="60" ry="14" fill="#BFDBFE" stroke="#1D4ED8" strokeWidth="2"/>
-            <text x="90" y="232" fill="#1D4ED8" fontSize="10" fontWeight="bold" textAnchor="middle">FONDO</text>
-            {/* Etiquetas Ejes abajo */}
-            {[0,1,2,3].slice(0,nE).map((_, i) => {
-              const x = 30 + (i + 1) * 120 / (nE + 1)
-              return <text key={i} x={x} y="225" fill="#1D4ED8" fontSize="9" fontWeight="bold" textAnchor="middle">{`E${i+1}`}</text>
-            })}
-          </svg>
-          <p style={S.nota}>Técnica: pulso-eco<br/>Unidades en mm</p>
+        {/* SVG dinámico según tipo */}
+        <div style={{ flex:'0 0 200px' }}>
+          <SvgCmp nP={nP} nE={nE} />
+          <p style={S.nota}>{cfg.nota}</p>
         </div>
 
         {/* Configuración */}
         <div style={{ flex:1, minWidth:260 }}>
+
+          {/* Selector de tipo de tanque */}
+          <div style={{ marginBottom:14 }}>
+            <label style={S.label}>Tipo de tanque</label>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {Object.entries(TIPO_TK).map(([key, c]) => (
+                <button
+                  key={key}
+                  onClick={() => setTipo(key)}
+                  style={{
+                    padding:'5px 12px', borderRadius:6, fontSize:12, fontWeight:600,
+                    cursor:'pointer', border:'1.5px solid',
+                    borderColor:  tipo === key ? '#1D4ED8' : '#CBD5E1',
+                    background:   tipo === key ? '#EFF6FF' : '#fff',
+                    color:        tipo === key ? '#1D4ED8' : '#64748B',
+                    transition:   'all .1s',
+                  }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Parámetros numéricos */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10, marginBottom:16 }}>
             <div>
-              <label style={S.label}>Puntos (P)</label>
+              <label style={S.label}>{cfg.labelFilas}</label>
               <input style={{ ...S.input, textAlign:'left' }} type="number" min="1" max="20"
                 value={nP} onChange={e => setNP(e.target.value)} />
             </div>
             <div>
-              <label style={S.label}>Ejes (E)</label>
+              <label style={S.label}>{cfg.labelCols}</label>
               <input style={{ ...S.input, textAlign:'left' }} type="number" min="1" max="12"
                 value={nE} onChange={e => setNE(e.target.value)} />
             </div>
             <div>
               <label style={S.label}>Esp. nominal (mm)</label>
               <input style={{ ...S.input, textAlign:'left' }} type="number" step="0.1"
-                value={data.espesor_nominal || ''} onChange={e => setEspesorNominal(e.target.value)}
-                placeholder="ej: 6.35" />
+                value={data.espesor_nominal || ''} placeholder="ej: 6.35"
+                onChange={e => onChange({ ...data, espesor_nominal: e.target.value })} />
             </div>
             <div>
               <label style={S.label}>Esp. mínimo (mm)</label>
               <input style={{ ...S.input, textAlign:'left' }} type="number" step="0.1"
-                value={data.espesor_minimo || ''} onChange={e => setEspesorMinimo(e.target.value)}
-                placeholder="ej: 5.0" />
+                value={data.espesor_minimo || ''} placeholder="ej: 5.0"
+                onChange={e => onChange({ ...data, espesor_minimo: e.target.value })} />
             </div>
           </div>
 
-          {/* Tabla TECHO */}
-          <div style={{ fontSize:11, fontWeight:700, color:'#1D4ED8', marginBottom:4 }}>Techo (mm)</div>
-          <div style={{ overflowX:'auto', marginBottom:12 }}>
-            <table style={{ borderCollapse:'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...S.th, minWidth:60 }}>Zona</th>
-                  {ejeLabels.map(e => <th key={e} style={{ ...S.th, minWidth:72 }}>{e}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style={S.tdLabel}>Techo</td>
-                  {ejeLabels.map((_, j) => (
-                    <td key={j} style={S.td}>
-                      <input style={{ ...S.input, width:68 }} type="number" step="0.1"
-                        value={techo[j] || ''} onChange={e => setCelda('techo', 0, j, e.target.value)}
-                        placeholder="—" />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {/* Tabla zona SUPERIOR (Techo / Cabezal IZQ) — oculta en techo flotante */}
+          {cfg.tieneSup && (
+            <>
+              <div style={{ fontSize:11, fontWeight:700, color:'#1D4ED8', marginBottom:4 }}>{cfg.labelSup} (mm)</div>
+              <div style={{ overflowX:'auto', marginBottom:12 }}>
+                <table style={{ borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...S.th, minWidth:80 }}>Zona</th>
+                      {colLabels.map(c => <th key={c} style={{ ...S.th, minWidth:72 }}>{c}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={S.tdLabel}>{cfg.labelSup}</td>
+                      {colLabels.map((_, j) => (
+                        <td key={j} style={S.td}>
+                          <input style={{ ...S.input, width:68 }} type="number" step="0.1"
+                            value={techo[j] || ''} placeholder="—"
+                            onChange={e => setCelda('techo', 0, j, e.target.value)} />
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
-          {/* Tabla MANTO */}
-          <div style={{ fontSize:11, fontWeight:700, color:'#1D4ED8', marginBottom:4 }}>Manto (mm)</div>
+          {/* Tabla MANTO / CUERPO */}
+          <div style={{ fontSize:11, fontWeight:700, color:'#1D4ED8', marginBottom:4 }}>
+            {tipo === 'horizontal' ? 'Cuerpo — Generatrices (mm)' : 'Manto (mm)'}
+          </div>
           <div style={{ overflowX:'auto', marginBottom:12 }}>
             <table style={{ borderCollapse:'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ ...S.th, minWidth:60 }}>Puntos</th>
-                  {ejeLabels.map(e => <th key={e} style={{ ...S.th, minWidth:72 }}>{e}</th>)}
+                  <th style={{ ...S.th, minWidth:80 }}>{cfg.labelFilas}</th>
+                  {colLabels.map(c => <th key={c} style={{ ...S.th, minWidth:72 }}>{c}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {pLabels.map((p, i) => {
+                {filaLabels.map((fila, i) => {
                   const row = manto[i] || Array(nE).fill('')
-                  const nominal = parseFloat(data.espesor_nominal) || null
-                  const minimo  = parseFloat(data.espesor_minimo)  || null
                   return (
                     <tr key={i}>
-                      <td style={S.tdLabel}>{p}</td>
-                      {ejeLabels.map((_, j) => {
-                        const val = parseFloat(row[j])
+                      <td style={S.tdLabel}>{fila}</td>
+                      {colLabels.map((_, j) => {
+                        const val  = parseFloat(row[j])
                         const bajo = !isNaN(val) && minimo && val < minimo
                         return (
                           <td key={j} style={{ ...S.td, background: bajo ? '#FEF2F2' : '#fff' }}>
                             <input
                               style={{ ...S.input, width:68, color: bajo ? '#DC2626' : '#1E293B', fontWeight: bajo ? 700 : 400 }}
                               type="number" step="0.1"
-                              value={row[j] || ''}
+                              value={row[j] || ''} placeholder="—"
                               onChange={e => setCelda('manto', i, j, e.target.value)}
-                              placeholder="—"
                             />
                           </td>
                         )
@@ -336,34 +601,38 @@ export function CroquisTanque({ data = {}, onChange }) {
             </table>
           </div>
 
-          {/* Tabla FONDO */}
-          <div style={{ fontSize:11, fontWeight:700, color:'#1D4ED8', marginBottom:4 }}>Fondo (mm)</div>
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ borderCollapse:'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...S.th, minWidth:60 }}>Zona</th>
-                  {ejeLabels.map(e => <th key={e} style={{ ...S.th, minWidth:72 }}>{e}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style={S.tdLabel}>Fondo</td>
-                  {ejeLabels.map((_, j) => (
-                    <td key={j} style={S.td}>
-                      <input style={{ ...S.input, width:68 }} type="number" step="0.1"
-                        value={fondo[j] || ''} onChange={e => setCelda('fondo', 0, j, e.target.value)}
-                        placeholder="—" />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {/* Tabla zona INFERIOR (Fondo / Cabezal DER / Cono) */}
+          {cfg.tieneInf && (
+            <>
+              <div style={{ fontSize:11, fontWeight:700, color:'#1D4ED8', marginBottom:4 }}>{cfg.labelInf} (mm)</div>
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...S.th, minWidth:80 }}>Zona</th>
+                      {colLabels.map(c => <th key={c} style={{ ...S.th, minWidth:72 }}>{c}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={S.tdLabel}>{cfg.labelInf}</td>
+                      {colLabels.map((_, j) => (
+                        <td key={j} style={S.td}>
+                          <input style={{ ...S.input, width:68 }} type="number" step="0.1"
+                            value={fondo[j] || ''} placeholder="—"
+                            onChange={e => setCelda('fondo', 0, j, e.target.value)} />
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
-          {data.espesor_minimo && (
+          {minimo && (
             <div style={{ marginTop:10, fontSize:11, color:'#DC2626', fontWeight:600 }}>
-              🔴 Celdas en rojo = espesor bajo el mínimo ({data.espesor_minimo} mm)
+              Celdas en rojo = espesor bajo el minimo ({minimo} mm)
             </div>
           )}
         </div>
