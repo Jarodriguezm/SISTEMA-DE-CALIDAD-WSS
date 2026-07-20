@@ -351,14 +351,21 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
       setPdfState('subiendo')
       const url = await subirPDFaSupabase(base64, tituloArchivo, ot.ot_numero)
 
-      // Registrar en documentos_ot como etapa 07 completada
-      await supabase.from('documentos_ot').upsert({
-        ot_numero:      ot.ot_numero,
-        tipo:           'asignacion',
-        nombre_archivo: tituloArchivo,
-        drive_url:      url,
-        subido_por:     nombreCompleto || 'Sistema',
-      }, { onConflict: 'ot_numero,tipo' })
+      // Registrar en documentos_ot como etapa 07 completada (insert/update manual)
+      const { data: docExist } = await supabase.from('documentos_ot')
+        .select('id').eq('ot_numero', ot.ot_numero).eq('tipo', 'asignacion').maybeSingle()
+      const docPayload = {
+        ot_numero: ot.ot_numero, tipo: 'asignacion',
+        nombre_archivo: tituloArchivo, drive_url: url,
+        subido_por: nombreCompleto || 'Sistema',
+      }
+      if (docExist) {
+        const { error: updDocErr } = await supabase.from('documentos_ot').update(docPayload).eq('id', docExist.id)
+        if (updDocErr) throw new Error('Error actualizando registro: ' + updDocErr.message)
+      } else {
+        const { error: insDocErr } = await supabase.from('documentos_ot').insert(docPayload)
+        if (insDocErr) throw new Error('Error registrando documento: ' + insDocErr.message)
+      }
 
       // Buscar email y teléfono de los inspectores asignados
       const nombres = (asig.inspectores_asignados || '')
