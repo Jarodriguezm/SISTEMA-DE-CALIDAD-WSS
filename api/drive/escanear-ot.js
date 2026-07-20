@@ -116,12 +116,26 @@ export default async function handler(req, res) {
     }
 
     if (upserts.length > 0) {
-      const { error: upsertErr } = await supabase
-        .from('documentos_ot')
-        .upsert(upserts, { onConflict: 'ot_numero,tipo' })
-
-      if (upsertErr) {
-        return res.status(500).json({ error: `Error guardando en DB: ${upsertErr.message}`, detalle: resultados })
+      for (const u of upserts) {
+        // Buscar si ya existe por drive_file_id (si está disponible) o por ot_numero+tipo+nombre
+        let existente = null
+        if (u.drive_file_id) {
+          const { data } = await supabase.from('documentos_ot')
+            .select('id').eq('ot_numero', u.ot_numero).eq('drive_file_id', u.drive_file_id).maybeSingle()
+          existente = data
+        }
+        if (!existente) {
+          const { data } = await supabase.from('documentos_ot')
+            .select('id').eq('ot_numero', u.ot_numero).eq('tipo', u.tipo).eq('nombre_archivo', u.nombre_archivo).maybeSingle()
+          existente = data
+        }
+        if (existente) {
+          const { error: updErr } = await supabase.from('documentos_ot').update(u).eq('id', existente.id)
+          if (updErr) return res.status(500).json({ error: `Error actualizando en DB: ${updErr.message}`, detalle: resultados })
+        } else {
+          const { error: insErr } = await supabase.from('documentos_ot').insert(u)
+          if (insErr) return res.status(500).json({ error: `Error guardando en DB: ${insErr.message}`, detalle: resultados })
+        }
       }
     }
 
