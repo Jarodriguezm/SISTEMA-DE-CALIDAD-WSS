@@ -45,22 +45,52 @@ const TIEMPOS_EST = [
   '2 días (16h)', '3 días (24h)',
 ]
 
-const NORMAS_EJECUCION = [
-  'ASME V Art. 1 (2021)',  'ASME V Art. 2 (2021)',  'ASME V Art. 4 (2021)',
-  'ASME V Art. 5 (2021)',  'ASME V Art. 6 (2021)',  'ASME V Art. 7 (2021)',
-  'ASTM E114 (2015)',      'ASTM E165 (2018)',       'ASTM E317 (2019)',
-  'ASTM E709 (2021)',      'ASTM E1444 (2022)',      'ASTM A435 (2019)',
-  'AWS B1.10 (2016)',      'ISO 3452-1 (2021)',      'ISO 9712 (2021)',
-  'ISO 17637 (2016)',      'SNT-TC-1A (2020)',
+const NORMAS_EJECUCION_BASE = [
+  // ASME V — Exámenes No Destructivos
+  'ASME V Art. 1 (2021)',   'ASME V Art. 2 (2021)',   'ASME V Art. 4 (2021)',
+  'ASME V Art. 5 (2021)',   'ASME V Art. 6 (2021)',   'ASME V Art. 7 (2021)',
+  'ASME V Art. 8 (2021)',   'ASME V Art. 9 (2021)',   'ASME V Art. 10 (2021)',
+  // ASTM — Métodos END
+  'ASTM E94 (2017)',        'ASTM E114 (2015)',        'ASTM E165 (2018)',
+  'ASTM E317 (2019)',       'ASTM E428 (2022)',        'ASTM E587 (2015)',
+  'ASTM E709 (2021)',       'ASTM E747 (2020)',        'ASTM E1444 (2022)',
+  'ASTM A435 (2019)',       'ASTM A578 (2017)',
+  // AWS
+  'AWS B1.10 (2016)',       'AWS B1.11 (2000)',
+  // ISO
+  'ISO 3452-1 (2021)',      'ISO 9712 (2021)',         'ISO 17637 (2016)',
+  'ISO 17638 (2016)',       'ISO 17640 (2018)',        'ISO 23277 (2022)',
+  'ISO 23278 (2015)',
+  // SNT / ACCP
+  'SNT-TC-1A (2020)',       'CP-189 (2016)',
+  // NCh (Normas Chilenas)
+  'NCh 2619 (2004)',        'NCh 2620 (2004)',
 ]
 
-const NORMAS_EVALUACION = [
-  'API 510 (2022)',          'API 570 (2023)',          'API 620 (2021)',
-  'API 650 (2023)',          'API 653 (2023)',          'API RP 571 (2020)',
-  'API RP 574 (2022)',       'API RP 577 (2022)',       'API RP 580 (2016)',
-  'ASME VIII Div. 1 (2023)', 'ASME VIII Div. 2 (2023)', 'ASME B31.1 (2022)',
-  'ASME B31.3 (2022)',       'ASME B31.4 (2022)',       'ASME B31.8 (2022)',
-  'AWS D1.1 (2020)',         'AWS D1.5 (2020)',          'NACE MR0175 (2021)',
+const NORMAS_EVALUACION_BASE = [
+  // API — Recipientes, tuberías y tanques
+  'API 510 (2022)',          'API 570 (2023)',          'API 579-1 (2021)',
+  'API 620 (2021)',          'API 650 (2023)',          'API 653 (2023)',
+  'API RP 571 (2020)',       'API RP 574 (2022)',       'API RP 577 (2022)',
+  'API RP 578 (2021)',       'API RP 580 (2016)',       'API RP 581 (2016)',
+  'API RP 582 (2022)',       'API RP 591 (2012)',
+  // ASME — Recipientes y tuberías
+  'ASME VIII Div. 1 (2023)', 'ASME VIII Div. 2 (2023)', 'ASME VIII Div. 3 (2023)',
+  'ASME B31.1 (2022)',       'ASME B31.3 (2022)',        'ASME B31.4 (2022)',
+  'ASME B31.8 (2022)',       'ASME B31.9 (2022)',        'ASME IX (2023)',
+  // AWS — Soldadura
+  'AWS D1.1 (2020)',         'AWS D1.2 (2021)',          'AWS D1.3 (2018)',
+  'AWS D1.4 (2018)',         'AWS D1.5 (2020)',          'AWS D1.6 (2017)',
+  // NACE / AMPP
+  'NACE MR0175 (2021)',      'NACE SP0169 (2013)',       'NACE SP0188 (2006)',
+  'NACE SP0472 (2020)',
+  // ISO
+  'ISO 5817 (2023)',         'ISO 10042 (2018)',         'ISO 13847 (2013)',
+  // NCh
+  'NCh 432 Of.1971',        'NCh 2369 (2003)',
+  // Grúas e izaje
+  'ASME B30.2 (2022)',       'ASME B30.5 (2021)',        'ASME B30.9 (2022)',
+  'ASME B30.20 (2021)',      'FEM 1.001 (2022)',
 ]
 
 function buildWAMensaje({ otNumero, cliente, contacto, telefonoCliente, fechaInspeccion, hora, sede,
@@ -540,6 +570,10 @@ export default function TabAsignaciones({ ot }) {
   const [procedimientos, setProcedimientos] = useState([])
   const [inspectores, setInspectores]       = useState([])
   const [vehiculos, setVehiculos]           = useState([])
+  const [normasCustomEj, setNormasCustomEj] = useState([])
+  const [normasCustomEv, setNormasCustomEv] = useState([])
+  const [inputNormaEj, setInputNormaEj]     = useState('')
+  const [inputNormaEv, setInputNormaEv]     = useState('')
 
   const FORM_INIT = {
     supervisor:'', inspectoresSeleccionados:[], equiposSeleccionados:[],
@@ -561,16 +595,37 @@ export default function TabAsignaciones({ ot }) {
 
   const cargarCatalogos = useCallback(async () => {
     try {
-      const [{ data: eq }, { data: proc }, { data: insp }, { data: veh }] = await Promise.all([
+      const [{ data: eq }, { data: proc }, { data: insp }, { data: veh }, { data: nc }] = await Promise.all([
         supabase.from('equipos').select('id,equipo_instrumento,codigo').eq('activo',true).order('equipo_instrumento'),
         supabase.from('catalogo_procedimientos').select('id,nombre,codigo').eq('activo',true).order('codigo'),
         supabase.from('v_usuarios_portal').select('nombre_completo,email,telefono_whatsapp,rol,activo')
           .in('rol',['INSPECTOR','SUPERVISOR','ADMIN']).eq('activo', true).order('nombre_completo'),
         supabase.from('vehiculos').select('id,patente,descripcion').eq('activo',true).order('patente'),
+        supabase.from('normas_custom').select('tipo,norma').order('norma'),
       ])
       setEquipos(eq||[]); setProcedimientos(proc||[]); setInspectores(insp||[]); setVehiculos(veh||[])
+      setNormasCustomEj((nc||[]).filter(n=>n.tipo==='ejecucion').map(n=>n.norma))
+      setNormasCustomEv((nc||[]).filter(n=>n.tipo==='evaluacion').map(n=>n.norma))
     } catch(e) { console.error('Catálogos:', e) }
   }, [])
+
+  async function agregarNormaCustom(tipo, valor, setInput) {
+    const norma = valor.trim()
+    if (!norma) return
+    const yaExiste = tipo === 'ejecucion'
+      ? [...NORMAS_EJECUCION_BASE, ...normasCustomEj].some(n => n.toLowerCase() === norma.toLowerCase())
+      : [...NORMAS_EVALUACION_BASE, ...normasCustomEv].some(n => n.toLowerCase() === norma.toLowerCase())
+    if (yaExiste) { setInput(''); return }
+    await supabase.from('normas_custom').upsert({ tipo, norma }, { onConflict: 'tipo,norma' })
+    if (tipo === 'ejecucion') {
+      setNormasCustomEj(prev => [...prev, norma].sort())
+      setForm(f => ({ ...f, normasEjecucion: [...f.normasEjecucion, norma] }))
+    } else {
+      setNormasCustomEv(prev => [...prev, norma].sort())
+      setForm(f => ({ ...f, normasEvaluacion: [...f.normasEvaluacion, norma] }))
+    }
+    setInput('')
+  }
 
   useEffect(() => { cargarAsignaciones(); cargarCatalogos() }, [cargarAsignaciones, cargarCatalogos])
 
@@ -770,7 +825,7 @@ export default function TabAsignaciones({ ot }) {
                 <span style={{ fontSize:10, color:'#185FA5', fontWeight:'normal', marginLeft:6 }}>selección múltiple</span>
               </label>
               <div style={checkboxListStyle}>
-                {NORMAS_EJECUCION.map(n => {
+                {[...NORMAS_EJECUCION_BASE, ...normasCustomEj].map(n => {
                   const sel = form.normasEjecucion.includes(n)
                   return (
                     <label key={n} style={checkRowStyle(sel)}>
@@ -779,6 +834,21 @@ export default function TabAsignaciones({ ot }) {
                     </label>
                   )
                 })}
+              </div>
+              {/* Campo para agregar norma manual */}
+              <div style={{ display:'flex', gap:5, marginTop:6 }}>
+                <input
+                  value={inputNormaEj}
+                  onChange={e=>setInputNormaEj(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); agregarNormaCustom('ejecucion', inputNormaEj, setInputNormaEj) }}}
+                  placeholder="Agregar norma no listada…"
+                  style={{ ...inputStyle, fontSize:11, height:30, flex:1 }}
+                />
+                <button
+                  type="button"
+                  onClick={()=>agregarNormaCustom('ejecucion', inputNormaEj, setInputNormaEj)}
+                  style={{ height:30, padding:'0 10px', background:'#1A3A5C', color:'#fff', border:'none', borderRadius:6, fontSize:12, cursor:'pointer', flexShrink:0 }}
+                >+ Agregar</button>
               </div>
               {form.normasEjecucion.length > 0 && (
                 <div style={{ marginTop:4, fontSize:11, color:'#185FA5' }}>
@@ -793,7 +863,7 @@ export default function TabAsignaciones({ ot }) {
                 <span style={{ fontSize:10, color:'#185FA5', fontWeight:'normal', marginLeft:6 }}>selección múltiple</span>
               </label>
               <div style={checkboxListStyle}>
-                {NORMAS_EVALUACION.map(n => {
+                {[...NORMAS_EVALUACION_BASE, ...normasCustomEv].map(n => {
                   const sel = form.normasEvaluacion.includes(n)
                   return (
                     <label key={n} style={checkRowStyle(sel)}>
@@ -802,6 +872,21 @@ export default function TabAsignaciones({ ot }) {
                     </label>
                   )
                 })}
+              </div>
+              {/* Campo para agregar norma manual */}
+              <div style={{ display:'flex', gap:5, marginTop:6 }}>
+                <input
+                  value={inputNormaEv}
+                  onChange={e=>setInputNormaEv(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); agregarNormaCustom('evaluacion', inputNormaEv, setInputNormaEv) }}}
+                  placeholder="Agregar norma no listada…"
+                  style={{ ...inputStyle, fontSize:11, height:30, flex:1 }}
+                />
+                <button
+                  type="button"
+                  onClick={()=>agregarNormaCustom('evaluacion', inputNormaEv, setInputNormaEv)}
+                  style={{ height:30, padding:'0 10px', background:'#1A3A5C', color:'#fff', border:'none', borderRadius:6, fontSize:12, cursor:'pointer', flexShrink:0 }}
+                >+ Agregar</button>
               </div>
               {form.normasEvaluacion.length > 0 && (
                 <div style={{ marginTop:4, fontSize:11, color:'#185FA5' }}>
