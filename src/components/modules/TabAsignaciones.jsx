@@ -37,15 +37,36 @@ const END_METHODS = [
   { cod:'O',    desc:'Otros',             reg:null },
 ]
 
-function buildWAMensaje({ otNumero, cliente, fechaInspeccion, hora, descripcion, supervisorNombre, pdfUrl }) {
-  return (
-    `Hola, te informamos que has sido asignado/a a una actividad de inspección.\n\n` +
-    `*OT:* ${otNumero}\n*Cliente:* ${cliente}\n*Fecha:* ${fechaInspeccion || 'Por confirmar'}\n` +
-    `*Hora:* ${hora || 'Por confirmar'}\n*Descripción:* ${descripcion || '—'}\n` +
-    `*Supervisor:* ${supervisorNombre}\n\n` +
-    (pdfUrl ? `📄 *Asignación REG-DII-036:* ${pdfUrl}\n\n` : '') +
-    `Por favor confirma recepción. — WSS División Inspección Industrial`
-  )
+const PORTAL_URL = 'https://sistema-de-calidad-wss.vercel.app'
+
+function buildWAMensaje({ otNumero, cliente, contacto, telefonoCliente, fechaInspeccion, hora, sede,
+  descripcion, tipos, procedimientos, normaEjecucion, vehiculo, supervisorNombre, pdfUrl }) {
+  const portalLink = `${PORTAL_URL}/ots/${otNumero}`
+  const lineas = []
+  lineas.push(`Hola, has sido asignado/a a una actividad de inspección WSS.\n`)
+  lineas.push(`📋 *ORDEN DE TRABAJO*`)
+  lineas.push(`*N° OT:* ${otNumero}`)
+  if (cliente)         lineas.push(`*Cliente:* ${cliente}`)
+  if (contacto)        lineas.push(`*Contacto cliente:* ${contacto}`)
+  if (telefonoCliente) lineas.push(`*Teléfono cliente:* ${telefonoCliente}`)
+  if (sede)            lineas.push(`*Sede / Faena:* ${sede}`)
+  lineas.push(``)
+  lineas.push(`🗓️ *PROGRAMACIÓN`)
+  lineas.push(`*Fecha:* ${fechaInspeccion || 'Por confirmar'}`)
+  lineas.push(`*Hora:* ${hora || 'Por confirmar'}`)
+  if (vehiculo)        lineas.push(`*Vehículo:* ${vehiculo}`)
+  lineas.push(`*Supervisor:* ${supervisorNombre}`)
+  lineas.push(``)
+  lineas.push(`🔧 *ACTIVIDAD A REALIZAR*`)
+  if (tipos)           lineas.push(`*Técnicas:* ${tipos}`)
+  if (procedimientos)  lineas.push(`*Procedimientos:* ${procedimientos}`)
+  if (normaEjecucion)  lineas.push(`*Norma:* ${normaEjecucion}`)
+  if (descripcion)     lineas.push(`*Descripción:* ${descripcion}`)
+  lineas.push(``)
+  if (pdfUrl)          lineas.push(`📄 *Asignación REG-DII-036:* ${pdfUrl}\n`)
+  lineas.push(`🔗 *Para ver todos los detalles ingresa al portal:*\n${portalLink}`)
+  lineas.push(`\nPor favor confirma recepción. — WSS División Inspección Industrial`)
+  return lineas.join('\n')
 }
 
 function escHtml(s) {
@@ -327,10 +348,20 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
             const conTel     = contactos.find(c => c.telefono_whatsapp)
             const emailsStr  = contactos.map(c => c.email).filter(Boolean).join(',')
             const msgWA      = buildWAMensaje({
-              otNumero: ot.ot_numero, cliente: ot.cliente,
-              fechaInspeccion: asig.fecha_inspeccion, hora: asig.hora,
-              descripcion: asig.descripcion_actividad,
-              supervisorNombre: asig.supervisor, pdfUrl: pdfState.url,
+              otNumero:        ot.ot_numero,
+              cliente:         ot.cliente,
+              contacto:        ot.contacto,
+              telefonoCliente: ot.telefono_cliente,
+              sede:            ot.direccion_faena || ot.sede,
+              fechaInspeccion: asig.fecha_inspeccion,
+              hora:            asig.hora,
+              vehiculo:        asig.vehiculo,
+              tipos:           asig.tipos_inspeccion,
+              procedimientos:  asig.procedimientos,
+              normaEjecucion:  asig.norma_ejecucion,
+              descripcion:     asig.descripcion_actividad,
+              supervisorNombre: asig.supervisor,
+              pdfUrl:          pdfState.url,
             })
             const urlWA = conTel ? waLink(conTel.telefono_whatsapp, msgWA) : null
             const asunto = encodeURIComponent(`Asignación OT ${ot.ot_numero} — WSS División Inspección Industrial`)
@@ -534,9 +565,21 @@ export default function TabAsignaciones({ ot }) {
       const eqStr    = form.equiposSeleccionados.join(', ')
       const supNombre = form.supervisor || nombreCompleto
 
-      const mensajeWA = buildWAMensaje({ otNumero:ot.ot_numero, cliente:ot.cliente,
-        fechaInspeccion:form.fechaInspeccion, hora:form.hora,
-        descripcion:form.descripcionActividad, supervisorNombre:supNombre })
+      const mensajeWA = buildWAMensaje({
+        otNumero:        ot.ot_numero,
+        cliente:         ot.cliente,
+        contacto:        ot.contacto,
+        telefonoCliente: ot.telefono_cliente,
+        sede:            ot.direccion_faena || ot.sede,
+        fechaInspeccion: form.fechaInspeccion,
+        hora:            form.hora,
+        vehiculo:        form.vehiculo,
+        tipos:           tiposStr,
+        procedimientos:  procStr,
+        normaEjecucion:  form.normaEjecucion,
+        descripcion:     form.descripcionActividad,
+        supervisorNombre: supNombre,
+      })
 
       const primerConTel = form.inspectoresSeleccionados.find(i => i.telefono_whatsapp)
       const waUrl = primerConTel ? waLink(primerConTel.telefono_whatsapp, mensajeWA) : null
