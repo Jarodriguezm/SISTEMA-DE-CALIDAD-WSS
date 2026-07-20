@@ -39,6 +39,30 @@ const END_METHODS = [
 
 const PORTAL_URL = 'https://sistema-de-calidad-wss.vercel.app'
 
+const TIEMPOS_EST = [
+  '1 hora', '2 horas', '3 horas', '4 horas',
+  'Medio día (4h)', '6 horas', '7 horas', 'Día completo (8h)',
+  '2 días (16h)', '3 días (24h)',
+]
+
+const NORMAS_EJECUCION = [
+  'ASME V Art. 1 (2021)',  'ASME V Art. 2 (2021)',  'ASME V Art. 4 (2021)',
+  'ASME V Art. 5 (2021)',  'ASME V Art. 6 (2021)',  'ASME V Art. 7 (2021)',
+  'ASTM E114 (2015)',      'ASTM E165 (2018)',       'ASTM E317 (2019)',
+  'ASTM E709 (2021)',      'ASTM E1444 (2022)',      'ASTM A435 (2019)',
+  'AWS B1.10 (2016)',      'ISO 3452-1 (2021)',      'ISO 9712 (2021)',
+  'ISO 17637 (2016)',      'SNT-TC-1A (2020)',
+]
+
+const NORMAS_EVALUACION = [
+  'API 510 (2022)',          'API 570 (2023)',          'API 620 (2021)',
+  'API 650 (2023)',          'API 653 (2023)',          'API RP 571 (2020)',
+  'API RP 574 (2022)',       'API RP 577 (2022)',       'API RP 580 (2016)',
+  'ASME VIII Div. 1 (2023)', 'ASME VIII Div. 2 (2023)', 'ASME B31.1 (2022)',
+  'ASME B31.3 (2022)',       'ASME B31.4 (2022)',       'ASME B31.8 (2022)',
+  'AWS D1.1 (2020)',         'AWS D1.5 (2020)',          'NACE MR0175 (2021)',
+]
+
 function buildWAMensaje({ otNumero, cliente, contacto, telefonoCliente, fechaInspeccion, hora, sede,
   descripcion, tipos, procedimientos, normaEjecucion, vehiculo, supervisorNombre, pdfUrl }) {
   const portalLink = `${PORTAL_URL}/ots/${otNumero}`
@@ -515,13 +539,15 @@ export default function TabAsignaciones({ ot }) {
   const [equipos, setEquipos]               = useState([])
   const [procedimientos, setProcedimientos] = useState([])
   const [inspectores, setInspectores]       = useState([])
+  const [vehiculos, setVehiculos]           = useState([])
 
-  const [form, setForm] = useState({
+  const FORM_INIT = {
     supervisor:'', inspectoresSeleccionados:[], equiposSeleccionados:[],
     procedimientosSeleccionados:[], tiposInspeccion:[],
     fechaInspeccion:'', hora:'', tiempoEstimado:'', vehiculo:'',
-    normaEjecucion:'', normaEvaluacion:'', descripcionActividad:'',
-  })
+    normasEjecucion:[], normasEvaluacion:[], descripcionActividad:'',
+  }
+  const [form, setForm] = useState(FORM_INIT)
 
   const cargarAsignaciones = useCallback(async () => {
     setLoading(true); setError(null)
@@ -535,13 +561,14 @@ export default function TabAsignaciones({ ot }) {
 
   const cargarCatalogos = useCallback(async () => {
     try {
-      const [{ data: eq }, { data: proc }, { data: insp }] = await Promise.all([
+      const [{ data: eq }, { data: proc }, { data: insp }, { data: veh }] = await Promise.all([
         supabase.from('equipos').select('id,equipo_instrumento,codigo').eq('activo',true).order('equipo_instrumento'),
         supabase.from('catalogo_procedimientos').select('id,nombre,codigo').eq('activo',true).order('codigo'),
         supabase.from('v_usuarios_portal').select('nombre_completo,email,telefono_whatsapp,rol')
           .in('rol',['INSPECTOR','SUPERVISOR','ADMIN']).order('nombre_completo'),
+        supabase.from('vehiculos').select('id,patente,descripcion').eq('activo',true).order('patente'),
       ])
-      setEquipos(eq||[]); setProcedimientos(proc||[]); setInspectores(insp||[])
+      setEquipos(eq||[]); setProcedimientos(proc||[]); setInspectores(insp||[]); setVehiculos(veh||[])
     } catch(e) { console.error('Catálogos:', e) }
   }, [])
 
@@ -565,6 +592,9 @@ export default function TabAsignaciones({ ot }) {
       const eqStr    = form.equiposSeleccionados.join(', ')
       const supNombre = form.supervisor || nombreCompleto
 
+      const normaEjStr  = form.normasEjecucion.join(', ')
+      const normaEvStr  = form.normasEvaluacion.join(', ')
+
       const mensajeWA = buildWAMensaje({
         otNumero:        ot.ot_numero,
         cliente:         ot.cliente,
@@ -576,7 +606,7 @@ export default function TabAsignaciones({ ot }) {
         vehiculo:        form.vehiculo,
         tipos:           tiposStr,
         procedimientos:  procStr,
-        normaEjecucion:  form.normaEjecucion,
+        normaEjecucion:  normaEjStr,
         descripcion:     form.descripcionActividad,
         supervisorNombre: supNombre,
       })
@@ -593,7 +623,7 @@ export default function TabAsignaciones({ ot }) {
         p_supervisor: supNombre, p_inspectores_asignados: inspStr,
         p_fecha_inspeccion: form.fechaInspeccion||null, p_hora: form.hora||null,
         p_tiempo_estimado: form.tiempoEstimado||null, p_vehiculo: form.vehiculo||null,
-        p_norma_ejecucion: form.normaEjecucion||null, p_norma_evaluacion: form.normaEvaluacion||null,
+        p_norma_ejecucion: normaEjStr||null, p_norma_evaluacion: normaEvStr||null,
         p_procedimientos: procStr||null, p_tipos_inspeccion: tiposStr||null,
         p_descripcion_actividad: descFinal, p_drive_url: null,
         p_whatsapp_inspectores_url: waUrl,
@@ -606,10 +636,7 @@ export default function TabAsignaciones({ ot }) {
           .map(i => ({ nombre:i.nombre_completo, url:waLink(i.telefono_whatsapp, mensajeWA) })),
       })
       setMostrarForm(false)
-      setForm({ supervisor:'', inspectoresSeleccionados:[], equiposSeleccionados:[],
-        procedimientosSeleccionados:[], tiposInspeccion:[],
-        fechaInspeccion:'', hora:'', tiempoEstimado:'', vehiculo:'',
-        normaEjecucion:'', normaEvaluacion:'', descripcionActividad:'' })
+      setForm(FORM_INIT)
       await cargarAsignaciones()
     } catch(e) { setError(e.message) }
     finally { setGuardando(false) }
@@ -705,11 +732,76 @@ export default function TabAsignaciones({ ot }) {
           </div>
 
           {/* Condiciones */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10, marginBottom:14 }}>
-            <div><label style={labelStyle}>Tiempo estimado</label><input value={form.tiempoEstimado} onChange={e=>setForm(f=>({...f,tiempoEstimado:e.target.value}))} placeholder="Ej: 6 horas" style={inputStyle} /></div>
-            <div><label style={labelStyle}>Vehículo</label><input value={form.vehiculo} onChange={e=>setForm(f=>({...f,vehiculo:e.target.value}))} placeholder="Ej: SKHP-59" style={inputStyle} /></div>
-            <div><label style={labelStyle}>Norma ejecución</label><input value={form.normaEjecucion} onChange={e=>setForm(f=>({...f,normaEjecucion:e.target.value}))} placeholder="Ej: ASME V" style={inputStyle} /></div>
-            <div><label style={labelStyle}>Norma evaluación</label><input value={form.normaEvaluacion} onChange={e=>setForm(f=>({...f,normaEvaluacion:e.target.value}))} placeholder="Ej: AWS D1.1" style={inputStyle} /></div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+            {/* Tiempo estimado */}
+            <div>
+              <label style={labelStyle}>Tiempo estimado</label>
+              <select value={form.tiempoEstimado} onChange={e=>setForm(f=>({...f,tiempoEstimado:e.target.value}))} style={inputStyle}>
+                <option value="">— Seleccionar —</option>
+                {TIEMPOS_EST.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {/* Vehículo */}
+            <div>
+              <label style={labelStyle}>Vehículo</label>
+              <select value={form.vehiculo} onChange={e=>setForm(f=>({...f,vehiculo:e.target.value}))} style={inputStyle}>
+                <option value="">— Seleccionar —</option>
+                {vehiculos.length > 0
+                  ? vehiculos.map(v => <option key={v.id} value={`${v.patente}${v.descripcion ? ' — '+v.descripcion : ''}`}>{v.patente}{v.descripcion ? ` — ${v.descripcion}` : ''}</option>)
+                  : <option disabled>Sin vehículos registrados</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          {/* Normas */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+            {/* Norma ejecución */}
+            <div>
+              <label style={labelStyle}>
+                Norma ejecución
+                <span style={{ fontSize:10, color:'#185FA5', fontWeight:'normal', marginLeft:6 }}>selección múltiple</span>
+              </label>
+              <div style={checkboxListStyle}>
+                {NORMAS_EJECUCION.map(n => {
+                  const sel = form.normasEjecucion.includes(n)
+                  return (
+                    <label key={n} style={checkRowStyle(sel)}>
+                      <input type="checkbox" checked={sel} onChange={()=>toggle('normasEjecucion', n)} style={{width:'auto',cursor:'pointer'}} />
+                      <span style={{fontSize:11}}>{n}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {form.normasEjecucion.length > 0 && (
+                <div style={{ marginTop:4, fontSize:11, color:'#185FA5' }}>
+                  ✓ {form.normasEjecucion.join(' · ')}
+                </div>
+              )}
+            </div>
+            {/* Norma evaluación */}
+            <div>
+              <label style={labelStyle}>
+                Norma evaluación
+                <span style={{ fontSize:10, color:'#185FA5', fontWeight:'normal', marginLeft:6 }}>selección múltiple</span>
+              </label>
+              <div style={checkboxListStyle}>
+                {NORMAS_EVALUACION.map(n => {
+                  const sel = form.normasEvaluacion.includes(n)
+                  return (
+                    <label key={n} style={checkRowStyle(sel)}>
+                      <input type="checkbox" checked={sel} onChange={()=>toggle('normasEvaluacion', n)} style={{width:'auto',cursor:'pointer'}} />
+                      <span style={{fontSize:11}}>{n}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {form.normasEvaluacion.length > 0 && (
+                <div style={{ marginTop:4, fontSize:11, color:'#185FA5' }}>
+                  ✓ {form.normasEvaluacion.join(' · ')}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Procedimientos */}
