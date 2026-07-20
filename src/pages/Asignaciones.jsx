@@ -11,7 +11,7 @@ import {
   TH, TD, PAGE_CARD, SELECT_STYLE, fmtFecha,
 } from '../components/ui/WssUI'
 
-const ESTADOS_ASIG = ['Programada','Realizada','Cancelada','Pendiente']
+const ESTADOS_ASIG = ['Programada','Realizada','Cancelada','Pendiente','Asignado','Asignada']
 const POR_PAGINA = 30
 
 export default function Asignaciones() {
@@ -69,12 +69,19 @@ export default function Asignaciones() {
   const hayFiltros   = !!(busqueda || filtroEstado || filtroDesde || filtroHasta || filtroResumen)
 
   // Summary strip
+  // Normalizar estado para conteo (la BD usa 'Asignado'/'Asignada', el diseño usa 'Programada')
+  const estadoNorm = e => {
+    if (!e) return 'Programada'
+    if (e === 'Asignado' || e === 'Asignada') return 'Asignado'
+    return e
+  }
+
   const summaryItems = [
-    { key: null,         label: 'Total',       count: datos.length,                                               color: '#1E3A5F' },
-    { key: 'Programada', label: 'Programadas', count: datos.filter(a => (a.estado || 'Programada') === 'Programada').length, color: '#3B82F6' },
-    { key: 'Realizada',  label: 'Realizadas',  count: datos.filter(a => a.estado === 'Realizada').length,          color: '#22C55E' },
-    { key: 'Cancelada',  label: 'Canceladas',  count: datos.filter(a => a.estado === 'Cancelada').length,          color: '#DC2626' },
-    { key: 'Pendiente',  label: 'Pendientes',  count: datos.filter(a => a.estado === 'Pendiente').length,          color: '#D97706' },
+    { key: null,         label: 'Total',       count: datos.length,                                                              color: '#1E3A5F' },
+    { key: 'Asignado',   label: 'Asignadas',   count: datos.filter(a => ['Asignado','Asignada'].includes(a.estado)).length,       color: '#3B82F6' },
+    { key: 'Realizada',  label: 'Realizadas',  count: datos.filter(a => a.estado === 'Realizada').length,                         color: '#22C55E' },
+    { key: 'Cancelada',  label: 'Canceladas',  count: datos.filter(a => a.estado === 'Cancelada').length,                         color: '#DC2626' },
+    { key: 'Pendiente',  label: 'Pendientes',  count: datos.filter(a => a.estado === 'Pendiente' || a.estado === 'Programada').length, color: '#D97706' },
   ]
 
   return (
@@ -195,7 +202,7 @@ export default function Asignaciones() {
               </thead>
               <tbody>
                 {visibles.map((a, i) => (
-                  <FilaAsig key={a.id || i} a={a} onVerOT={() => navigate(`/ots/${a.ot_numero}`)} />
+                  <FilaAsig key={a.id || i} a={a} onVerOT={a.ot_numero ? () => navigate(`/ots/${a.ot_numero}`) : null} />
                 ))}
               </tbody>
             </table>
@@ -231,14 +238,21 @@ function FilaAsig({ a, onVerOT }) {
     >
       {/* OT */}
       <td style={TD}>
-        <button
-          onClick={onVerOT}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}
-        >
-          <span style={{ fontFamily: "'Cascadia Code','JetBrains Mono',Menlo,monospace", fontSize: 12, fontWeight: 700, color: '#1E3A5F', letterSpacing: '.3px' }}>
-            {a.ot_numero}
+        {a.ot_numero ? (
+          <button
+            onClick={onVerOT}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}
+          >
+            <span style={{ fontFamily: "'Cascadia Code','JetBrains Mono',Menlo,monospace", fontSize: 12, fontWeight: 700, color: '#1E3A5F', letterSpacing: '.3px' }}>
+              {a.ot_numero}
+            </span>
+            {a.cliente && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{a.cliente}</div>}
+          </button>
+        ) : (
+          <span style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>
+            {a.cliente || '—'}
           </span>
-        </button>
+        )}
       </td>
 
       {/* Inspector(es) */}
@@ -284,9 +298,10 @@ function FilaAsig({ a, onVerOT }) {
       {/* Acción */}
       <td style={{ ...TD, textAlign: 'right' }}>
         <button
-          onClick={onVerOT}
-          style={BTN_VER}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#94A3B8'; e.currentTarget.style.background = '#F8FAFC' }}
+          onClick={onVerOT || undefined}
+          disabled={!onVerOT}
+          style={{ ...BTN_VER, opacity: onVerOT ? 1 : 0.4, cursor: onVerOT ? 'pointer' : 'not-allowed' }}
+          onMouseEnter={e => { if (onVerOT) { e.currentTarget.style.borderColor = '#94A3B8'; e.currentTarget.style.background = '#F8FAFC' } }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#fff' }}
         >
           Ver OT
