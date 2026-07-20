@@ -724,7 +724,14 @@ export default function TabAsignaciones({ ot }) {
           {/* Supervisor + Fecha/Hora */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:14 }}>
             <div><label style={labelStyle}>Supervisor</label>
-              <input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} placeholder={nombreCompleto} style={inputStyle} /></div>
+              <select value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} style={inputStyle}>
+                <option value="">— {nombreCompleto || 'Seleccionar'} —</option>
+                {inspectores
+                  .filter(i => ['SUPERVISOR','ADMIN'].includes(i.rol))
+                  .map(i => <option key={i.email} value={i.nombre_completo}>{i.nombre_completo}</option>)
+                }
+              </select>
+            </div>
             <div><label style={labelStyle}>Fecha inspección *</label>
               <input type="date" value={form.fechaInspeccion} onChange={e=>setForm(f=>({...f,fechaInspeccion:e.target.value}))} style={inputStyle} /></div>
             <div><label style={labelStyle}>Hora</label>
