@@ -31,7 +31,7 @@ export default function Asignaciones() {
       setCargando(true); setError('')
       let q = supabase
         .from('asignaciones')
-        .select('*')
+        .select('*, ots(ot_numero)')
         .order('fecha_inspeccion', { ascending: false })
         .limit(500)
       if (filtroEstado) q = q.eq('estado', filtroEstado)
@@ -58,7 +58,7 @@ export default function Asignaciones() {
 
   // Filtrado local (sobre resultado de Supabase)
   const filtrados = datos.filter(a => {
-    const matchBusqueda = !busqueda || [a.ot_numero, a.inspectores_asignados, a.supervisor, a.descripcion_actividad, a.tipos_inspeccion]
+    const matchBusqueda = !busqueda || [a.ots?.ot_numero, a.inspectores_asignados, a.supervisor, a.descripcion_actividad, a.tipos_inspeccion]
       .some(v => String(v || '').toLowerCase().includes(busqueda.toLowerCase()))
     const matchResumen = !filtroResumen || (a.estado || 'Programada') === filtroResumen
     return matchBusqueda && matchResumen
@@ -202,7 +202,7 @@ export default function Asignaciones() {
               </thead>
               <tbody>
                 {visibles.map((a, i) => (
-                  <FilaAsig key={a.id || i} a={a} onVerOT={a.ot_numero ? () => navigate(`/ots/${a.ot_numero}`) : null} />
+                  <FilaAsig key={a.id || i} a={a} onVerOT={a.ots?.ot_numero ? () => navigate(`/ots/${a.ots.ot_numero}`) : null} />
                 ))}
               </tbody>
             </table>
@@ -238,13 +238,13 @@ function FilaAsig({ a, onVerOT }) {
     >
       {/* OT */}
       <td style={TD}>
-        {a.ot_numero ? (
+        {a.ots?.ot_numero ? (
           <button
             onClick={onVerOT}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}
           >
             <span style={{ fontFamily: "'Cascadia Code','JetBrains Mono',Menlo,monospace", fontSize: 12, fontWeight: 700, color: '#1E3A5F', letterSpacing: '.3px' }}>
-              {a.ot_numero}
+              {a.ots.ot_numero}
             </span>
             {a.cliente && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{a.cliente}</div>}
           </button>
