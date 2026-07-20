@@ -85,7 +85,7 @@ async function procesarOT(token, ot) {
   const subfolders = await listarSubcarpetas(token, mainFolderId)
   const carpetasDrive = {}
   for (const folder of subfolders) {
-    const match = folder.name.match(/^(\d{2})\s*[-\u2013]/)
+    const match = folder.name.match(/^(\d{2})\s*[-–]/)
     if (match) {
       carpetasDrive[match[1]] = {
         id:     folder.id,
@@ -133,15 +133,28 @@ async function procesarOT(token, ot) {
     })
   }
 
-  if (upserts.length > 0) {
-    const { error: upsertErr } = await supabase
-      .from('documentos_ot')
-      .upsert(upserts, { onConflict: 'ot_numero,tipo' })
-    if (upsertErr) resultado.error_documentos = upsertErr.message
-    else resultado.documentos_sincronizados = upserts.length
-  } else {
-    resultado.documentos_sincronizados = 0
+  let sincronizados = 0
+  for (const u of upserts) {
+    let existente = null
+    if (u.drive_file_id) {
+      const { data } = await supabase.from('documentos_ot')
+        .select('id').eq('ot_numero', u.ot_numero).eq('drive_file_id', u.drive_file_id).maybeSingle()
+      existente = data
+    }
+    if (!existente) {
+      const { data } = await supabase.from('documentos_ot')
+        .select('id').eq('ot_numero', u.ot_numero).eq('tipo', u.tipo).eq('nombre_archivo', u.nombre_archivo).maybeSingle()
+      existente = data
+    }
+    if (existente) {
+      const { error: e } = await supabase.from('documentos_ot').update(u).eq('id', existente.id)
+      if (e) resultado.error_documentos = e.message; else sincronizados++
+    } else {
+      const { error: e } = await supabase.from('documentos_ot').insert(u)
+      if (e) resultado.error_documentos = e.message; else sincronizados++
+    }
   }
+  resultado.documentos_sincronizados = sincronizados
 
   return resultado
 }
