@@ -703,7 +703,7 @@ export default function TabAsignaciones({ ot }) {
           <div style={{ marginBottom:14 }}>
             <label style={labelStyle}>Inspector(es) asignado(s) * <span style={{ fontSize:10, color:'#185FA5', fontWeight:'normal', marginLeft:6 }}>selección múltiple</span></label>
             <div style={checkboxListStyle}>
-              {inspectores.filter(i => i.rol==='INSPECTOR').map(insp => {
+              {inspectores.map(insp => {
                 const sel = !!form.inspectoresSeleccionados.find(i => i.email===insp.email)
                 return (
                   <label key={insp.email} style={checkRowStyle(sel)}>
