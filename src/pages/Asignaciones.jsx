@@ -31,7 +31,7 @@ export default function Asignaciones() {
       setCargando(true); setError('')
       let q = supabase
         .from('asignaciones')
-        .select('*, ots(ot_numero)')
+        .select('*, ots!ot_id(ot_numero)')
         .order('fecha_inspeccion', { ascending: false })
         .limit(500)
       if (filtroEstado) q = q.eq('estado', filtroEstado)
