@@ -792,6 +792,10 @@ export default function NuevoInforme() {
   // Datos visuales de croquis (mediciones + control dimensional)
   const [datosVisuales, setDatosVisuales] = useState({})
 
+  // ── Borrador automático ──────────────────────────────────────────────────
+  const [borradorDisponible, setBorradorDisponible] = useState(false)
+  const [borradorData, setBorradorData]             = useState(null)
+
   // ── Estado inspección TANQUE (múltiples tanques) ─────────────────────────
   const initTanque = () => ({
     tag: '',
@@ -834,6 +838,72 @@ export default function NuevoInforme() {
   }
   function addLinea() { setLineas(prev => [...prev, initLinea()]) }
   function removeLinea(idx) { setLineas(prev => prev.filter((_, i) => i !== idx)) }
+
+  // ── Restaurar / descartar borrador ───────────────────────────────────────
+  function restaurarBorrador() {
+    if (!borradorData) return
+    const d = borradorData
+    if (d.otInput)         setOtInput(d.otInput)
+    if (d.tipo)            setTipo(d.tipo)
+    if (d.general)         setGeneral(d.general)
+    if (d.normas)          setNormas(d.normas)
+    if (d.equipo)          setEquipo(d.equipo)
+    if (d.endAplicados)    setEnd(d.endAplicados)
+    if (d.mediciones)      setMediciones(d.mediciones)
+    if (d.hallazgos)       setHallazgos(d.hallazgos)
+    if (d.resultado)       setResultado(d.resultado)
+    if (d.textoIA)         setTextoIA(d.textoIA)
+    if (d.elementosIzaje)  setElementosIzaje(d.elementosIzaje)
+    if (d.equiposIzaje)    setEquiposIzaje(d.equiposIzaje)
+    if (d.equiposMedicion) setEquiposMedicion(d.equiposMedicion)
+    if (d.fotosInspeccion) setFotosInspeccion(d.fotosInspeccion)
+    if (d.tanques)         setTanques(d.tanques)
+    if (d.lineas)          setLineas(d.lineas)
+    if (d.datosVisuales)   setDatosVisuales(d.datosVisuales)
+    if (d.inspectoresOT)   setInspectoresOT(d.inspectoresOT)
+    setBorradorDisponible(false)
+    setBorradorData(null)
+  }
+  function descartarBorrador() {
+    try { localStorage.removeItem('wss_borrador_informe') } catch {}
+    setBorradorDisponible(false)
+    setBorradorData(null)
+  }
+
+  // Detectar borrador guardado al montar
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wss_borrador_informe')
+      if (saved) {
+        const data = JSON.parse(saved)
+        if (data?.tipo || data?.otInput) {
+          setBorradorData(data)
+          setBorradorDisponible(true)
+        }
+      }
+    } catch {}
+  }, [])
+
+  // Auto-guardar borrador cada 2 segundos cuando hay cambios
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const lineasSafe = lineas.map(l => ({
+          ...l,
+          fotos: (l.fotos || []).map(({ file: _f, preview: _p, ...rest }) => rest),
+        }))
+        localStorage.setItem('wss_borrador_informe', JSON.stringify({
+          otInput, tipo, general, normas, equipo, endAplicados, mediciones,
+          hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
+          equiposMedicion, fotosInspeccion, tanques, lineas: lineasSafe,
+          datosVisuales, inspectoresOT,
+        }))
+      } catch {}
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [otInput, tipo, general, normas, equipo, endAplicados, mediciones,
+      hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
+      equiposMedicion, fotosInspeccion, tanques, lineas, datosVisuales, inspectoresOT])
 
   // Auto-cargar si hay ?ot= en la URL
   useEffect(() => {
@@ -1175,6 +1245,7 @@ export default function NuevoInforme() {
         const err = r1.error || r2.error
         if (err) { setErrorGuardar(err.message); return }
         alert(`Se generaron 2 informes IZAJE:\n✅ Aceptados → ID ${r1.data.id}\n❌ Rechazados → ID ${r2.data.id}`)
+        try { localStorage.removeItem('wss_borrador_informe') } catch {}
         navigate(`/informes/${r1.data.id}`)
         return
       }
@@ -1194,6 +1265,7 @@ export default function NuevoInforme() {
       }
       return
     }
+    try { localStorage.removeItem('wss_borrador_informe') } catch {}
     navigate(`/informes/${data.id}`)
   }
 
@@ -1228,6 +1300,25 @@ export default function NuevoInforme() {
           )}
         </div>
       </div>
+
+      {/* Banner borrador guardado */}
+      {borradorDisponible && (
+        <div style={{ background:'#FFFBEB', border:'1.5px solid #F59E0B', borderRadius:10,
+          padding:'12px 18px', display:'flex', alignItems:'center', justifyContent:'space-between',
+          marginBottom:20, gap:12, flexWrap:'wrap' }}>
+          <div>
+            <span style={{ fontWeight:700, color:'#92400E' }}>⚠ Hay un borrador guardado</span>
+            <span style={{ fontSize:13, color:'#78350F', marginLeft:8 }}>
+              {borradorData?.general?.ot_numero ? `OT: ${borradorData.general.ot_numero}` : 'Informe sin OT'}
+              {borradorData?.tipo ? ` · ${borradorData.tipo}` : ''}
+            </span>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="btn btn-primary btn-sm" onClick={restaurarBorrador}>↩ Restaurar borrador</button>
+            <button className="btn btn-secondary btn-sm" onClick={descartarBorrador}>✕ Descartar</button>
+          </div>
+        </div>
+      )}
 
       {/* ── PASO 0: Vincular OT ── */}
       <div style={S.seccion}>
