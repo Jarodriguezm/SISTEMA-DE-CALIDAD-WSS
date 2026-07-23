@@ -512,21 +512,106 @@ function getNominalEspesor(dn, scheduleOrSdr, material) {
 
 // ── MultiSelect: selección múltiple con chips y búsqueda ─────────────────────
 
-function MultiSelect({ value, onChange, options, placeholder }) {
+// ── Listas base de normas y procedimientos ────────────────────────────────────
+
+const NORMAS_EJECUCION_BASE = [
+  // ASME V — Exámenes No Destructivos
+  'ASME V Art. 1 (2021)', 'ASME V Art. 2 (2021)', 'ASME V Art. 4 (2021)',
+  'ASME V Art. 5 (2021)', 'ASME V Art. 6 (2021)', 'ASME V Art. 7 (2021)',
+  'ASME V Art. 8 (2021)', 'ASME V Art. 9 (2021)', 'ASME V Art. 10 (2021)',
+  // ASTM — Métodos END
+  'ASTM E94 (2017)',  'ASTM E114 (2015)', 'ASTM E165 (2018)',
+  'ASTM E317 (2019)', 'ASTM E428 (2022)', 'ASTM E587 (2015)',
+  'ASTM E709 (2021)', 'ASTM E747 (2020)', 'ASTM E1444 (2022)',
+  'ASTM A435 (2019)', 'ASTM A578 (2017)',
+  // AWS
+  'AWS B1.10 (2016)', 'AWS B1.11 (2000)',
+  // ISO
+  'ISO 3452-1 (2021)', 'ISO 9712 (2021)', 'ISO 17637 (2016)',
+  'ISO 17638 (2016)',  'ISO 17640 (2018)', 'ISO 23277 (2022)', 'ISO 23278 (2015)',
+  // SNT / ACCP
+  'SNT-TC-1A (2020)', 'CP-189 (2016)',
+  // NCh (Normas Chilenas)
+  'NCh 2619 (2004)', 'NCh 2620 (2004)',
+  // INN Izaje
+  'INN OI376', 'INN OI377',
+  // DS Chile
+  'DS 43/2015',
+]
+
+const NORMAS_EVALUACION_BASE = [
+  // API — Recipientes, tuberías y tanques
+  'API 510 (2022)', 'API 570 (2023)', 'API 579-1 (2021)',
+  'API 620 (2021)', 'API 650 (2023)', 'API 653 (2023)',
+  'API RP 571 (2020)', 'API RP 574 (2022)', 'API RP 577 (2022)',
+  'API RP 578 (2021)', 'API RP 580 (2016)', 'API RP 581 (2016)',
+  'API RP 582 (2022)', 'API RP 591 (2012)',
+  // ASME — Recipientes y tuberías
+  'ASME VIII Div. 1 (2023)', 'ASME VIII Div. 2 (2023)', 'ASME VIII Div. 3 (2023)',
+  'ASME B31.1 (2022)', 'ASME B31.3 (2022)', 'ASME B31.4 (2022)',
+  'ASME B31.8 (2022)', 'ASME B31.9 (2022)', 'ASME IX (2023)',
+  // AWS — Soldadura
+  'AWS D1.1 (2020)', 'AWS D1.2 (2021)', 'AWS D1.3 (2018)',
+  'AWS D1.4 (2018)', 'AWS D1.5 (2020)', 'AWS D1.6 (2017)',
+  // NACE / AMPP
+  'NACE MR0175 (2021)', 'NACE SP0169 (2013)', 'NACE SP0188 (2006)', 'NACE SP0472 (2020)',
+  // ISO
+  'ISO 5817 (2023)', 'ISO 10042 (2018)', 'ISO 13847 (2013)',
+  // NCh
+  'NCh 432 Of.1971', 'NCh 2369 (2003)',
+  // Grúas e izaje
+  'ASME B30.2 (2022)', 'ASME B30.5 (2021)', 'ASME B30.9 (2022)', 'ASME B30.20 (2021)',
+  // DS Chile
+  'DS 43/2015 Art. 42',
+]
+
+const PROCEDIMIENTOS_BASE = [
+  'PRO-DII-IV-001',   // Inspección Visual
+  'PRO-DII-LP-001',   // Líquidos Penetrantes
+  'PRO-DII-PM-001',   // Partículas Magnéticas
+  'PRO-DII-UT-001',   // Ultrasonido Pulso-Eco
+  'PRO-DII-UT-002',   // Ultrasonido por Contacto
+  'PRO-DII-UTPA-001', // Ultrasonido Phased Array
+  'PRO-DII-CD-001',   // Corrientes de Eddy
+  'PRO-DII-IRT-001',  // Termografía Infrarroja
+  'PRO-DII-RX-001',   // Radiografía Industrial
+  'PRO-DII-PH-001',   // Prueba Hidrostática
+  'PRO-DII-PC-001',   // Prueba de Color / Fuga
+  'PRO-DII-IZL-001',  // Izaje y Levante
+  'PRO-DII-IZL-002',  // Izaje Crítico
+  'PRO-DII-CTK-001',  // Control e Inspección de Tanques
+  'PRO-DII-CST-001',  // Control de Soldadura
+  'PRO-DII-TRZ-001',  // Trazabilidad de Materiales
+  'PRO-DII-VER-001',  // Verificación Dimensional
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MultiSelect({ value, onChange, options, placeholder, onAddCustom }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const filtered = options.filter(o =>
     o.toLowerCase().includes(search.toLowerCase()) && !value.includes(o)
   )
+  const esNuevo = search.trim() !== '' &&
+    !options.some(o => o.toLowerCase() === search.trim().toLowerCase()) &&
+    !value.includes(search.trim())
+
   function add(opt) {
     if (!value.includes(opt)) onChange([...value, opt])
     setSearch('')
+    setOpen(false)
   }
   function addCustom() {
     const s = search.trim()
-    if (s && !value.includes(s)) { onChange([...value, s]); setSearch('') }
+    if (!s || value.includes(s)) return
+    onChange([...value, s])
+    onAddCustom?.(s)   // guardar en normas_custom si el padre lo pide
+    setSearch('')
+    setOpen(false)
   }
   function remove(opt) { onChange(value.filter(v => v !== opt)) }
+
   return (
     <div style={{ position:'relative' }}>
       <div
@@ -546,33 +631,47 @@ function MultiSelect({ value, onChange, options, placeholder }) {
           onChange={e => { setSearch(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onKeyDown={e => {
-            if (e.key === 'Enter') { e.preventDefault(); addCustom() }
+            if (e.key === 'Enter') { e.preventDefault(); esNuevo ? addCustom() : (filtered[0] && add(filtered[0])) }
             if (e.key === 'Escape') setOpen(false)
           }}
           placeholder={value.length === 0 ? placeholder : ''}
           style={{ border:'none', outline:'none', fontSize:13, minWidth:80, flex:1, background:'transparent' }}
         />
+        {esNuevo && (
+          <button
+            onMouseDown={e => { e.preventDefault(); addCustom() }}
+            style={{ background:'#0F766E', color:'#fff', border:'none', borderRadius:4, padding:'3px 10px',
+              fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0, whiteSpace:'nowrap' }}>
+            + Agregar
+          </button>
+        )}
       </div>
       {open && (
         <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200,
           background:'#fff', border:'1px solid #CBD5E1', borderRadius:8,
-          boxShadow:'0 4px 12px rgba(0,0,0,.12)', maxHeight:200, overflowY:'auto', marginTop:4 }}>
-          {filtered.length === 0 && search.trim() && (
-            <div style={{ padding:'8px 12px', fontSize:12, color:'#64748B' }}>
-              Presiona Enter para agregar "<strong>{search}</strong>"
+          boxShadow:'0 4px 12px rgba(0,0,0,.12)', maxHeight:220, overflowY:'auto', marginTop:4 }}>
+          {esNuevo && (
+            <div
+              onMouseDown={e => { e.preventDefault(); addCustom() }}
+              style={{ padding:'8px 12px', fontSize:12, color:'#0F766E', cursor:'pointer',
+                display:'flex', alignItems:'center', gap:6, background:'#F0FDF4',
+                borderBottom:'1px solid #D1FAE5', fontWeight:600 }}>
+              + Agregar "{search.trim()}"
             </div>
           )}
           {filtered.map(o => (
             <div key={o}
-              onClick={() => { add(o); setOpen(false) }}
+              onClick={() => add(o)}
               style={{ padding:'8px 12px', fontSize:13, cursor:'pointer', color:'#1E293B' }}
               onMouseEnter={e => e.currentTarget.style.background='#F1F5F9'}
               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
               {o}
             </div>
           ))}
-          {filtered.length === 0 && !search.trim() && (
-            <div style={{ padding:'8px 12px', fontSize:12, color:'#94A3B8' }}>Sin más opciones</div>
+          {filtered.length === 0 && !esNuevo && (
+            <div style={{ padding:'8px 12px', fontSize:12, color:'#94A3B8' }}>
+              {search.trim() ? 'Ya agregada o no encontrada' : 'Sin más opciones'}
+            </div>
           )}
         </div>
       )}
@@ -614,6 +713,31 @@ export default function NuevoInforme() {
     norma_evaluacion: [],
     procedimientos: [],
   })
+  const [normasCustomEj,  setNormasCustomEj]  = useState([])
+  const [normasCustomEv,  setNormasCustomEv]  = useState([])
+  const [procsCustom,     setProcsCustom]     = useState([])
+
+  // Cargar normas custom guardadas desde Supabase
+  useEffect(() => {
+    supabase.from('normas_custom').select('valor, tipo').then(({ data }) => {
+      if (!data) return
+      setNormasCustomEj(data.filter(n => n.tipo === 'ejecucion').map(n => n.valor))
+      setNormasCustomEv(data.filter(n => n.tipo === 'evaluacion').map(n => n.valor))
+      setProcsCustom(data.filter(n => n.tipo === 'procedimiento').map(n => n.valor))
+    })
+  }, [])
+
+  async function guardarNormaCustom(tipo, valor) {
+    // Verificar que no esté ya en la lista base ni duplicada en custom
+    const base = tipo === 'ejecucion' ? NORMAS_EJECUCION_BASE
+               : tipo === 'evaluacion' ? NORMAS_EVALUACION_BASE
+               : PROCEDIMIENTOS_BASE
+    if (base.some(b => b.toLowerCase() === valor.toLowerCase())) return
+    await supabase.from('normas_custom').insert({ tipo, valor })
+    if (tipo === 'ejecucion') setNormasCustomEj(p => [...p, valor])
+    else if (tipo === 'evaluacion') setNormasCustomEv(p => [...p, valor])
+    else setProcsCustom(p => [...p, valor])
+  }
   const [equipo, setEquipo]         = useState({})
   const [endAplicados, setEnd]      = useState([])
   const [mediciones, setMediciones] = useState([])
@@ -1226,8 +1350,9 @@ export default function NuevoInforme() {
               <MultiSelect
                 value={normas.norma_ejecucion}
                 onChange={v => setNormas(p => ({ ...p, norma_ejecucion: v }))}
-                options={['API 650 (Ed. 13, 2020)','API 653 (Ed. 5, 2014)','API 570 (Ed. 4, 2016)','API 510 (Ed. 10, 2014)','ASME V (Ed. 2021)','ASME VIII Div.1 (Ed. 2021)','AWS D1.1 (Ed. 2020)','AWS D1.2 (Ed. 2014)','AWS D1.3 (Ed. 2018)','DS 43/2015','ISO 9712 (Ed. 2021)','ASTM E165 (Ed. 2018)','ASTM E709 (Ed. 2021)','ASTM E1417 (Ed. 2021)','ASME B31.3 (Ed. 2022)','ASME B31.1 (Ed. 2020)','ASME B30.2 (Ed. 2016)','ASME B30.9 (Ed. 2018)','ASME B30.10 (Ed. 2019)','INN OI376','INN OI377']}
-                placeholder="Selecciona o escribe normas de ejecución..."
+                options={[...NORMAS_EJECUCION_BASE, ...normasCustomEj]}
+                placeholder="Selecciona o escribe norma de ejecución..."
+                onAddCustom={v => guardarNormaCustom('ejecucion', v)}
               />
             </div>
             <div>
@@ -1235,8 +1360,9 @@ export default function NuevoInforme() {
               <MultiSelect
                 value={normas.norma_evaluacion}
                 onChange={v => setNormas(p => ({ ...p, norma_evaluacion: v }))}
-                options={['API 650 Apéndice C (Ed. 13, 2020)','API 653 Tabla 4.3.2 (Ed. 5, 2014)','AWS D1.1 Tabla 6.1 (Ed. 2020)','ASME V Art. 6 (Ed. 2021)','ASME V Art. 7 (Ed. 2021)','DS 43/2015 Art. 42','ISO 9712 (Ed. 2021)','ASTM E165 (Ed. 2018)','ASTM E709 (Ed. 2021)','API 570 Párrafo 7 (Ed. 4, 2016)']}
-                placeholder="Selecciona o escribe criterios de aceptación..."
+                options={[...NORMAS_EVALUACION_BASE, ...normasCustomEv]}
+                placeholder="Selecciona o escribe criterio de aceptación..."
+                onAddCustom={v => guardarNormaCustom('evaluacion', v)}
               />
             </div>
             <div>
@@ -1244,8 +1370,9 @@ export default function NuevoInforme() {
               <MultiSelect
                 value={normas.procedimientos}
                 onChange={v => setNormas(p => ({ ...p, procedimientos: v }))}
-                options={['PRO-DII-IV-001','PRO-DII-LP-001','PRO-DII-PM-001','PRO-DII-UT-001','PRO-DII-UT-002','PRO-DII-UTPA-001','PRO-DII-IRT-001','PRO-DII-PH-001','PRO-DII-PC-001','PRO-DII-IZL-001','PRO-DII-IZL-002','PRO-DII-CTK-001']}
-                placeholder="Selecciona o escribe procedimientos WSS..."
+                options={[...PROCEDIMIENTOS_BASE, ...procsCustom]}
+                placeholder="Selecciona o escribe procedimiento WSS..."
+                onAddCustom={v => guardarNormaCustom('procedimiento', v)}
               />
             </div>
           </div>
