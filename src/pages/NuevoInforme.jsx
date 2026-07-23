@@ -1,4 +1,20 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+
+// Fix mobile keyboard dismiss: textarea con estado local, solo sincroniza al perder foco
+function TextareaIA({ value, onChange, rows = 4, placeholder }) {
+  const [local, setLocal] = useState(value ?? '')
+  useEffect(() => { setLocal(value ?? '') }, [value])
+  return (
+    <textarea className="input"
+      rows={rows}
+      value={local}
+      placeholder={placeholder}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={e => onChange(e.target.value)}
+      style={{ fontSize:13, lineHeight:1.6, resize:'vertical', width:'100%', boxSizing:'border-box' }}
+    />
+  )
+}
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
@@ -886,6 +902,25 @@ export default function NuevoInforme() {
     } catch {}
   }, [])
 
+  // Sync: observaciones de elementos IZAJE rechazados → hallazgos (auto)
+  useEffect(() => {
+    if (tipo !== 'IZAJE') return
+    const deIzaje = elementosIzaje
+      .filter(el => el.resultado === 'NO_CUMPLE' && el.observacion?.trim())
+      .map(el => ({
+        descripcion: el.observacion.trim(),
+        ubicacion:   `${el.tipo || ''}${el.n_sello ? ` N°Sello: ${el.n_sello}` : ''}`,
+        criticidad:  'MAYOR',
+        norma:       '',
+        _izajeRef:   `${el.tipo}_${el.n_sello || el._i}`,
+      }))
+    setHallazgos(prev => {
+      const manuales = (prev || []).filter(h => !h._izajeRef)
+      return [...manuales, ...deIzaje]
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elementosIzaje, tipo])
+
   // Auto-guardar borrador cada 2 segundos cuando hay cambios
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1207,7 +1242,7 @@ export default function NuevoInforme() {
       },
       end_aplicados:     endAplicados,
       mediciones,
-      hallazgos,
+      hallazgos:         hallazgos.map(({ _izajeRef: _, ...h }) => h),
       resultado,
       texto_ia:          textoIA,
       estado,
@@ -3092,10 +3127,12 @@ export default function NuevoInforme() {
                     <div style={{ fontSize:11, fontWeight:700, color:'#7C3AED', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>
                       {s.replace(/_/g,' ')}
                     </div>
-                    <textarea className="input" rows={4}
+                    <TextareaIA
                       value={textoIA[s] || ''}
-                      onChange={e => setTextoIA(prev => ({ ...prev, [s]: e.target.value }))}
-                      style={{ fontSize:13, lineHeight:1.6, resize:'vertical' }} />
+                      rows={4}
+                      placeholder={`Texto de ${s.replace(/_/g,' ')}…`}
+                      onChange={val => setTextoIA(prev => ({ ...prev, [s]: val }))}
+                    />
                   </div>
                 ))}
                 <div style={{ padding:'10px 14px', background:'#EDE9FE', borderRadius:8, fontSize:12, color:'#5B21B6' }}>
