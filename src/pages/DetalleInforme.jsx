@@ -258,166 +258,29 @@ export default function DetalleInforme() {
     setComentRech('')
   }
 
-  // ── Word ──────────────────────────────────────────────────────────────────
+  // ── Word (Certificado acreditado WSS) ────────────────────────────────────
   async function generarWord() {
     setGenerandoW(true)
     try {
-      const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-              AlignmentType, WidthType, BorderStyle, ShadingType } = await import('docx')
-
-      const borde = { style: BorderStyle.SINGLE, size: 1, color: 'DDDDDD' }
-      const bordes = { top: borde, bottom: borde, left: borde, right: borde }
-      const cm = () => ({ top: 80, bottom: 80, left: 120, right: 120 })
-
-      const hallazgos = Array.isArray(informe.hallazgos) ? informe.hallazgos : []
-      const texIA = informe.texto_ia || {}
-
-      const metaFilas = [
-        ['Código informe', informe.codigo_informe || informe.numero || '—'],
-        ['OT', informe.ot_numero || '—'],
-        ['Cliente', informe.cliente_nombre || '—'],
-        ['Tipo de equipo', informe.tipo_equipo || '—'],
-        ['Lugar', informe.lugar || '—'],
-        ['Fecha inspección', informe.fecha_inspeccion
-          ? new Date(informe.fecha_inspeccion + 'T00:00:00').toLocaleDateString('es-CL') : '—'],
-        ['Inspector', informe.inspector_nombre || '—'],
-        ['Resultado', informe.resultado || '—'],
-        ['Norma / Código', informe.norma_codigo || '—'],
-      ]
-
-      const children = [
-        // Título
-        new Paragraph({
-          children: [new TextRun({ text: 'INFORME DE INSPECCIÓN END', bold: true, size: 36, font: 'Arial' })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 160 },
-        }),
-        new Paragraph({
-          children: [new TextRun({
-            text: informe.codigo_informe || informe.numero || 'DII-XXXX',
-            bold: true, size: 28, font: 'Arial', color: '1E3A5F',
-          })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 480 },
-        }),
-
-        // Tabla metadata
-        new Table({
-          width: { size: 9360, type: WidthType.DXA },
-          columnWidths: [2800, 6560],
-          rows: metaFilas.map(([lbl, val]) => new TableRow({
-            children: [
-              new TableCell({
-                borders: bordes,
-                width: { size: 2800, type: WidthType.DXA },
-                shading: { fill: 'EFF6FF', type: ShadingType.CLEAR },
-                margins: cm(),
-                children: [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, size: 20, font: 'Arial' })] })],
-              }),
-              new TableCell({
-                borders: bordes,
-                width: { size: 6560, type: WidthType.DXA },
-                margins: cm(),
-                children: [new Paragraph({ children: [new TextRun({ text: val, size: 20, font: 'Arial' })] })],
-              }),
-            ],
-          })),
-        }),
-
-        new Paragraph({ spacing: { before: 480, after: 0 } }),
-
-        // Secciones IA
-        ...SECCIONES_IA.flatMap(sec => texIA[sec.key] ? [
-          new Paragraph({
-            children: [new TextRun({ text: sec.label.toUpperCase(), bold: true, size: 22, font: 'Arial', color: '1E3A5F' })],
-            spacing: { before: 320, after: 120 },
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: texIA[sec.key], size: 20, font: 'Arial' })],
-            spacing: { after: 160 },
-          }),
-        ] : []),
-      ]
-
-      // Tabla hallazgos
-      if (hallazgos.length > 0) {
-        children.push(
-          new Paragraph({
-            children: [new TextRun({ text: 'HALLAZGOS', bold: true, size: 22, font: 'Arial', color: '1E3A5F' })],
-            spacing: { before: 320, after: 120 },
-          }),
-          new Table({
-            width: { size: 9360, type: WidthType.DXA },
-            columnWidths: [480, 5280, 2000, 1600],
-            rows: [
-              new TableRow({
-                children: ['#', 'Descripción', 'Ubicación', 'Criticidad'].map((h, i) =>
-                  new TableCell({
-                    borders: bordes,
-                    width: { size: [480, 5280, 2000, 1600][i], type: WidthType.DXA },
-                    shading: { fill: '1E3A5F', type: ShadingType.CLEAR },
-                    margins: cm(),
-                    children: [new Paragraph({
-                      children: [new TextRun({ text: h, bold: true, size: 18, font: 'Arial', color: 'FFFFFF' })]
-                    })],
-                  })
-                ),
-              }),
-              ...hallazgos.map((h, i) =>
-                new TableRow({
-                  children: [String(i + 1), h.descripcion || '', h.ubicacion || '', h.criticidad || '']
-                    .map((v, ci) => new TableCell({
-                      borders: bordes,
-                      width: { size: [480, 5280, 2000, 1600][ci], type: WidthType.DXA },
-                      margins: cm(),
-                      children: [new Paragraph({
-                        children: [new TextRun({ text: v, size: 18, font: 'Arial' })]
-                      })],
-                    }))
-                })
-              ),
-            ],
-          })
-        )
-      }
-
-      // Bloque firma
-      children.push(
-        new Paragraph({ spacing: { before: 800, after: 0 } }),
-        new Paragraph({
-          children: [new TextRun({ text: '_________________________________', size: 20, font: 'Arial' })],
-          spacing: { before: 640, after: 80 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: informe.inspector_nombre || 'Inspector', bold: true, size: 20, font: 'Arial' })],
-          spacing: { after: 60 },
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: 'Inspector END · WSS Calidad', size: 18, font: 'Arial', color: '64748B' })],
-        }),
-      )
-
-      const doc = new Document({
-        sections: [{
-          properties: {
-            page: {
-              size: { width: 11906, height: 16838 }, // A4
-              margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 },
-            },
-          },
-          children,
-        }],
+      const res = await fetch('/api/generar-word', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ informeId: id }),
       })
-
-      const blob = await Packer.toBlob(doc)
-      const url = URL.createObjectURL(blob)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const cd   = res.headers.get('Content-Disposition') || ''
+      const match = cd.match(/filename="([^"]+)"/)
+      const fname = match ? match[1] : `WSS_${informe.ot_numero || informe.id}.docx`
       const a = document.createElement('a')
-      a.href = url
-      a.download = `${informe.codigo_informe || informe.numero || 'Informe'}.docx`
-      a.click()
+      a.href = url; a.download = fname; a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      alert('Error generando Word: ' + err.message)
+      alert('Error generando certificado Word: ' + err.message)
     }
     setGenerandoW(false)
   }
