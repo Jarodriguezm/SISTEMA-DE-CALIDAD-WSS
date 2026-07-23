@@ -54,11 +54,11 @@ const CAMPOS = {
     { id: 'estado_soldaduras',label: 'Estado general soldaduras',     type: 'select', ops: ['Sin discontinuidades','Con observaciones','Con defectos'] },
   ],
   IZAJE: [
-    { id: 'tipo_equipo_izaje',  label: 'Tipo de equipo',     type: 'select', req: true, ops: ['Grúa Puente','Grúa Pórtico','Grúa Horquilla','Grúa Articulada','Alza Hombre','Eslinga','Grillete','Gancho','Otra'] },
+    { id: 'tipo_equipo_izaje',  label: 'Tipo de equipo',     type: 'select', ops: ['Grúa Puente','Grúa Pórtico','Grúa Horquilla','Grúa Articulada','Alza Hombre','Eslinga','Grillete','Gancho','Otra'] },
     { id: 'marca',              label: 'Marca',              type: 'text' },
     { id: 'modelo',             label: 'Modelo',             type: 'text' },
     { id: 'numero_serie',       label: 'N° de Serie',        type: 'text' },
-    { id: 'capacidad_ton',      label: 'Capacidad (ton)',    type: 'number', req: true },
+    { id: 'capacidad_ton',      label: 'Capacidad (ton)',    type: 'number' },
     { id: 'año_fabricacion',    label: 'Año fabricación',    type: 'number' },
     { id: 'horas_operacion',    label: 'Horas de operación', type: 'number' },
     { id: 'prueba_carga',       label: 'Prueba de carga',    type: 'select', ops: ['Realizada - Satisfactoria','Realizada - No Satisfactoria','No realizada','No aplica'] },
@@ -786,7 +786,8 @@ export default function NuevoInforme() {
   // Equipos de medición END (múltiples)
   const [equiposMedicion, setEquiposMedicion] = useState([])
   // Equipos de izaje principales (múltiples)
-  const [equiposIzaje, setEquiposIzaje] = useState([{}])
+  const [equiposIzaje, setEquiposIzaje]           = useState([{}])
+  const [mostrarEquipoMayor, setMostrarEquipoMayor] = useState(false)
   // Error de validación de hallazgo
   const [hallazgoDescError, setHallazgoDescError] = useState(false)
   // Datos visuales de croquis (mediciones + control dimensional)
@@ -854,7 +855,8 @@ export default function NuevoInforme() {
     if (d.resultado)       setResultado(d.resultado)
     if (d.textoIA)         setTextoIA(d.textoIA)
     if (d.elementosIzaje)  setElementosIzaje(d.elementosIzaje)
-    if (d.equiposIzaje)    setEquiposIzaje(d.equiposIzaje)
+    if (d.equiposIzaje)       setEquiposIzaje(d.equiposIzaje)
+    if (d.mostrarEquipoMayor !== undefined) setMostrarEquipoMayor(d.mostrarEquipoMayor)
     if (d.equiposMedicion) setEquiposMedicion(d.equiposMedicion)
     if (d.fotosInspeccion) setFotosInspeccion(d.fotosInspeccion)
     if (d.tanques)         setTanques(d.tanques)
@@ -895,7 +897,7 @@ export default function NuevoInforme() {
         localStorage.setItem('wss_borrador_informe', JSON.stringify({
           otInput, tipo, general, normas, equipo, endAplicados, mediciones,
           hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
-          equiposMedicion, fotosInspeccion, tanques, lineas: lineasSafe,
+          mostrarEquipoMayor, equiposMedicion, fotosInspeccion, tanques, lineas: lineasSafe,
           datosVisuales, inspectoresOT,
         }))
       } catch {}
@@ -1514,9 +1516,18 @@ export default function NuevoInforme() {
         {tipo && (<>
           {/* ── PASO 4: Datos del equipo ── */}
           <div style={S.seccion}>
-            <div style={S.seccionTitulo}>⑤ Datos del Equipo — {TIPOS.find(t => t.id === tipo)?.label}</div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: mostrarEquipoMayor ? 14 : 0 }}>
+              <div style={S.seccionTitulo}>⑤ Datos del Equipo — {TIPOS.find(t => t.id === tipo)?.label}</div>
+              {tipo === 'IZAJE' && (
+                <button onClick={() => setMostrarEquipoMayor(v => !v)}
+                  style={{ fontSize:12, padding:'5px 14px', borderRadius:6, border:'1.5px solid #CBD5E1',
+                    background: mostrarEquipoMayor ? '#EFF6FF' : '#F8FAFC', color:'#475569', cursor:'pointer', fontWeight:600 }}>
+                  {mostrarEquipoMayor ? '▲ Ocultar' : '▼ Agregar equipo mayor (opcional)'}
+                </button>
+              )}
+            </div>
             {tipo === 'IZAJE' ? (<>
-              {equiposIzaje.map((eq, idx) => (
+              {mostrarEquipoMayor && equiposIzaje.map((eq, idx) => (
                 <div key={idx} style={{ border:'1px solid #E2E8F0', borderRadius:8, padding:14, marginBottom:12, background:'#FAFAFA' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
                     <span style={{ fontSize:12, fontWeight:700, color:'#475569' }}>Equipo mayor #{idx + 1}</span>
@@ -1546,11 +1557,13 @@ export default function NuevoInforme() {
                   </div>
                 </div>
               ))}
-              <button className="btn btn-secondary btn-sm"
-                onClick={() => setEquiposIzaje(prev => [...prev, {}])}
-                style={{ cursor:'pointer' }}>
-                + Agregar equipo
-              </button>
+              {mostrarEquipoMayor && (
+                <button className="btn btn-secondary btn-sm"
+                  onClick={() => setEquiposIzaje(prev => [...prev, {}])}
+                  style={{ cursor:'pointer' }}>
+                  + Agregar equipo
+                </button>
+              )}
             </>) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 {camposActivos.map(c => (
