@@ -3049,18 +3049,19 @@ export default function NuevoInforme() {
           {/* ── Resultado ── */}
           <div style={S.seccion}>
             <div style={S.seccionTitulo}>{necesitaMediciones ? '⑨' : '⑧'} Resultado de la Inspección</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(90px, 1fr))', gap:10 }}>
               {[
                 { id:'CONFORME',     icon:'✅', label:'CONFORME',     desc:'Sin defectos fuera de tolerancia', color:'#065F46', bg:'#D1FAE5', border:'#6EE7B7' },
-                { id:'CONDICIONADO', icon:'⚠️', label:'CONDICIONADO', desc:'Opera con restricciones o requiere seguimiento', color:'#92400E', bg:'#FEF3C7', border:'#FCD34D' },
-                { id:'NO_CONFORME',  icon:'🚫', label:'NO CONFORME',  desc:'Defectos críticos requieren reparación', color:'#991B1B', bg:'#FEE2E2', border:'#FCA5A5' },
+                { id:'CONDICIONADO', icon:'⚠️', label:'CONDICIONADO', desc:'Opera con restricciones',          color:'#92400E', bg:'#FEF3C7', border:'#FCD34D' },
+                { id:'NO_CONFORME',  icon:'🚫', label:'NO CONFORME',  desc:'Defectos críticos',               color:'#991B1B', bg:'#FEE2E2', border:'#FCA5A5' },
               ].map(r => (
                 <button key={r.id} onClick={() => setResultado(r.id)}
-                  style={{ padding:'14px 12px', borderRadius:10, border:`2px solid ${resultado===r.id?r.border:'#E2E8F0'}`,
-                    background: resultado===r.id?r.bg:'#fff', cursor:'pointer', textAlign:'center' }}>
-                  <div style={{ fontSize:24, marginBottom:4 }}>{r.icon}</div>
-                  <div style={{ fontWeight:700, fontSize:13, color: resultado===r.id?r.color:'#1E293B' }}>{r.label}</div>
-                  <div style={{ fontSize:11, color:'#94A3B8', marginTop:2 }}>{r.desc}</div>
+                  style={{ padding:'12px 8px', borderRadius:10, border:`2px solid ${resultado===r.id?r.border:'#E2E8F0'}`,
+                    background: resultado===r.id?r.bg:'#fff', cursor:'pointer', textAlign:'center',
+                    minWidth:0, wordBreak:'break-word' }}>
+                  <div style={{ fontSize:22, marginBottom:4 }}>{r.icon}</div>
+                  <div style={{ fontWeight:700, fontSize:12, color: resultado===r.id?r.color:'#1E293B', lineHeight:1.2 }}>{r.label}</div>
+                  <div style={{ fontSize:10, color:'#94A3B8', marginTop:3, lineHeight:1.3 }}>{r.desc}</div>
                 </button>
               ))}
             </div>
