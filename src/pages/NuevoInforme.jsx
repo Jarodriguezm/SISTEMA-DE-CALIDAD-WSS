@@ -21,7 +21,7 @@ function TextareaIA({ value, onChange, rows = 4, placeholder, seccion, contextoI
     if (procesando) return
     setProcesando(accion)
     try {
-      const res = await fetch('/api/asistente-texto', {
+      const res = await fetch('/api/generar-informe-ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accion, texto: local, seccion, contexto: contextoIA || {} }),
