@@ -447,6 +447,7 @@ function SeccionCargaInforme({ ot }) {
       setExitoUpload(`✓ ${nuevosResultados.length} archivo${nuevosResultados.length > 1 ? 's subidos' : ' subido'} correctamente`)
       setTimeout(() => setExitoUpload(''), 4000)
       cargarDocs()
+      onInformeCreado?.()   // notifica al padre (DetalleOT) para refrescar docs
     } catch (e) { setError(e.message) } finally { setSubiendo(false) }
   }
 
