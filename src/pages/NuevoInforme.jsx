@@ -1,18 +1,77 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
 // Fix mobile keyboard dismiss: textarea con estado local, solo sincroniza al perder foco
-function TextareaIA({ value, onChange, rows = 4, placeholder }) {
-  const [local, setLocal] = useState(value ?? '')
+const LABEL_SECCION_IA = {
+  introduccion:       'Procedimiento / Introducción',
+  descripcion_equipo: 'Descripción del Equipo',
+  end_realizados:     'Ensayos No Destructivos Realizados',
+  hallazgos:          'Hallazgos de Inspección',
+  evaluacion:         'Evaluación Técnica',
+  conclusion:         'Conclusión',
+  recomendaciones:    'Recomendaciones',
+}
+
+function TextareaIA({ value, onChange, rows = 4, placeholder, seccion, contextoIA }) {
+  const [local, setLocal]         = useState(value ?? '')
+  const [procesando, setProcesando] = useState(null) // 'resumir' | 'ampliar'
+
   useEffect(() => { setLocal(value ?? '') }, [value])
+
+  async function asistirTexto(accion) {
+    if (procesando) return
+    setProcesando(accion)
+    try {
+      const res = await fetch('/api/asistente-texto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion, texto: local, seccion, contexto: contextoIA || {} }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Error IA')
+      setLocal(d.texto)
+      onChange(d.texto)
+    } catch (e) { alert('Error IA: ' + e.message) }
+    finally { setProcesando(null) }
+  }
+
+  const btnStyle = (disabled) => ({
+    fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 5, cursor: disabled ? 'default' : 'pointer',
+    border: '1px solid #DDD6FE', background: disabled ? '#F3F0FF' : '#EDE9FE',
+    color: disabled ? '#A78BFA' : '#6D28D9', display: 'inline-flex', alignItems: 'center', gap: 4,
+    opacity: disabled ? 0.6 : 1, transition: 'all .15s',
+  })
+
   return (
-    <textarea className="input"
-      rows={rows}
-      value={local}
-      placeholder={placeholder}
-      onChange={e => setLocal(e.target.value)}
-      onBlur={e => onChange(e.target.value)}
-      style={{ fontSize:13, lineHeight:1.6, resize:'vertical', width:'100%', boxSizing:'border-box' }}
-    />
+    <div>
+      {seccion && (
+        <div style={{ display:'flex', gap:6, marginBottom:5 }}>
+          <button
+            style={btnStyle(!local.trim() || !!procesando)}
+            disabled={!local.trim() || !!procesando}
+            onClick={() => asistirTexto('resumir')}
+            title="Resumir y compactar el texto actual"
+          >
+            {procesando === 'resumir' ? '⏳' : '✂️'} Resumir
+          </button>
+          <button
+            style={btnStyle(!!procesando)}
+            disabled={!!procesando}
+            onClick={() => asistirTexto('ampliar')}
+            title={local.trim() ? 'Ampliar con más detalle técnico' : 'Generar texto para esta sección'}
+          >
+            {procesando === 'ampliar' ? '⏳' : '✨'} {local.trim() ? 'Ampliar' : 'Generar sección'}
+          </button>
+        </div>
+      )}
+      <textarea className="input"
+        rows={rows}
+        value={local}
+        placeholder={placeholder}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={e => onChange(e.target.value)}
+        style={{ fontSize:13, lineHeight:1.6, resize:'vertical', width:'100%', boxSizing:'border-box' }}
+      />
+    </div>
   )
 }
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -3288,22 +3347,35 @@ export default function NuevoInforme() {
             )}
 
             {textoIA && (
-              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                {seccionesIA.map(s => (
-                  <div key={s}>
-                    <div style={{ fontSize:11, fontWeight:700, color:'#7C3AED', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>
-                      {s.replace(/_/g,' ')}
+              <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+                {seccionesIA.map(s => {
+                  const contextoIAActual = {
+                    tipo_inspeccion: tipo,
+                    normas_evaluacion: Array.isArray(normas.norma_evaluacion) ? normas.norma_evaluacion.join(', ') : normas.norma_evaluacion,
+                    cliente: general.cliente_nombre,
+                    lugar: general.lugar,
+                    end_aplicados: endAplicados.join(', '),
+                    hallazgos_detectados: hallazgos.map(h => h.descripcion).filter(Boolean).join('; '),
+                    resultado_inspeccion: resultado,
+                  }
+                  return (
+                    <div key={s} style={{ background:'#FAFAFA', border:'1px solid #EDE9FE', borderRadius:8, padding:'12px 14px' }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#7C3AED', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:6 }}>
+                        {LABEL_SECCION_IA[s] || s.replace(/_/g,' ')}
+                      </div>
+                      <TextareaIA
+                        value={textoIA[s] || ''}
+                        rows={4}
+                        placeholder={`Texto de ${LABEL_SECCION_IA[s] || s.replace(/_/g,' ')}…`}
+                        onChange={val => setTextoIA(prev => ({ ...prev, [s]: val }))}
+                        seccion={s}
+                        contextoIA={contextoIAActual}
+                      />
                     </div>
-                    <TextareaIA
-                      value={textoIA[s] || ''}
-                      rows={4}
-                      placeholder={`Texto de ${s.replace(/_/g,' ')}…`}
-                      onChange={val => setTextoIA(prev => ({ ...prev, [s]: val }))}
-                    />
-                  </div>
-                ))}
+                  )
+                })}
                 <div style={{ padding:'10px 14px', background:'#EDE9FE', borderRadius:8, fontSize:12, color:'#5B21B6' }}>
-                  💡 Puedes editar cualquier sección antes de guardar. Los cambios se preservan.
+                  💡 Usa ✂️ <b>Resumir</b> para compactar el texto o ✨ <b>Ampliar</b> para agregar detalle técnico. Edita directamente si lo prefieres.
                 </div>
               </div>
             )}
