@@ -308,7 +308,7 @@ export default function DetalleOT() {
       <div style={{ marginTop: 16 }}>
         {tabActivo === 'info'         && <TabInfo ot={ot} />}
         {tabActivo === 'documentos'   && <TabDocumentos docs={documentos} ot={ot} onActualizar={cargarTodo} />}
-        {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} />}
+        {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} onActualizar={cargarTodo} />}
         {tabActivo === 'actas'        && <TabActa ot={ot} asignaciones={asignaciones} onActaCreada={cargarTodo} />}
         {tabActivo === 'informes'     && <TabInformes ot={ot} onInformeCreado={cargarTodo} />}
         {tabActivo === 'facturacion'  && <TabFacturacion ot={ot} onDocumentoSubido={cargarTodo} />}
