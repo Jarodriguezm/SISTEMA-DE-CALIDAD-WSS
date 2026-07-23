@@ -333,7 +333,7 @@ async function subirPDFaSupabase(base64, nombre, otNumero) {
 }
 
 // ─── Modal visor PDF ──────────────────────────────────────────────────────────
-function ModalPDF({ html, asig, ot, onCerrar }) {
+function ModalPDF({ html, asig, ot, onCerrar, onGuardado }) {
   const iframeRef   = useRef(null)
   const { usuario } = useAuth()
   const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
@@ -376,6 +376,7 @@ function ModalPDF({ html, asig, ot, onCerrar }) {
         .in('nombre_completo', nombres)
 
       setPdfState({ url, contactos: contactos || [] })
+      onGuardado?.()   // notifica a DetalleOT para refrescar documentos
     } catch (e) {
       setPdfState({ error: e.message })
     }
@@ -561,7 +562,7 @@ function TarjetaAsignacion({ asig, ot, onVerPDF }) {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function TabAsignaciones({ ot }) {
+export default function TabAsignaciones({ ot, onActualizar }) {
   const { usuario } = useAuth()
   const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ')
 
@@ -715,6 +716,7 @@ export default function TabAsignaciones({ ot }) {
           asig={pdfModal}
           ot={ot}
           onCerrar={() => setPdfModal(null)}
+          onGuardado={onActualizar}
         />
       )}
 
