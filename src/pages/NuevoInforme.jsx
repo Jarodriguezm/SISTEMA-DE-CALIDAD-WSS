@@ -1032,31 +1032,51 @@ export default function NuevoInforme() {
   function restaurarBorrador() {
     if (!borradorData) return
     const d = borradorData
-    if (d.otInput)                        setOtInput(d.otInput)
-    if (d.tipo)                           setTipo(d.tipo)
-    if (d.general)                        setGeneral(d.general)
-    if (d.normas)                         setNormas(d.normas)
-    if (d.equipo)                         setEquipo(d.equipo)
-    if (d.endAplicados?.length)           setEnd(d.endAplicados)
-    if (d.mediciones?.length)             setMediciones(d.mediciones)
-    if (d.hallazgos?.length)             setHallazgos(d.hallazgos)
-    if (d.resultado)                      setResultado(d.resultado)
-    if (d.textoIA)                        setTextoIA(d.textoIA)
-    if (d.elementosIzaje?.length)        setElementosIzaje(d.elementosIzaje)
-    if (d.equiposIzaje?.length)          setEquiposIzaje(d.equiposIzaje)
+
+    // 1. Siempre restaurar campos de texto y selección
+    setOtInput(d.otInput || '')
+    if (d.tipo)    setTipo(d.tipo)
+    if (d.general) setGeneral(d.general)
+    if (d.normas)  setNormas(d.normas)
+    if (d.equipo)  setEquipo(d.equipo)
+
+    // 2. Arrays: restaurar siempre (vacío es estado válido)
+    setEnd(d.endAplicados  || [])
+    setMediciones(d.mediciones || [])
+    setHallazgos((d.hallazgos || []).map(({ _izajeRef: _, ...h }) => h))
+    setElementosIzaje(d.elementosIzaje  || [])
+    setEquiposIzaje( d.equiposIzaje?.length ? d.equiposIzaje : [{}])
+    setEquiposMedicion(d.equiposMedicion || [])
+    setFotosInspeccion(d.fotosInspeccion || [])
+    setInspectoresOT(d.inspectoresOT   || [])
+    if (d.tanques?.length) setTanques(d.tanques)
+    if (d.lineas?.length)  setLineas(d.lineas)
+
+    // 3. Campos opcionales
+    if (d.resultado)                       setResultado(d.resultado)
+    if (d.textoIA)                         setTextoIA(d.textoIA)
+    if (d.datosVisuales)                   setDatosVisuales(d.datosVisuales)
     if (d.mostrarEquipoMayor !== undefined) setMostrarEquipoMayor(d.mostrarEquipoMayor)
-    if (d.equiposMedicion?.length)       setEquiposMedicion(d.equiposMedicion)
-    if (d.fotosInspeccion?.length)       setFotosInspeccion(d.fotosInspeccion)
-    if (d.tanques?.length)               setTanques(d.tanques)
-    if (d.lineas?.length)                setLineas(d.lineas)
-    if (d.datosVisuales)                 setDatosVisuales(d.datosVisuales)
-    if (d.inspectoresOT?.length)         setInspectoresOT(d.inspectoresOT)
-    // Restaurar estado de OT cargada para que el banner verde aparezca
-    if (d.otCargada)                     setOtCargada(d.otCargada)
-    if (d.asignacion)                    setAsignacion(d.asignacion)
+    if (d.asignacion)                      setAsignacion(d.asignacion)
+
+    // 4. otCargada: CLAVE para que el formulario se muestre.
+    //    Si la OT no se alcanzó a cargar antes de salir, reconstruir
+    //    un objeto mínimo a partir de los datos generales del borrador.
+    if (d.otCargada) {
+      setOtCargada(d.otCargada)
+    } else {
+      const otNum = d.otInput || d.general?.ot_numero || ''
+      // Objeto sintético que hace otCargada !== null → muestra el formulario
+      setOtCargada({
+        ot_numero:       otNum,
+        cliente:         d.general?.cliente_nombre || '',
+        direccion_faena: d.general?.lugar          || '',
+        supervisor:      d.general?.supervisor_nombre || '',
+      })
+    }
+
     setBorradorDisponible(false)
     setBorradorData(null)
-    // Scroll suave hacia arriba para que el inspector vea el formulario restaurado
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   function descartarBorrador() {
@@ -1539,7 +1559,8 @@ export default function NuevoInforme() {
   const seccionesIA         = textoIA
     ? ['introduccion','descripcion_equipo','end_realizados','hallazgos','evaluacion','conclusion','recomendaciones']
     : []
-  const otLista = otCargada !== null
+  // Mostrar el formulario si hay OT cargada O si ya se eligió un tipo (borrador restaurado)
+  const otLista = otCargada !== null || !!tipo
 
   // Offset de numeración de pasos
   const paso = (n) => otLista ? n : n
@@ -1635,7 +1656,7 @@ export default function NuevoInforme() {
       </div>
 
       {/* El resto del formulario solo aparece si hay OT cargada O si el usuario lo quiere saltarse */}
-      {!otCargada && (
+      {!otLista && (
         <div style={{ textAlign: 'center', padding: '12px 0', marginBottom: 16 }}>
           <button
             onClick={() => setOtCargada({})}
@@ -1645,7 +1666,7 @@ export default function NuevoInforme() {
         </div>
       )}
 
-      {otCargada !== null && (<>
+      {otLista && (<>
 
         {/* ── PASO 1: Tipo de equipo ── */}
         <div style={S.seccion}>
