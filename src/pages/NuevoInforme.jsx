@@ -566,23 +566,36 @@ const NORMAS_EVALUACION_BASE = [
 ]
 
 const PROCEDIMIENTOS_BASE = [
-  'PRO-DII-IV-001',   // Inspección Visual
-  'PRO-DII-LP-001',   // Líquidos Penetrantes
-  'PRO-DII-PM-001',   // Partículas Magnéticas
-  'PRO-DII-UT-001',   // Ultrasonido Pulso-Eco
-  'PRO-DII-UT-002',   // Ultrasonido por Contacto
-  'PRO-DII-UTPA-001', // Ultrasonido Phased Array
-  'PRO-DII-CD-001',   // Corrientes de Eddy
-  'PRO-DII-IRT-001',  // Termografía Infrarroja
-  'PRO-DII-RX-001',   // Radiografía Industrial
-  'PRO-DII-PH-001',   // Prueba Hidrostática
-  'PRO-DII-PC-001',   // Prueba de Color / Fuga
-  'PRO-DII-IZL-001',  // Izaje y Levante
-  'PRO-DII-IZL-002',  // Izaje Crítico
-  'PRO-DII-CTK-001',  // Control e Inspección de Tanques
-  'PRO-DII-CST-001',  // Control de Soldadura
-  'PRO-DII-TRZ-001',  // Trazabilidad de Materiales
-  'PRO-DII-VER-001',  // Verificación Dimensional
+  'PRO-DII-001 — Control dimensional',
+  'PRO-DII-002 — Inspeccion visual',
+  'PRO-DII-003 — Liquidos penetrantes',
+  'PRO-DII-004 — Particulas magneticas',
+  'PRO-DII-005 — Medicion de espesores',
+  'PRO-DII-006 — Inspeccion ultrasonido detector de falla',
+  'PRO-DII-007 — Inspección de pinturas sobre sustratos metálicos',
+  'PRO-DII-008 — Control de asentamiento y verticalidad',
+  'PRO-DII-009 — Calificacion de personal',
+  'PRO-DII-011 — Control Documental',
+  'PRO-DII-012 — Pruebas de Hermeticidad',
+  'PRO-DII-013 — Pruebas de Hermeticidad QUIMETAL',
+  'PRO-DII-014 — Inspección medición de espesores en techo TK',
+  'PRO-DII-015 — Ondas guiadas de largo alcance',
+  'PRO-DII-016 — Ultrasonido Phased Array',
+  'PRO-DII-017 — Termografías',
+  'PRO-DII-019 — Medicion de tensión de pernos',
+  'PRO-DII-020 — Inspección visual AWS D1.1',
+  'PRO-DII-021 — Evaluación integridad de tanques',
+  'PRO-DII-022 — Inspección de gancho',
+  'PRO-DII-023 — Prueba de carga',
+  'PRO-DII-024 — Inspección de equipos de Izaje y Levante',
+  'PRO-DII-025 — Uso, acceso y almacenamiento de equipos e instrumentos',
+  'PRO-DII-026 — Procedimiento específico Inspección de estanque TK 201',
+  'PRO-DII-027 — Inspección integral de calderas',
+  'PRO-DII-028 — Inspección de equipos de levante',
+  'PRO-DII-029 — Procedimiento específico Inspección de elementos de izajes',
+  'PRO-DII-030 — Procedimiento específico Pruebas de cámara de vacío',
+  'PRO-DII-031 — Procedimiento específico Uso de esmeril angular inalambrico',
+  'PRO-DII-032 — Prueba de Carga a Vigas y Yugos de Izaje',
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -716,8 +729,9 @@ export default function NuevoInforme() {
   const [normasCustomEj,  setNormasCustomEj]  = useState([])
   const [normasCustomEv,  setNormasCustomEv]  = useState([])
   const [procsCustom,     setProcsCustom]     = useState([])
+  const [catalogoEquipos, setCatalogoEquipos] = useState([])   // equipos desde BD
 
-  // Cargar normas custom guardadas desde Supabase
+  // Cargar normas custom y catálogo de equipos desde Supabase
   useEffect(() => {
     supabase.from('normas_custom').select('valor, tipo').then(({ data }) => {
       if (!data) return
@@ -725,6 +739,11 @@ export default function NuevoInforme() {
       setNormasCustomEv(data.filter(n => n.tipo === 'evaluacion').map(n => n.valor))
       setProcsCustom(data.filter(n => n.tipo === 'procedimiento').map(n => n.valor))
     })
+    supabase.from('equipos')
+      .select('id, equipo_instrumento, codigo')
+      .eq('activo', true)
+      .order('equipo_instrumento')
+      .then(({ data }) => { if (data) setCatalogoEquipos(data) })
   }, [])
 
   async function guardarNormaCustom(tipo, valor) {
@@ -2635,14 +2654,15 @@ export default function NuevoInforme() {
           {/* ── PASO 5: END Aplicados ── */}
           <div style={S.seccion}>
             <div style={S.seccionTitulo}>⑥ Métodos END Aplicados</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
               {METODOS_END.map(m => (
                 <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                  padding: '8px 12px', borderRadius: 8, border: '1px solid',
+                  padding: '10px 12px', borderRadius: 8, border: '2px solid',
                   borderColor: endAplicados.includes(m.id) ? '#1E3A5F' : '#E2E8F0',
-                  background: endAplicados.includes(m.id) ? '#EFF6FF' : '#fff', fontSize: 12 }}>
+                  background: endAplicados.includes(m.id) ? '#EFF6FF' : '#fff',
+                  fontSize: 13, fontWeight: endAplicados.includes(m.id) ? 600 : 400 }}>
                   <input type="checkbox" checked={endAplicados.includes(m.id)} onChange={() => toggleEnd(m.id)}
-                    style={{ accentColor: '#1E3A5F' }} />
+                    style={{ accentColor: '#1E3A5F', width: 16, height: 16, flexShrink: 0 }} />
                   {m.label}
                 </label>
               ))}
@@ -2654,69 +2674,85 @@ export default function NuevoInforme() {
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
               <div style={S.seccionTitulo}>⑦ Equipo / Instrumento END Utilizado</div>
               <button className="btn btn-secondary btn-sm"
-                onClick={() => setEquiposMedicion(prev => [...prev, { tipo:'', marca:'', modelo:'', numero_serie:'', cert_calibracion:'' }])}
+                onClick={() => setEquiposMedicion(prev => [...prev, { codigo_wss:'', equipo_instrumento:'', marca:'', modelo:'', numero_serie:'', cert_calibracion:'' }])}
                 style={{ cursor:'pointer' }}>
                 + Agregar equipo
               </button>
             </div>
             <p style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>
-              Registra cada instrumento utilizado (marca, modelo, N° serie y certificado de calibración).
+              Selecciona el equipo WSS y completa N° serie y certificado de calibración.
             </p>
             {equiposMedicion.length === 0 ? (
               <div style={{ color:'var(--gris)', fontSize:13, padding:'14px 0', textAlign:'center', borderTop:'1px dashed #E2E8F0' }}>
                 Sin equipos. Haz clic en "+ Agregar equipo" para ingresar.
               </div>
             ) : (
-              <div style={{ overflowX:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', minWidth:700 }}>
-                  <thead>
-                    <tr style={{ background:'#F8FAFC' }}>
-                      {['Tipo / Instrumento','Marca','Modelo','N° Serie','Certificado calibración',''].map(h => (
-                        <th key={h} style={{ padding:'8px 12px', fontSize:11, fontWeight:700, color:'#64748B', textAlign:'left', border:'1px solid #E2E8F0' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {equiposMedicion.map((em, i) => (
-                      <tr key={i}>
-                        <td style={S.tdInput}>
-                          <select className="input" value={em.tipo}
-                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, tipo: e.target.value } : x))}
-                            style={{ fontSize:12, minWidth:160 }}>
-                            <option value="">— Tipo —</option>
-                            {['Medidor UT','Medidor UT Phased Array','Lámpara UV (36W)','Lámpara UV (100W)','Yoquillo magnético','Bobina de campo','Penetrómetro','Cuña de calibración','Cámara termográfica','Medidor de espesores por ultrasonido','Galga de recubrimiento','Manómetro digital','Dinamómetro'].map(t => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={S.tdInput}>
-                          <input className="input" value={em.marca}
-                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, marca: e.target.value } : x))}
-                            placeholder="Marca" style={{ fontSize:12, width:90 }} />
-                        </td>
-                        <td style={S.tdInput}>
-                          <input className="input" value={em.modelo}
-                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, modelo: e.target.value } : x))}
-                            placeholder="Modelo" style={{ fontSize:12, width:90 }} />
-                        </td>
-                        <td style={S.tdInput}>
-                          <input className="input" value={em.numero_serie}
-                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, numero_serie: e.target.value } : x))}
-                            placeholder="N° serie" style={{ fontSize:12, width:80 }} />
-                        </td>
-                        <td style={S.tdInput}>
-                          <input className="input" value={em.cert_calibracion}
-                            onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, cert_calibracion: e.target.value } : x))}
-                            placeholder="CAL-2025-XXXX, vig. hasta..." style={{ fontSize:12 }} />
-                        </td>
-                        <td style={{ padding:'4px 8px', border:'1px solid #E2E8F0', textAlign:'center' }}>
-                          <button onClick={() => setEquiposMedicion(prev => prev.filter((_, j) => j !== i))}
-                            style={{ background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:16 }}>✕</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {equiposMedicion.map((em, i) => (
+                  <div key={i} style={{ border:'1px solid #E2E8F0', borderRadius:10, padding:'12px 14px', background:'#FAFAFA', position:'relative' }}>
+                    {/* Botón quitar */}
+                    <button onClick={() => setEquiposMedicion(prev => prev.filter((_, j) => j !== i))}
+                      style={{ position:'absolute', top:8, right:10, background:'none', border:'none', color:'#EF4444', cursor:'pointer', fontSize:18, lineHeight:1 }}>✕</button>
+
+                    {/* Fila 1: Selector de equipo WSS */}
+                    <div style={{ marginBottom:8 }}>
+                      <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'.3px', display:'block', marginBottom:4 }}>
+                        Equipo / Instrumento WSS
+                      </label>
+                      <select
+                        className="input"
+                        value={em.codigo_wss}
+                        onChange={e => {
+                          const eq = catalogoEquipos.find(c => c.codigo === e.target.value)
+                          setEquiposMedicion(prev => prev.map((x, j) => j === i ? {
+                            ...x,
+                            codigo_wss:          eq?.codigo || '',
+                            equipo_instrumento:  eq?.equipo_instrumento || '',
+                          } : x))
+                        }}
+                        style={{ width:'100%', fontSize:13 }}>
+                        <option value="">— Selecciona equipo —</option>
+                        {catalogoEquipos.map(eq => (
+                          <option key={eq.codigo} value={eq.codigo}>
+                            {eq.codigo} — {eq.equipo_instrumento}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Fila 2: Marca + Modelo */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'.3px', display:'block', marginBottom:4 }}>Marca</label>
+                        <input className="input" value={em.marca}
+                          onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, marca: e.target.value } : x))}
+                          placeholder="Marca" style={{ fontSize:13, width:'100%' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'.3px', display:'block', marginBottom:4 }}>Modelo</label>
+                        <input className="input" value={em.modelo}
+                          onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, modelo: e.target.value } : x))}
+                          placeholder="Modelo" style={{ fontSize:13, width:'100%' }} />
+                      </div>
+                    </div>
+
+                    {/* Fila 3: N° Serie + Certificado */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'.3px', display:'block', marginBottom:4 }}>N° Serie</label>
+                        <input className="input" value={em.numero_serie}
+                          onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, numero_serie: e.target.value } : x))}
+                          placeholder="N° serie" style={{ fontSize:13, width:'100%' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'.3px', display:'block', marginBottom:4 }}>Cert. calibración</label>
+                        <input className="input" value={em.cert_calibracion}
+                          onChange={e => setEquiposMedicion(prev => prev.map((x, j) => j === i ? { ...x, cert_calibracion: e.target.value } : x))}
+                          placeholder="CAL-2025-XXXX, vig. hasta..." style={{ fontSize:13, width:'100%' }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
