@@ -303,7 +303,7 @@ export default function ChatWidget() {
                 </div>
                 <div style={{ fontSize: 11, color: '#22C55E', display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }}/>
-                  En línea · GPT-4o
+                  En línea · Claude
                 </div>
               </div>
             </div>
@@ -382,7 +382,7 @@ export default function ChatWidget() {
             </button>
           </div>
 
-          <div style={S.pie}>Powered by GPT-4o · WSS Sistema de Calidad</div>
+          <div style={S.pie}>Powered by Claude · WSS Sistema de Calidad</div>
         </div>
       )}
 
