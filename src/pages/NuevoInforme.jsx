@@ -531,54 +531,164 @@ function getNominalEspesor(dn, scheduleOrSdr, material) {
 // ── Listas base de normas y procedimientos ────────────────────────────────────
 
 const NORMAS_EJECUCION_BASE = [
-  // ASME V — Exámenes No Destructivos
-  'ASME V Art. 1 (2021)', 'ASME V Art. 2 (2021)', 'ASME V Art. 4 (2021)',
-  'ASME V Art. 5 (2021)', 'ASME V Art. 6 (2021)', 'ASME V Art. 7 (2021)',
-  'ASME V Art. 8 (2021)', 'ASME V Art. 9 (2021)', 'ASME V Art. 10 (2021)',
-  // ASTM — Métodos END
-  'ASTM E94 (2017)',  'ASTM E114 (2015)', 'ASTM E165 (2018)',
-  'ASTM E317 (2019)', 'ASTM E428 (2022)', 'ASTM E587 (2015)',
-  'ASTM E709 (2021)', 'ASTM E747 (2020)', 'ASTM E1444 (2022)',
-  'ASTM A435 (2019)', 'ASTM A578 (2017)',
-  // AWS
-  'AWS B1.10 (2016)', 'AWS B1.11 (2000)',
-  // ISO
-  'ISO 3452-1 (2021)', 'ISO 9712 (2021)', 'ISO 17637 (2016)',
-  'ISO 17638 (2016)',  'ISO 17640 (2018)', 'ISO 23277 (2022)', 'ISO 23278 (2015)',
-  // SNT / ACCP
-  'SNT-TC-1A (2020)', 'CP-189 (2016)',
-  // NCh (Normas Chilenas)
-  'NCh 2619 (2004)', 'NCh 2620 (2004)',
-  // INN Izaje
-  'INN OI376', 'INN OI377',
-  // DS Chile
-  'DS 43/2015',
+  // ── ASME V — Exámenes No Destructivos (edición 2023) ──
+  'ASME V Art. 1 (2023)',  'ASME V Art. 2 (2023)',  'ASME V Art. 4 (2023)',
+  'ASME V Art. 5 (2023)',  'ASME V Art. 6 (2023)',  'ASME V Art. 7 (2023)',
+  'ASME V Art. 8 (2023)',  'ASME V Art. 9 (2023)',  'ASME V Art. 10 (2023)',
+  'ASME V Art. 11 (2023)', 'ASME V Art. 12 (2023)', 'ASME V Art. 13 (2023)',
+  // ── ASME B30 — Izaje, Levante y Aparatos de Elevación ──
+  'ASME B30.2 (2022) — Grúas Viajeras y Portales',
+  'ASME B30.3 (2019) — Grúas Torre',
+  'ASME B30.4 (2021) — Grúas Portal Móviles',
+  'ASME B30.5 (2021) — Grúas Móviles y Locomotoras',
+  'ASME B30.6 (2021) — Grúas Industriales (Derricks)',
+  'ASME B30.7 (2020) — Winches de Base',
+  'ASME B30.8 (2021) — Grúas Flotantes',
+  'ASME B30.9 (2022) — Eslingas',
+  'ASME B30.10 (2021) — Ganchos',
+  'ASME B30.11 (2021) — Monorrieles y Sistemas con Polipastos',
+  'ASME B30.12 (2021) — Izaje con Garras',
+  'ASME B30.13 (2020) — Sistemas de Transporte en Carro',
+  'ASME B30.14 (2021) — Grúas Sideboards',
+  'ASME B30.16 (2022) — Polipastos Aéreos (Overhead Hoists)',
+  'ASME B30.17 (2022) — Grúas Aéreas Flotantes',
+  'ASME B30.20 (2021) — Equipos de Izaje por Debajo del Gancho',
+  'ASME B30.21 (2021) — Aparejos de Cadena Manual',
+  'ASME B30.22 (2021) — Grúas Articuladas (Knuckle Boom)',
+  'ASME B30.23 (2021) — Izaje de Personal',
+  'ASME B30.26 (2021) — Herrajes de Aparejamiento',
+  'ASME B30.27 (2020) — Materiales y Manejo de Equipos',
+  'ASME B30.28 (2021) — Tirfor / Polipastos de Palanca',
+  'ASME B30.29 (2021) — Eslingas de Acero (Wire Rope)',
+  'ASME B30.30 (2022) — Aparejos de Aparejos de Cadena',
+  // ── ASME B17 / ANSI — Hardware de Izaje ──
+  'ASME B17.2 (2021) — Grilletes',
+  // ── ASTM — Métodos END ──
+  'ASTM E94 (2017)   — Radiografía Industrial (RT)',
+  'ASTM E114 (2015)  — UT por Pulso-Eco (contacto)',
+  'ASTM E165 (2018)  — Líquidos Penetrantes (PT)',
+  'ASTM E317 (2019)  — Calibración de Equipos UT',
+  'ASTM E428 (2022)  — Reflectores de Calibración UT',
+  'ASTM E587 (2015)  — UT por Haz Angular',
+  'ASTM E709 (2021)  — Partículas Magnéticas (MT)',
+  'ASTM E747 (2020)  — Imagen de Calidad RT',
+  'ASTM E1444 (2022) — Guía MT Aeroespacial',
+  'ASTM A435 (2019)  — UT Placas de Acero',
+  'ASTM A578 (2017)  — UT Chapas para Recipientes',
+  'ASTM E2375 (2022) — UT por Phased Array (PAUT)',
+  'ASTM E2700 (2020) — UT Pulso-Eco por Contacto TOFD',
+  'ASTM E3023 (2020) — Phased Array (PAUT) Soldaduras',
+  // ── AWS ──
+  'AWS B1.10 (2016) — Guía Inspección END de Soldaduras',
+  'AWS B1.11 (2000) — Guía Inspección Visual de Soldaduras',
+  'AWS D1.1 (2020)  — Structural Welding Code (Acero)',
+  // ── ISO END ──
+  'ISO 3452-1 (2021) — Ensayo por Líquidos Penetrantes',
+  'ISO 9712 (2021)   — Calificación Personal END',
+  'ISO 17637 (2016)  — Inspección Visual de Soldaduras',
+  'ISO 17638 (2016)  — Partículas Magnéticas Soldaduras',
+  'ISO 17640 (2018)  — UT de Soldaduras (Técnicas, Niveles)',
+  'ISO 19285 (2017)  — Examen MT Uniones Soldadas',
+  'ISO 23277 (2022)  — Criterios Aceptación PT Soldaduras',
+  'ISO 23278 (2015)  — Criterios Aceptación MT Soldaduras',
+  // ── ISO Izaje y Levante ──
+  'ISO 4308-1 (2003) — Grúas — Selección de Cables',
+  'ISO 7363 (2014)   — Grúas — Tolerancias para Estructuras',
+  'ISO 9927-1 (2013) — Grúas — Inspecciones',
+  'ISO 12210 (2014)  — Grúas — Información de Fabricación',
+  'ISO 20332 (2016)  — Grúas — Verificación de Cálculos Estructurales',
+  'ISO 23851 (2021)  — Eslingas de Cable de Acero — Seguridad',
+  // ── EN (Norma Europea Izaje) ──
+  'EN 818-1 (2008) — Cadenas de Corto Enlace para Izaje',
+  'EN 818-4 (2008) — Eslingas de Cadena',
+  'EN 1492-1 (2000) — Eslingas Textiles Planas',
+  'EN 1492-2 (2000) — Eslingas Textiles Redondas',
+  'EN 13001-1 (2015) — Grúas — Diseño General',
+  'EN 13411-3 (2012) — Terminaciones para Cables de Acero',
+  // ── SNT / ACCP ──
+  'SNT-TC-1A (2020) — Calificación y Certificación Personal END',
+  'CP-189 (2016)    — Estándar Calificación ASNT',
+  // ── NCh (Normas Chilenas) ──
+  'NCh 2619 (2004) — Exámenes No Destructivos — Calificación',
+  'NCh 2620 (2004) — END — Requisitos Generales',
+  // ── INN — Acreditación Izaje ──
+  'NCh-ISO 17020:2012 — Requisitos Org. Inspección (OI 376/OI 377)',
+  'INN OI376 — Ensayos No Destructivos',
+  'INN OI377 — Equipos de Izaje y Levante',
+  // ── DS y Reglamentos Chile ──
+  'DS 43/2015 — Reglamento Grúas y Equipos de Izaje',
+  'DS 594/1999 — Reglamento Condiciones Sanitarias Trabajo (Chile)',
 ]
 
 const NORMAS_EVALUACION_BASE = [
-  // API — Recipientes, tuberías y tanques
-  'API 510 (2022)', 'API 570 (2023)', 'API 579-1 (2021)',
-  'API 620 (2021)', 'API 650 (2023)', 'API 653 (2023)',
-  'API RP 571 (2020)', 'API RP 574 (2022)', 'API RP 577 (2022)',
-  'API RP 578 (2021)', 'API RP 580 (2016)', 'API RP 581 (2016)',
-  'API RP 582 (2022)', 'API RP 591 (2012)',
-  // ASME — Recipientes y tuberías
-  'ASME VIII Div. 1 (2023)', 'ASME VIII Div. 2 (2023)', 'ASME VIII Div. 3 (2023)',
-  'ASME B31.1 (2022)', 'ASME B31.3 (2022)', 'ASME B31.4 (2022)',
-  'ASME B31.8 (2022)', 'ASME B31.9 (2022)', 'ASME IX (2023)',
-  // AWS — Soldadura
-  'AWS D1.1 (2020)', 'AWS D1.2 (2021)', 'AWS D1.3 (2018)',
-  'AWS D1.4 (2018)', 'AWS D1.5 (2020)', 'AWS D1.6 (2017)',
-  // NACE / AMPP
-  'NACE MR0175 (2021)', 'NACE SP0169 (2013)', 'NACE SP0188 (2006)', 'NACE SP0472 (2020)',
-  // ISO
-  'ISO 5817 (2023)', 'ISO 10042 (2018)', 'ISO 13847 (2013)',
-  // NCh
-  'NCh 432 Of.1971', 'NCh 2369 (2003)',
-  // Grúas e izaje
-  'ASME B30.2 (2022)', 'ASME B30.5 (2021)', 'ASME B30.9 (2022)', 'ASME B30.20 (2021)',
-  // DS Chile
-  'DS 43/2015 Art. 42',
+  // ── ASME B30 — Criterios de Aceptación Izaje y Levante ──
+  'ASME B30.2 (2022)  — Criterios Grúas Viajeras y Portales',
+  'ASME B30.5 (2021)  — Criterios Grúas Móviles y Locomotoras',
+  'ASME B30.9 (2022)  — Criterios Eslingas (descarte)',
+  'ASME B30.10 (2021) — Criterios Ganchos (descarte)',
+  'ASME B30.16 (2022) — Criterios Polipastos Aéreos',
+  'ASME B30.20 (2021) — Criterios Equipos Bajo el Gancho',
+  'ASME B30.21 (2021) — Criterios Aparejos de Cadena',
+  'ASME B30.26 (2021) — Criterios Herrajes de Aparejamiento',
+  'ASME B30.29 (2021) — Criterios Eslingas de Acero (Wire Rope)',
+  // ── ASME B17 / ANSI — Hardware de Izaje ──
+  'ASME B17.2 (2021)  — Criterios Grilletes',
+  // ── ASME — Recipientes, tuberías y soldadura ──
+  'ASME VIII Div. 1 (2023) — Criterios Recipientes a Presión',
+  'ASME VIII Div. 2 (2023) — Criterios Recipientes a Presión (Alt.)',
+  'ASME VIII Div. 3 (2023) — Criterios Alta Presión',
+  'ASME B31.1 (2022)  — Criterios Tuberías de Vapor',
+  'ASME B31.3 (2022)  — Criterios Tuberías Proceso',
+  'ASME B31.4 (2022)  — Criterios Tuberías Líquidos',
+  'ASME B31.8 (2022)  — Criterios Tuberías Gas',
+  'ASME IX (2023)     — Calificación Procedimientos de Soldadura',
+  // ── API — Recipientes, tuberías y tanques ──
+  'API 510 (2022)      — Inspección Recipientes a Presión',
+  'API 570 (2023)      — Inspección Sistemas de Tuberías',
+  'API 579-1 (2021)    — Fitness for Service (FFS)',
+  'API 620 (2021)      — Diseño Tanques Gran Volumen Baja Presión',
+  'API 650 (2023)      — Tanques de Almacenamiento Soldados',
+  'API 653 (2023)      — Inspección Reparación Tanques',
+  'API RP 571 (2020)   — Mecanismos de Daño Equipos Fijos',
+  'API RP 574 (2022)   — Prácticas Inspección Tuberías',
+  'API RP 577 (2022)   — Prácticas Inspección Soldadura',
+  'API RP 578 (2021)   — Verificación Material y Aleación',
+  'API RP 580 (2016)   — Inspección Basada en Riesgo (RBI)',
+  'API RP 581 (2016)   — Metodología Cuantitativa RBI',
+  'API RP 582 (2022)   — Soldadura Recipientes Proceso',
+  // ── AWS — Criterios Soldadura ──
+  'AWS D1.1 (2020)    — Structural Welding Code (Acero)',
+  'AWS D1.2 (2021)    — Structural Welding Code (Aluminio)',
+  'AWS D1.3 (2018)    — Structural Welding Code (Láminas)',
+  'AWS D1.4 (2018)    — Structural Welding Code (Armaduras)',
+  'AWS D1.5 (2020)    — Structural Welding Code (Puentes)',
+  'AWS D1.6 (2017)    — Structural Welding Code (Inox)',
+  // ── ISO — Criterios Soldadura y END ──
+  'ISO 5817 (2023)    — Niveles Aceptación Imperfecciones Soldadura (Acero)',
+  'ISO 10042 (2018)   — Niveles Aceptación Imperfecciones Soldadura (Aluminio)',
+  'ISO 13847 (2013)   — Soldadura Tuberías Gas',
+  'ISO 23277 (2022)   — Criterios Aceptación PT Soldaduras',
+  'ISO 23278 (2015)   — Criterios Aceptación MT Soldaduras',
+  // ── ISO Izaje — Criterios ──
+  'ISO 9927-1 (2013)  — Grúas — Criterios Inspección en Servicio',
+  'ISO 4309 (2017)    — Cables de Acero — Criterios de Descarte',
+  'ISO 7363 (2014)    — Grúas — Tolerancias Estructuras',
+  // ── EN (Norma Europea Criterios Izaje) ──
+  'EN 818-4 (2008)    — Criterios Eslingas de Cadena',
+  'EN 1492-1 (2000)   — Criterios Eslingas Textiles Planas',
+  'EN 1492-2 (2000)   — Criterios Eslingas Textiles Redondas',
+  // ── NACE / AMPP — Corrosión ──
+  'NACE MR0175 (2021) — Criterios Material Ambientes Sulfurosos',
+  'NACE SP0169 (2013) — Control Corrosión Ext. Tuberías Subterráneas',
+  'NACE SP0188 (2006) — Evaluación Recubrimientos Internos',
+  'NACE SP0472 (2020) — Soldadura Recipientes Proceso (Corrosión)',
+  // ── NCh (Normas Chilenas) ──
+  'NCh 432 Of.1971    — Cálculo Acciones Debidas al Viento',
+  'NCh 2369 (2003)    — Diseño Sísmico Estructuras e Instalaciones',
+  // ── INN ──
+  'NCh-ISO 17020:2012 — Requisitos OI (OI 376/OI 377)',
+  // ── DS y Reglamentos Chile ──
+  'DS 43/2015         — Reglamento Equipos de Izaje (criterios Art. 42)',
 ]
 
 const PROCEDIMIENTOS_BASE = [
