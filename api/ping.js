@@ -1,6 +1,6 @@
 // api/ping.js — Diagnóstico rápido del asistente María
 // Visitar: https://sistema-de-calidad-wss.vercel.app/api/ping
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
 
   const apiKey = process.env.ANTHROPIC_API_KEY
