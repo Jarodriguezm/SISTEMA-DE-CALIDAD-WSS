@@ -1,8 +1,19 @@
 // api/generar-informe-ia.js
 // POST /api/generar-informe-ia
-// Recibe datos del formulario y retorna texto técnico generado por Claude
+// Modo 1 (accion: 'resumir'|'ampliar'): asistente de texto por sección
+// Modo 2 (sin accion): genera informe completo en JSON
 
 export const config = { maxDuration: 60 }
+
+const NOMBRES_SECCION = {
+  introduccion:       'Procedimiento / Introduccion',
+  descripcion_equipo: 'Descripcion del Equipo',
+  end_realizados:     'Ensayos No Destructivos Realizados',
+  hallazgos:          'Hallazgos de Inspeccion',
+  evaluacion:         'Evaluacion Tecnica',
+  conclusion:         'Conclusion',
+  recomendaciones:    'Recomendaciones',
+}
 
 const NORMAS_POR_TIPO = {
   TANQUE:     'API 650, API 653, ASME, NCh2136, NCh2190',
@@ -21,6 +32,36 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada' })
 
+  // ── MODO ASISTENTE DE TEXTO (resumir / ampliar secciones) ─────────────────
+  const { accion } = req.body || {}
+  if (accion === 'resumir' || accion === 'ampliar') {
+    const { texto = '', seccion = '', contexto = {} } = req.body
+    const nombreSec = NOMBRES_SECCION[seccion] || seccion.replace(/_/g, ' ')
+    const ctxLineas = Object.entries(contexto)
+      .filter(([, v]) => v && String(v).trim())
+      .map(([k, v]) => `- ${k}: ${v}`)
+      .join('\n')
+    const base = `Eres un redactor tecnico especialista en informes de inspeccion industrial para WSS Testing & Certification Chile. Escribe en espanol tecnico, normativo y profesional. Jamas incluyas explicaciones, etiquetas ni texto fuera del cuerpo del informe.`
+    const ctxBloque = ctxLineas ? `\nContexto del informe:\n${ctxLineas}\n` : ''
+    const prompt = accion === 'resumir'
+      ? `${base}${ctxBloque}\nSeccion: "${nombreSec}"\nTexto actual:\n${texto}\n\nTarea: Resume y compacta el texto. Mantén el lenguaje normativo sin perder informacion clave.\nDevuelve UNICAMENTE el texto resumido.`
+      : `${base}${ctxBloque}\nSeccion: "${nombreSec}"\n${texto ? `Texto actual:\n${texto}\n\nTarea: Amplia con mayor detalle tecnico y referencias normativas relevantes.` : `Tarea: Redacta el texto completo para esta seccion con lenguaje tecnico normativo.`}\nDevuelve UNICAMENTE el texto mejorado.`
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
+      })
+      if (!r.ok) return res.status(502).json({ error: `Error IA (${r.status})` })
+      const d = await r.json()
+      const textoResult = (d.content || []).find(b => b.type === 'text')?.text || ''
+      return res.json({ texto: textoResult.trim() })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── MODO GENERACION COMPLETA DE INFORME ───────────────────────────────────
   const {
     tipo_equipo, ot_numero, cliente_nombre, lugar, fecha_inspeccion,
     inspector_nombre, supervisor_nombre, datos_equipo, end_aplicados, mediciones, hallazgos, resultado,
