@@ -994,7 +994,7 @@ export default function NuevoInforme() {
 
   // ── Elementos IZAJE ──────────────────────────────────────────────────────
   function addElementoIzaje() {
-    setElementosIzaje(prev => [...prev, { tipo:'', n_sello:'', descripcion:'', resultado:'' }])
+    setElementosIzaje(prev => [...prev, { tipo:'', n_sello:'', descripcion:'', resultado:'', observacion:'' }])
   }
   function updateElementoIzaje(i, field, val) {
     setElementosIzaje(prev => prev.map((el, j) => j === i ? { ...el, [field]: val } : el))
@@ -1157,6 +1157,29 @@ export default function NuevoInforme() {
     }
 
     // ── Con conexión → subir directo a Supabase ───────────────────────────
+
+    // Para IZAJE: si hay elementos de ambos tipos → generar 2 informes separados
+    if (tipo === 'IZAJE') {
+      const cumpleItems   = elementosIzaje.filter(e => e.resultado === 'CUMPLE')
+      const noCumpleItems = elementosIzaje.filter(e => e.resultado === 'NO_CUMPLE')
+      if (cumpleItems.length > 0 && noCumpleItems.length > 0) {
+        const payloadAceptados  = { ...payload, resultado: 'ACEPTADO',
+          datos_equipo: { ...payload.datos_equipo, elementos_izaje: cumpleItems } }
+        const payloadRechazados = { ...payload, resultado: 'RECHAZADO',
+          datos_equipo: { ...payload.datos_equipo, elementos_izaje: noCumpleItems } }
+        const [r1, r2] = await Promise.all([
+          supabase.from('informes').insert(payloadAceptados).select('id').single(),
+          supabase.from('informes').insert(payloadRechazados).select('id').single(),
+        ])
+        setGuardando(false)
+        const err = r1.error || r2.error
+        if (err) { setErrorGuardar(err.message); return }
+        alert(`Se generaron 2 informes IZAJE:\n✅ Aceptados → ID ${r1.data.id}\n❌ Rechazados → ID ${r2.data.id}`)
+        navigate(`/informes/${r1.data.id}`)
+        return
+      }
+    }
+
     const { data, error } = await supabase.from('informes').insert(payload).select('id').single()
     setGuardando(false)
     if (error) {
@@ -1524,7 +1547,7 @@ export default function NuevoInforme() {
                                         placeholder={c.ph || ''} style={{ fontSize:11, width: c.w || 80 }} />
                                     </td>
                                   ))}
-                                  <td style={{ ...S.td, minWidth:150 }}>
+                                  <td style={{ ...S.td, minWidth:160 }}>
                                     <div style={{ display:'flex', gap:4 }}>
                                       {[['CUMPLE','✓ Aceptable','#16A34A','#D1FAE5','#065F46'],['NO_CUMPLE','✗ Rechazado','#DC2626','#FEE2E2','#991B1B']].map(([val,lbl,bc,bg,fc]) => (
                                         <button key={val} onClick={() => updateElementoIzaje(el._i,'resultado',val)}
@@ -1536,6 +1559,12 @@ export default function NuevoInforme() {
                                         </button>
                                       ))}
                                     </div>
+                                    {el.resultado === 'NO_CUMPLE' && (
+                                      <input className="input" value={el.observacion || ''}
+                                        onChange={e => updateElementoIzaje(el._i,'observacion',e.target.value)}
+                                        placeholder="Observación del rechazo..."
+                                        style={{ fontSize:10, marginTop:5, width:'100%', borderColor:'#FCA5A5', background:'#FFF5F5' }} />
+                                    )}
                                   </td>
                                   <td style={{ ...S.td, textAlign:'center' }}>
                                     <button onClick={() => removeElementoIzaje(el._i)}
