@@ -813,6 +813,9 @@ export default function NuevoInforme() {
   const [borradorDisponible, setBorradorDisponible] = useState(false)
   const [borradorData, setBorradorData]             = useState(null)
 
+  // Ref que siempre tiene el estado más reciente para guardado síncrono al salir
+  const estadoActualRef = useRef({})
+
   // ── Estado inspección TANQUE (múltiples tanques) ─────────────────────────
   const initTanque = () => ({
     tag: '',
@@ -901,6 +904,36 @@ export default function NuevoInforme() {
       }
     } catch {}
   }, [])
+
+  // Mantener ref con estado actual (sin deps = corre en cada render)
+  useEffect(() => {
+    estadoActualRef.current = {
+      otInput, tipo, general, normas, equipo, endAplicados, mediciones,
+      hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
+      mostrarEquipoMayor, equiposMedicion, fotosInspeccion, tanques,
+      lineas, datosVisuales, inspectoresOT,
+    }
+  })
+
+  // Guardar borrador INMEDIATAMENTE al salir del formulario (unmount)
+  useEffect(() => {
+    return () => {
+      try {
+        const d = estadoActualRef.current
+        // Solo guardar si hay algo relevante
+        if (!d.tipo && !d.otInput) return
+        const lineasSafe = (d.lineas || []).map(l => ({
+          ...l,
+          fotos: (l.fotos || []).map(({ file: _f, preview: _p, ...rest }) => rest),
+        }))
+        localStorage.setItem('wss_borrador_informe', JSON.stringify({
+          ...d,
+          lineas: lineasSafe,
+          hallazgos: (d.hallazgos || []).map(({ _izajeRef: _, ...h }) => h),
+        }))
+      } catch {}
+    }
+  }, []) // vacío = solo al montar/desmontar
 
   // Sync: observaciones de elementos IZAJE rechazados → hallazgos (auto)
   useEffect(() => {
