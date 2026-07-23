@@ -754,10 +754,26 @@ export default function TabActa({ ot, asignaciones = [], onActaCreada }) {
     } catch { /* silencioso */ } finally { setCargando(false) }
   }
 
-  function handleGuardada(numero) {
+  async function handleGuardada(numero) {
     setExito(numero)
     setPantalla('lista')
     cargarActas()
+    // Registrar en documentos_ot para que el paso 08 muestre "Completada"
+    // Verificar si ya existe un registro para esta OT con tipo='acta'
+    const { data: docExist } = await supabase
+      .from('documentos_ot')
+      .select('id')
+      .eq('ot_numero', ot.ot_numero)
+      .eq('tipo', 'acta')
+      .maybeSingle()
+    if (!docExist) {
+      await supabase.from('documentos_ot').insert({
+        ot_numero:      ot.ot_numero,
+        tipo:           'acta',
+        nombre_archivo: `Acta ${numero}`,
+        subido_por:     'Inspector',
+      })
+    }
     onActaCreada && onActaCreada()
   }
 
