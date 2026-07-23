@@ -863,27 +863,32 @@ export default function NuevoInforme() {
   function restaurarBorrador() {
     if (!borradorData) return
     const d = borradorData
-    if (d.otInput)         setOtInput(d.otInput)
-    if (d.tipo)            setTipo(d.tipo)
-    if (d.general)         setGeneral(d.general)
-    if (d.normas)          setNormas(d.normas)
-    if (d.equipo)          setEquipo(d.equipo)
-    if (d.endAplicados)    setEnd(d.endAplicados)
-    if (d.mediciones)      setMediciones(d.mediciones)
-    if (d.hallazgos)       setHallazgos(d.hallazgos)
-    if (d.resultado)       setResultado(d.resultado)
-    if (d.textoIA)         setTextoIA(d.textoIA)
-    if (d.elementosIzaje)  setElementosIzaje(d.elementosIzaje)
-    if (d.equiposIzaje)       setEquiposIzaje(d.equiposIzaje)
+    if (d.otInput)                        setOtInput(d.otInput)
+    if (d.tipo)                           setTipo(d.tipo)
+    if (d.general)                        setGeneral(d.general)
+    if (d.normas)                         setNormas(d.normas)
+    if (d.equipo)                         setEquipo(d.equipo)
+    if (d.endAplicados?.length)           setEnd(d.endAplicados)
+    if (d.mediciones?.length)             setMediciones(d.mediciones)
+    if (d.hallazgos?.length)             setHallazgos(d.hallazgos)
+    if (d.resultado)                      setResultado(d.resultado)
+    if (d.textoIA)                        setTextoIA(d.textoIA)
+    if (d.elementosIzaje?.length)        setElementosIzaje(d.elementosIzaje)
+    if (d.equiposIzaje?.length)          setEquiposIzaje(d.equiposIzaje)
     if (d.mostrarEquipoMayor !== undefined) setMostrarEquipoMayor(d.mostrarEquipoMayor)
-    if (d.equiposMedicion) setEquiposMedicion(d.equiposMedicion)
-    if (d.fotosInspeccion) setFotosInspeccion(d.fotosInspeccion)
-    if (d.tanques)         setTanques(d.tanques)
-    if (d.lineas)          setLineas(d.lineas)
-    if (d.datosVisuales)   setDatosVisuales(d.datosVisuales)
-    if (d.inspectoresOT)   setInspectoresOT(d.inspectoresOT)
+    if (d.equiposMedicion?.length)       setEquiposMedicion(d.equiposMedicion)
+    if (d.fotosInspeccion?.length)       setFotosInspeccion(d.fotosInspeccion)
+    if (d.tanques?.length)               setTanques(d.tanques)
+    if (d.lineas?.length)                setLineas(d.lineas)
+    if (d.datosVisuales)                 setDatosVisuales(d.datosVisuales)
+    if (d.inspectoresOT?.length)         setInspectoresOT(d.inspectoresOT)
+    // Restaurar estado de OT cargada para que el banner verde aparezca
+    if (d.otCargada)                     setOtCargada(d.otCargada)
+    if (d.asignacion)                    setAsignacion(d.asignacion)
     setBorradorDisponible(false)
     setBorradorData(null)
+    // Scroll suave hacia arriba para que el inspector vea el formulario restaurado
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   function descartarBorrador() {
     try { localStorage.removeItem('wss_borrador_informe') } catch {}
@@ -912,28 +917,45 @@ export default function NuevoInforme() {
       hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
       mostrarEquipoMayor, equiposMedicion, fotosInspeccion, tanques,
       lineas, datosVisuales, inspectoresOT,
+      otCargada, asignacion,   // ← para restaurar el estado de OT al volver
     }
   })
 
-  // Guardar borrador INMEDIATAMENTE al salir del formulario (unmount)
+  // Helper: guarda el estado actual en localStorage de forma síncrona
+  const guardarBorradorAhora = useCallback(() => {
+    try {
+      const d = estadoActualRef.current
+      if (!d.tipo && !d.otInput) return
+      const lineasSafe = (d.lineas || []).map(l => ({
+        ...l,
+        fotos: (l.fotos || []).map(({ file: _f, preview: _p, ...rest }) => rest),
+      }))
+      localStorage.setItem('wss_borrador_informe', JSON.stringify({
+        ...d,
+        lineas: lineasSafe,
+        hallazgos: (d.hallazgos || []).map(({ _izajeRef: _, ...h }) => h),
+      }))
+    } catch {}
+  }, [])
+
+  // Guardar al desmontar (navegar dentro de la app / botón atrás Android)
   useEffect(() => {
-    return () => {
-      try {
-        const d = estadoActualRef.current
-        // Solo guardar si hay algo relevante
-        if (!d.tipo && !d.otInput) return
-        const lineasSafe = (d.lineas || []).map(l => ({
-          ...l,
-          fotos: (l.fotos || []).map(({ file: _f, preview: _p, ...rest }) => rest),
-        }))
-        localStorage.setItem('wss_borrador_informe', JSON.stringify({
-          ...d,
-          lineas: lineasSafe,
-          hallazgos: (d.hallazgos || []).map(({ _izajeRef: _, ...h }) => h),
-        }))
-      } catch {}
+    return () => { guardarBorradorAhora() }
+  }, [guardarBorradorAhora])
+
+  // Guardar cuando la app pasa a background en mobile (cambio de app, bloqueo pantalla)
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') guardarBorradorAhora()
     }
-  }, []) // vacío = solo al montar/desmontar
+    document.addEventListener('visibilitychange', onHide)
+    // pagehide cubre iOS Safari cuando cierra el tab
+    window.addEventListener('pagehide', guardarBorradorAhora)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', guardarBorradorAhora)
+    }
+  }, [guardarBorradorAhora])
 
   // Sync: observaciones de elementos IZAJE rechazados → hallazgos (auto)
   useEffect(() => {
@@ -967,13 +989,15 @@ export default function NuevoInforme() {
           hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
           mostrarEquipoMayor, equiposMedicion, fotosInspeccion, tanques, lineas: lineasSafe,
           datosVisuales, inspectoresOT,
+          otCargada, asignacion,
         }))
       } catch {}
     }, 2000)
     return () => clearTimeout(timer)
   }, [otInput, tipo, general, normas, equipo, endAplicados, mediciones,
       hallazgos, resultado, textoIA, elementosIzaje, equiposIzaje,
-      equiposMedicion, fotosInspeccion, tanques, lineas, datosVisuales, inspectoresOT])
+      equiposMedicion, fotosInspeccion, tanques, lineas, datosVisuales, inspectoresOT,
+      otCargada, asignacion])
 
   // Auto-cargar si hay ?ot= en la URL
   useEffect(() => {
