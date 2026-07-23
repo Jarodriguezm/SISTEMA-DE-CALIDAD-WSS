@@ -2759,12 +2759,12 @@ export default function NuevoInforme() {
               />
             </div>
           )}
-          {tipo === 'IZAJE' && elementosIzaje.some(el => getFamiliaIzaje(el.tipo) === 'hardware') && (
+          {tipo === 'IZAJE' && elementosIzaje.some(el => el.tipo === 'Gancho') && (
             <div style={S.seccion}>
-              <div style={S.seccionTitulo}>⑤d Control Dimensional — Elementos de Izaje</div>
+              <div style={S.seccionTitulo}>⑤d Control Dimensional — Gancho (ASME B30.10)</div>
               <CroquisEquipo
                 tipo="IZAJE"
-                tipoIzaje={elementosIzaje.find(el => getFamiliaIzaje(el.tipo) === 'hardware')?.tipo}
+                tipoIzaje="Gancho"
                 data={datosVisuales}
                 onChange={setDatosVisuales}
               />
