@@ -103,21 +103,16 @@ function FormReserva({ ot, onReservada, onCancel }) {
     setGuardando(true); setError('')
     try {
       const serie = 'DII'
-      // Una sola llamada al RPC — obtiene el número de inicio de la secuencia atómica
-      const { data: numInicio, error: numErr } = await supabase.rpc('siguiente_numero_informe', { p_serie: serie })
-      if (numErr) throw numErr
 
+      // Records SIN numero_correlativo/codigo_informe — la DB los asigna
+      // atómicamente dentro de reservar_rango_informe (advisory lock).
       const registros = []
-      let offset = 0
       for (const area of ['END', 'IZL', 'TRZ', 'VER']) {
         const qty = cantidades[area]
         if (qty === 0) continue
         for (let i = 0; i < qty; i++) {
-          const num = numInicio + offset
           registros.push({
             serie,
-            numero_correlativo: num,
-            codigo_informe: formatCodigo(serie, num),
             ot_numero: ot.ot_numero,
             sede,
             area,
@@ -128,14 +123,23 @@ function FormReserva({ ot, onReservada, onCancel }) {
             fecha_entrega_informe: fechaEntrega || null,
             inspector: inspector || null,
             observacion: observacion || null,
+            estado: 'Reservado',
             created_by: usuario?.email || '',
           })
-          offset++
         }
       }
-      const { error: insErr } = await supabase.from('numeros_informe').insert(registros)
-      if (insErr) throw insErr
-      onReservada(registros.map(r => r.codigo_informe))
+
+      // RPC atómica: lock + número + insert en una sola transacción
+      const { data: result, error: rpcErr } = await supabase
+        .rpc('reservar_rango_informe', { p_records: registros })
+      if (rpcErr) throw rpcErr
+
+      // Reconstruir los códigos asignados a partir del rango devuelto
+      const codigos = []
+      for (let n = result.inicio; n <= result.fin; n++) {
+        codigos.push(formatCodigo(serie, n))
+      }
+      onReservada(codigos)
     } catch (e) {
       setError(e.message || 'Error al reservar los números de informe')
     } finally { setGuardando(false) }
