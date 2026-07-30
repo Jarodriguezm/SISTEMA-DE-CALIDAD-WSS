@@ -174,7 +174,8 @@ export default async function handler(req, res) {
   ])
 
   // ── Campos calculados ─────────────────────────────────────────────────────
-  const docNum    = inf.reg_dii_numero || `INF-${String(inf.id).substring(0, 8).toUpperCase()}`
+  // docNum: usar numero (DII:XXXXX o DII:XXXXX REV01) como identificador principal del documento
+  const docNum    = inf.numero || inf.reg_dii_numero || `INF-${String(inf.id).substring(0, 8).toUpperCase()}`
   const fechaInsp = inf.fecha_inspeccion
     ? new Date(inf.fecha_inspeccion + 'T12:00:00').toLocaleDateString('es-CL')
     : '—'
