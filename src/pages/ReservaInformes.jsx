@@ -150,30 +150,20 @@ export default function ReservaInformes() {
     setGuardando(true)
     setErrorForm('')
     try {
-      // Un solo llamado al RPC — obtiene el número de inicio de la secuencia atómica
-      const { data: nextNum, error: rpcErr } = await supabase
-        .rpc('siguiente_numero_informe', { p_serie: 'DII' })
-      if (rpcErr) throw rpcErr
-      if (!nextNum) throw new Error('No se pudo obtener el siguiente número')
-
       const reservaId    = 'RINF-' + crypto.randomUUID()
       const reservadoPor = ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim()
         || usuario?.email || 'Sistema'
 
-      // Construir records: primero todos los END, luego IZL, etc.
+      // Construir records SIN numero_correlativo/codigo_informe (la DB los asigna atómicamente)
       const records = []
-      let offset = 0
       for (const { cod } of AREAS_FORM) {
         const cant = form.cantidades[cod] || 0
         for (let i = 0; i < cant; i++) {
-          const num = nextNum + offset
           records.push({
             reserva_id:            reservaId,
             ot_numero:             form.ot_numero,
             sede:                  form.sede,
             serie:                 'DII',
-            numero_correlativo:    num,
-            codigo_informe:        `DII-${num}`,
             area:                  cod,
             producto:              form.producto          || null,
             acta_asociada:         form.acta             || null,
@@ -184,15 +174,16 @@ export default function ReservaInformes() {
             estado:                'Reservado',
             created_by:            reservadoPor,
           })
-          offset++
         }
       }
 
-      const { error: insErr } = await supabase.from('numeros_informe').insert(records)
-      if (insErr) throw insErr
+      // RPC atómica: lock + número + insert en una sola transacción
+      const { data: result, error: rpcErr } = await supabase
+        .rpc('reservar_rango_informe', { p_records: records })
+      if (rpcErr) throw rpcErr
 
-      const desde = `DII-${nextNum}`
-      const hasta = totalReservar > 1 ? ` a DII-${nextNum + totalReservar - 1}` : ''
+      const desde = `DII-${result.inicio}`
+      const hasta = totalReservar > 1 ? ` a DII-${result.fin}` : ''
       const resumenAreas = AREAS_FORM
         .filter(a => form.cantidades[a.cod] > 0)
         .map(a => `${form.cantidades[a.cod]} ${a.label}`)
@@ -323,20 +314,15 @@ export default function ReservaInformes() {
 
     setGuardandoOT(true); setErrorFormOT('')
     try {
-      const { data: nextNum, error: rpcErr } = await supabase.rpc('siguiente_numero_informe', { p_serie: 'DII' })
-      if (rpcErr) throw rpcErr
-      if (!nextNum) throw new Error('No se pudo obtener el siguiente número')
-
       const reservaId    = 'RINF-' + crypto.randomUUID()
       const reservadoPor = ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim() || usuario?.email || 'Sistema'
 
-      const records = props.map((p, i) => ({
+      // Records SIN numero_correlativo/codigo_informe (la DB los asigna atómicamente)
+      const records = props.map(p => ({
         reserva_id:            reservaId,
         ot_numero:             otDesdeOT,
         sede:                  sedeDesdeOT,
         serie:                 'DII',
-        numero_correlativo:    nextNum + i,
-        codigo_informe:        `DII-${nextNum + i}`,
         area:                  areaDesdeOT,
         producto:              p.descripcion,
         acta_asociada:         datosDesdeOT.acta             || null,
@@ -348,11 +334,13 @@ export default function ReservaInformes() {
         created_by:            reservadoPor,
       }))
 
-      const { error: insErr } = await supabase.from('numeros_informe').insert(records)
-      if (insErr) throw insErr
+      // RPC atómica: lock + número + insert en una sola transacción
+      const { data: result, error: rpcErr } = await supabase
+        .rpc('reservar_rango_informe', { p_records: records })
+      if (rpcErr) throw rpcErr
 
-      const desde = `DII-${nextNum}`
-      const hasta  = props.length > 1 ? ` → DII-${nextNum + props.length - 1}` : ''
+      const desde = `DII-${result.inicio}`
+      const hasta  = props.length > 1 ? ` → DII-${result.fin}` : ''
       setMensajeExito(`✅ ${props.length} número${props.length !== 1 ? 's' : ''} reservados: ${desde}${hasta}`)
       setTimeout(() => setMensajeExito(''), 8000)
       setMostrarFormOT(false); setOtDesdeOT(''); setEquiposOT([]); setConfigEq({})
