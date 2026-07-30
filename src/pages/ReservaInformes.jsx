@@ -10,6 +10,25 @@ import { useAuth } from '../lib/AuthContext'
 const ESTADOS = ['', 'Reservado', 'Emitido', 'Anulado']
 const AREAS   = ['', 'END', 'IZL', 'TRZ', 'VER']
 
+const AREA_CONFIG = {
+  END: { label: 'END',              color: '#185FA5', bg: '#DBEAFE' },
+  IZL: { label: 'Izaje y Levante', color: '#7C3AED', bg: '#EDE9FE' },
+  TRZ: { label: 'Trazabilidad',    color: '#D97706', bg: '#FEF3C7' },
+  VER: { label: 'Verificación',    color: '#059669', bg: '#D1FAE5' },
+}
+
+function BadgeArea({ area }) {
+  const cfg = AREA_CONFIG[area]
+  if (!cfg) return <span style={{ color: '#94A3B8', fontSize: 12 }}>{area || '—'}</span>
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
+      borderRadius: 20, fontSize: 11, fontWeight: 800,
+      background: cfg.bg, color: cfg.color,
+    }}>{cfg.label}</span>
+  )
+}
+
 const NOMBRE_SEDE = {
   SCL: 'Santiago',
   ANF: 'Antofagasta',
@@ -960,6 +979,7 @@ export default function ReservaInformes() {
                       <th>Código</th>
                       <th>Serie</th>
                       <th>N° Correlativo</th>
+                      <th>Área</th>
                       <th>Sede</th>
                       <th>OT</th>
                       <th>Estado</th>
@@ -984,6 +1004,7 @@ export default function ReservaInformes() {
                           <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>
                             {r.numero_correlativo}
                           </td>
+                          <td><BadgeArea area={r.area} /></td>
                           <td>
                             {r.sede
                               ? <span className="badge" style={{
