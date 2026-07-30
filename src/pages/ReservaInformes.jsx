@@ -372,12 +372,74 @@ export default function ReservaInformes() {
     }
   }
 
+  // ── generar revisión de un número DII ───────────────────────
+  async function generarRevisionNum(r) {
+    const baseCode = (r.codigo_informe || `${r.serie}-${r.numero_correlativo}`)
+      .replace(/\s+REV\d+$/i, '')
+
+    if (!window.confirm(
+      `¿Generar revisión del número "${baseCode}"?\n\n` +
+      `Se creará un nuevo registro como REV01, REV02, etc.\n` +
+      `El número correlativo se mantiene igual para trazabilidad.`
+    )) return
+
+    // Si ya es una revisión, apuntamos al padre original
+    const padreId = r.numero_padre_id || r.id
+
+    try {
+      // Obtener la revisión más alta para ese padre
+      const { data: revs, error: errRevs } = await supabase
+        .from('numeros_informe')
+        .select('revision')
+        .or(`id.eq.${padreId},numero_padre_id.eq.${padreId}`)
+        .order('revision', { ascending: false })
+        .limit(1)
+
+      if (errRevs) throw errRevs
+
+      const maxRev  = revs?.[0]?.revision ?? 0
+      const nextRev = maxRev + 1
+      const revTag  = ` REV${String(nextRev).padStart(2, '0')}`
+
+      const reservadoPor = ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim()
+        || usuario?.email || 'Sistema'
+
+      const { error: errIns } = await supabase.from('numeros_informe').insert({
+        reserva_id:            r.reserva_id,
+        ot_numero:             r.ot_numero,
+        sede:                  r.sede,
+        serie:                 r.serie || 'DII',
+        numero_correlativo:    r.numero_correlativo,
+        codigo_informe:        baseCode + revTag,
+        area:                  r.area,
+        producto:              r.producto              || null,
+        acta_asociada:         r.acta_asociada         || null,
+        fecha_inspeccion:      r.fecha_inspeccion      || null,
+        fecha_entrega_informe: r.fecha_entrega_informe || null,
+        inspector:             r.inspector             || null,
+        observacion:           r.observacion           || null,
+        estado:                'Reservado',
+        revision:              nextRev,
+        numero_padre_id:       padreId,
+        created_by:            reservadoPor,
+      })
+
+      if (errIns) throw errIns
+
+      setMensajeExito(`✅ Creada revisión ${baseCode}${revTag}`)
+      setTimeout(() => setMensajeExito(''), 8000)
+      cargar()
+    } catch (e) {
+      alert('Error al crear revisión: ' + mensajeError(e))
+    }
+  }
+
   // ── filtrado ─────────────────────────────────────────────────
   const filtrados = datos.filter(r => {
     if (!busqueda) return true
     const q = busqueda.toLowerCase()
     return [r.ot_numero, r.codigo_informe, `DII-${r.numero_correlativo}`,
-            NOMBRE_SEDE[r.sede], r.sede]
+            NOMBRE_SEDE[r.sede], r.sede, r.area]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
   const visibles     = filtrados.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA)
@@ -991,12 +1053,21 @@ export default function ReservaInformes() {
                     {visibles.map((r, i) => {
                       const codigo = r.codigo_informe || `${r.serie}-${r.numero_correlativo}`
                       const colorSede = COLOR_SEDE[r.sede] || 'var(--gris)'
+                      const esRevision = (r.revision ?? 0) > 0
                       return (
-                        <tr key={r.id || i}>
+                        <tr key={r.id || i} style={esRevision ? { background: '#F0F7FF' } : {}}>
                           <td>
                             <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 15, color: '#1A3A5C' }}>
                               {codigo}
                             </span>
+                            {esRevision && (
+                              <span style={{
+                                marginLeft: 6, fontSize: 10, background: '#DBEAFE', color: '#1D4ED8',
+                                padding: '1px 6px', borderRadius: 8, fontWeight: 800, verticalAlign: 'middle',
+                              }}>
+                                REV{String(r.revision).padStart(2,'0')}
+                              </span>
+                            )}
                           </td>
                           <td>
                             <span className="badge badge-blue">{r.serie || 'DII'}</span>
@@ -1045,6 +1116,18 @@ export default function ReservaInformes() {
                                 <button className="btn btn-primary btn-sm"
                                   onClick={() => navigate(`/informes/nuevo?ot=${r.ot_numero}&reg=${codigo}`)}>
                                   📝 Crear Informe
+                                </button>
+                              )}
+                              {!esAuditor() && r.estado !== 'Anulado' && (
+                                <button
+                                  onClick={() => generarRevisionNum(r)}
+                                  title={`Crear revisión de ${(r.codigo_informe || `${r.serie}-${r.numero_correlativo}`).replace(/\s+REV\d+$/i, '')}`}
+                                  style={{
+                                    padding: '4px 10px', borderRadius: 6,
+                                    border: '1px solid #BFDBFE', background: '#EFF6FF',
+                                    color: '#1D4ED8', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                                  }}>
+                                  + REV
                                 </button>
                               )}
                             </div>
