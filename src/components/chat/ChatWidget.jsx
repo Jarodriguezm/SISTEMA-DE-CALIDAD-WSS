@@ -504,7 +504,7 @@ const IcRefresh = () => (
 const S = {
   fab: {
     position:        'fixed',
-    bottom:          24,
+    bottom:          72,
     right:           24,
     width:           52,
     height:          52,
@@ -522,7 +522,7 @@ const S = {
   },
   panel: {
     position:       'fixed',
-    bottom:         88,
+    bottom:         136,
     right:          24,
     width:          390,
     height:         580,
