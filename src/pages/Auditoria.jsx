@@ -7,9 +7,28 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 
-const SERIES = ['', 'ESI', 'EAI', 'IVS', 'IVA']
+const SERIES = ['', 'DII', 'ESI', 'EAI', 'IVS', 'IVA']
 const ESTADOS_INF = ['', 'Reservado', 'Emitido', 'Anulado']
-const COLOR_SERIE = { ESI: '#185FA5', EAI: '#7C3AED', IVS: '#059669', IVA: '#D97706' }
+const COLOR_SERIE = { DII: '#0E2A45', ESI: '#185FA5', EAI: '#7C3AED', IVS: '#059669', IVA: '#D97706' }
+
+const AREA_CONFIG = {
+  END: { label: 'END',              color: '#185FA5', bg: '#DBEAFE' },
+  IZL: { label: 'Izaje y Levante', color: '#7C3AED', bg: '#EDE9FE' },
+  TRZ: { label: 'Trazabilidad',    color: '#D97706', bg: '#FEF3C7' },
+  VER: { label: 'Verificación',    color: '#059669', bg: '#D1FAE5' },
+}
+
+function BadgeArea({ area }) {
+  const cfg = AREA_CONFIG[area]
+  if (!cfg) return <span style={{ color: '#94A3B8', fontSize: 12 }}>{area || '—'}</span>
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
+      borderRadius: 20, fontSize: 11, fontWeight: 800,
+      background: cfg.bg, color: cfg.color,
+    }}>{cfg.label}</span>
+  )
+}
 
 function fmt(fecha, hora = false) {
   if (!fecha) return '—'
@@ -266,6 +285,7 @@ function TabTrazabilidad() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroSerie, setFiltroSerie] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroArea, setFiltroArea] = useState('')
   const [pagina, setPagina] = useState(0)
   const [modalInforme, setModalInforme] = useState(null)
   const [modalPersona, setModalPersona] = useState(null)
@@ -278,12 +298,13 @@ function TabTrazabilidad() {
       let q = supabase.from('v_trazabilidad_informes').select('*').limit(2000)
       if (filtroSerie)  q = q.eq('serie', filtroSerie)
       if (filtroEstado) q = q.eq('estado_informe', filtroEstado)
+      if (filtroArea)   q = q.eq('area', filtroArea)
       const { data, error: err } = await q
       if (err) throw err
       setDatos(data || [])
     } catch (e) { setError(mensajeError(e)) }
     finally { setCargando(false) }
-  }, [filtroSerie, filtroEstado])
+  }, [filtroSerie, filtroEstado, filtroArea])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -299,7 +320,7 @@ function TabTrazabilidad() {
   const filtrados = datos.filter(r => {
     if (!busqueda) return true
     const q = busqueda.toLowerCase()
-    return [r.codigo_informe, r.ot_numero, r.cliente, r.inspector, r.supervisor, r.producto, r.codigo_acta]
+    return [r.codigo_informe, r.ot_numero, r.cliente, r.inspector, r.supervisor, r.producto, r.codigo_acta, r.area, r.sede]
       .some(v => String(v || '').toLowerCase().includes(q))
   })
 
@@ -341,6 +362,16 @@ function TabTrazabilidad() {
             <label>Serie</label>
             <select className="select" value={filtroSerie} onChange={e => { setFiltroSerie(e.target.value); setPagina(0) }}>
               {SERIES.map(s => <option key={s} value={s}>{s || 'Todas'}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 120 }}>
+            <label>Área técnica</label>
+            <select className="select" value={filtroArea} onChange={e => { setFiltroArea(e.target.value); setPagina(0) }}>
+              <option value="">Todas</option>
+              <option value="END">END</option>
+              <option value="IZL">Izaje y Levante</option>
+              <option value="TRZ">Trazabilidad</option>
+              <option value="VER">Verificación</option>
             </select>
           </div>
           <div className="field" style={{ flex: 1, minWidth: 120 }}>
@@ -404,7 +435,7 @@ function TabTrazabilidad() {
                               {r.ot_numero || '—'}
                             </span>
                           </td>
-                          <td><span className="badge badge-blue">{r.area || '—'}</span></td>
+                          <td><BadgeArea area={r.area} /></td>
                           <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {r.cliente || '—'}
                           </td>
