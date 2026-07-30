@@ -77,7 +77,7 @@ export default function Informes() {
       // 3. Informes ya creados (puede no existir la tabla aún)
       const { data: infs, error: eInf } = await supabase
         .from('informes')
-        .select('id,numero,reg_dii_numero,metodo_end_cod,ot_numero,cliente_nombre,estado,resultado,fecha_inspeccion,created_at')
+        .select('id,numero,reg_dii_numero,metodo_end_cod,ot_numero,cliente_nombre,estado,resultado,fecha_inspeccion,created_at,revision,informe_padre_id')
         .order('created_at', { ascending: false })
       if (eInf) setErrorTabla(true)
       setInformesDB(infs || [])
@@ -86,6 +86,43 @@ export default function Informes() {
     } finally {
       setCargando(false)
     }
+  }
+
+  // ── Generar revisión de un informe ─────────────────────────────────────────
+  async function generarRevision(inf) {
+    const baseNum = (inf.numero || '').replace(/ REV\d+$/i, '')
+    if (!window.confirm(`¿Crear revisión del informe "${baseNum}"?\n\nSe generará una copia como BORRADOR con el número siguiente (REV01, REV02, …).\nEl original queda intacto para trazabilidad.`)) return
+
+    // Raíz del árbol de revisiones
+    const padreId = inf.informe_padre_id || inf.id
+
+    // Buscar la revisión más alta existente (original + todas las REV)
+    const { data: revs } = await supabase
+      .from('informes')
+      .select('revision')
+      .or(`id.eq.${padreId},informe_padre_id.eq.${padreId}`)
+      .order('revision', { ascending: false })
+      .limit(1)
+
+    const nextRev = ((revs?.[0]?.revision) ?? 0) + 1
+    const revTag  = ` REV${String(nextRev).padStart(2, '0')}`
+
+    // Copiar todos los campos del informe excepto los de identidad
+    const { id: _id, created_at: _ca, updated_at: _ua, revision: _rev, informe_padre_id: _pid, ...campos } = inf
+
+    const { error } = await supabase.from('informes').insert({
+      ...campos,
+      numero:           baseNum + revTag,
+      revision:         nextRev,
+      informe_padre_id: padreId,
+      estado:           'BORRADOR',
+    })
+
+    if (error) {
+      alert('Error al generar revisión: ' + error.message)
+      return
+    }
+    await cargarDatos()
   }
 
   // ── Cola de trabajo: asignaciones × métodos END → pendientes / completados ──
@@ -181,6 +218,7 @@ export default function Informes() {
           contadores={contadores}
           errorTabla={errorTabla}
           navigate={navigate}
+          onGenerarRev={generarRevision}
         />
       )}
     </div>
@@ -298,7 +336,7 @@ function TarjetaItem({ item, navigate, completado = false }) {
 
 // ── Todos los informes ──────────────────────────────────────────────────────────
 
-function TodosInformes({ filtrados, informesDB, filtroEstado, setFiltroEstado, busqueda, setBusqueda, contadores, errorTabla, navigate }) {
+function TodosInformes({ filtrados, informesDB, filtroEstado, setFiltroEstado, busqueda, setBusqueda, contadores, errorTabla, navigate, onGenerarRev }) {
   if (errorTabla) {
     return (
       <div className="card" style={{ padding:32, textAlign:'center' }}>
@@ -348,7 +386,14 @@ function TodosInformes({ filtrados, informesDB, filtroEstado, setFiltroEstado, b
                 const est = ESTADO_BADGE[inf.estado] || ESTADO_BADGE.BORRADOR
                 return (
                   <tr key={inf.id} style={{ borderBottom:'1px solid #F1F5F9', background: i%2===0 ? '#fff' : '#FAFAFA' }}>
-                    <td style={{ padding:'10px 14px', fontSize:13, fontWeight:700, color:'#1E3A5F' }}>{inf.numero || '—'}</td>
+                    <td style={{ padding:'10px 14px', fontSize:13, fontWeight:700, color:'#1E3A5F' }}>
+                      {inf.numero || '—'}
+                      {(inf.revision > 0) && (
+                        <span style={{ marginLeft:6, fontSize:10, background:'#DBEAFE', color:'#1D4ED8', padding:'2px 7px', borderRadius:20, fontWeight:800 }}>
+                          REV{String(inf.revision).padStart(2,'0')}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding:'10px 14px', fontSize:12, fontWeight:700, color:'#7C3AED', fontFamily:'monospace' }}>{inf.reg_dii_numero || '—'}</td>
                     <td style={{ padding:'10px 14px', fontSize:12, color:'#475569' }}>{inf.ot_numero || '—'}</td>
                     <td style={{ padding:'10px 14px', fontSize:12 }}>{inf.cliente_nombre || '—'}</td>
@@ -359,7 +404,14 @@ function TodosInformes({ filtrados, informesDB, filtroEstado, setFiltroEstado, b
                       <span style={{ ...S.badge, background:est.bg, color:est.color }}>{est.label}</span>
                     </td>
                     <td style={{ padding:'10px 14px' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/informes/${inf.id}`)}>Ver</button>
+                      <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/informes/${inf.id}`)}>Ver</button>
+                        <button
+                          onClick={() => onGenerarRev(inf)}
+                          style={{ padding:'4px 10px', borderRadius:6, border:'1px solid #BFDBFE', background:'#EFF6FF', color:'#1D4ED8', cursor:'pointer', fontSize:11, fontWeight:700, whiteSpace:'nowrap' }}>
+                          + REV
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
