@@ -95,6 +95,9 @@ export default function Personal() {
     vencidos:  alertas.filter(a => a.estado === 'VENCIDO').length,
     faltantes: alertas.filter(a => a.estado === 'FALTANTE').length,
     porVencer: alertas.filter(a => a.estado.startsWith('POR VENCER')).length,
+    sugeridas: estados.filter(e => idsVisibles.has(e.personal_id) && e.tiene_sugerencia).length,
+    sugAltas:  estados.filter(e => idsVisibles.has(e.personal_id) && e.tiene_sugerencia
+                                   && e.confianza === 'alta').length,
   }
 
   // ── acciones ─────────────────────────────────────────────
@@ -130,6 +133,8 @@ export default function Personal() {
         cargado_por: ((usuario?.nombre || '') + ' ' + (usuario?.apellido || '')).trim()
                      || usuario?.email || 'Sistema',
       }
+      // Si se guardó una fecha de emisión, la sugerencia queda resuelta
+      if (editDoc.fecha_emision) payload.sugerencia_resuelta = true
       const { error: err } = await supabase
         .from('documentos_personal')
         .upsert(payload, { onConflict: 'personal_id,tipo_codigo' })
@@ -139,6 +144,25 @@ export default function Personal() {
       setEditDoc(null); cargar()
     } catch (e) { setError(mensajeError(e)) }
     finally { setGuardando(false) }
+  }
+
+  async function confirmarSugerencias(personalId = null, soloAltas = true) {
+    const alcance = personalId ? 'de este trabajador' : 'de toda la división'
+    const filtro  = soloAltas ? 'de confianza alta (año en el nombre del archivo)' : 'detectadas'
+    if (!window.confirm(
+      `¿Confirmar las fechas sugeridas ${filtro} ${alcance}?\n\n` +
+      `Se tomarán como fecha de emisión oficial y el vencimiento se recalculará.`
+    )) return
+    try {
+      const { data, error: err } = await supabase.rpc('fn_confirmar_sugerencias', {
+        p_personal_id: personalId,
+        p_confianza:   soloAltas ? 'alta' : null,
+      })
+      if (err) throw err
+      setOk(`${data} fecha${data === 1 ? '' : 's'} confirmada${data === 1 ? '' : 's'}`)
+      setTimeout(() => setOk(''), 6000)
+      cargar()
+    } catch (e) { setError(mensajeError(e)) }
   }
 
   async function enviarResumen() {
@@ -183,6 +207,26 @@ export default function Personal() {
 
       {ok    && <div className="alert alert-ok"    style={{ marginBottom: 14 }}>✅ {ok}</div>}
       {error && <div className="alert alert-error" style={{ marginBottom: 14 }}>⚠ {error}</div>}
+
+      {/* Banner de sugerencias pendientes */}
+      {kpi.sugeridas > 0 && (
+        <div style={S.banner}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#0E2A45' }}>
+              {kpi.sugeridas} fecha{kpi.sugeridas !== 1 ? 's' : ''} detectada{kpi.sugeridas !== 1 ? 's' : ''} en Drive esperando confirmación
+            </div>
+            <div style={{ fontSize: 12.5, color: '#78716C', marginTop: 3 }}>
+              {kpi.sugAltas} con el año en el nombre del archivo (confianza alta) ·{' '}
+              {kpi.sugeridas - kpi.sugAltas} tomadas de la fecha de carga en Drive, que conviene verificar una a una.
+            </div>
+          </div>
+          {kpi.sugAltas > 0 && (
+            <button onClick={() => confirmarSugerencias(null, true)} style={S.btnUsar}>
+              Confirmar las {kpi.sugAltas} de confianza alta
+            </button>
+          )}
+        </div>
+      )}
 
       {/* KPIs */}
       <div style={S.kpis}>
@@ -336,6 +380,10 @@ export default function Personal() {
                                 fecha_emision: d?.fecha_emision || '',
                                 fecha_vencimiento: d?.fecha_vencimiento || '',
                                 drive_url: d?.drive_url || '', observacion: d?.observacion || '',
+                                fecha_sugerida: d?.fecha_sugerida || '',
+                                origen_sugerencia: d?.origen_sugerencia || '',
+                                confianza: d?.confianza || '',
+                                archivo_detectado: d?.archivo_detectado || '',
                               })}
                               style={{ ...S.celda, background: e.bg, color: e.fg }}>
                               {e.ico}
@@ -402,6 +450,10 @@ export default function Personal() {
                                 fecha_emision: a.fecha_emision || '',
                                 fecha_vencimiento: a.fecha_vencimiento || '',
                                 drive_url: a.drive_url || '', observacion: a.observacion || '',
+                                fecha_sugerida: a.fecha_sugerida || '',
+                                origen_sugerencia: a.origen_sugerencia || '',
+                                confianza: a.confianza || '',
+                                archivo_detectado: a.archivo_detectado || '',
                               })}>
                               Regularizar
                             </button>
@@ -471,6 +523,10 @@ export default function Personal() {
                               fecha_emision: d.fecha_emision || '',
                               fecha_vencimiento: d.fecha_vencimiento || '',
                               drive_url: d.drive_url || '', observacion: d.observacion || '',
+                              fecha_sugerida: d.fecha_sugerida || '',
+                              origen_sugerencia: d.origen_sugerencia || '',
+                              confianza: d.confianza || '',
+                              archivo_detectado: d.archivo_detectado || '',
                             })}>
                             {d.documento_id ? 'Editar' : 'Registrar'}
                           </button>
@@ -499,6 +555,35 @@ export default function Personal() {
               <button onClick={() => setEditDoc(null)} style={S.btnX} disabled={guardando}>✕</button>
             </div>
             <div style={{ padding: '20px 22px' }}>
+              {editDoc.fecha_sugerida && !editDoc.fecha_emision && (
+                <div style={S.sugerencia}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#92400E',
+                      textTransform: 'uppercase', letterSpacing: '.5px' }}>
+                      Fecha sugerida desde Drive
+                    </div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: '#0E2A45', marginTop: 3 }}>
+                      {editDoc.fecha_sugerida}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#78716C', marginTop: 3 }}>
+                      Origen: {editDoc.origen_sugerencia || 'Drive'}
+                      {editDoc.confianza && ` · confianza ${editDoc.confianza}`}
+                      {editDoc.archivo_detectado && <><br />Archivo: {editDoc.archivo_detectado}</>}
+                    </div>
+                    {editDoc.confianza === 'media' && (
+                      <div style={{ fontSize: 11.5, color: '#B45309', marginTop: 5, fontWeight: 600 }}>
+                        Es la fecha en que el archivo se subió a Drive, no necesariamente la de emisión. Verificar.
+                      </div>
+                    )}
+                  </div>
+                  <button type="button"
+                    onClick={() => setEditDoc(d => ({ ...d, fecha_emision: d.fecha_sugerida }))}
+                    style={S.btnUsar}>
+                    Usar esta fecha
+                  </button>
+                </div>
+              )}
+
               <div className="grid">
                 <div className="col-6 field">
                   <label>Fecha de emisión</label>
@@ -648,6 +733,21 @@ const S = {
     flexWrap: 'wrap', alignItems: 'center', background: '#FAFBFC',
   },
   hint: { fontSize: 11, color: 'var(--gris)', marginTop: 3, display: 'block' },
+  banner: {
+    display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+    background: '#FFFBEB', border: '1.5px solid #FDE68A', borderLeft: '5px solid #D97706',
+    borderRadius: 12, padding: '14px 18px', marginBottom: 16,
+  },
+  sugerencia: {
+    display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap',
+    background: '#FFFBEB', border: '1.5px solid #FDE68A',
+    borderRadius: 10, padding: '13px 16px', marginBottom: 16,
+  },
+  btnUsar: {
+    background: '#0E2A45', color: '#fff', border: 'none', borderRadius: 9,
+    padding: '10px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    whiteSpace: 'nowrap', flexShrink: 0,
+  },
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300,
     display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
