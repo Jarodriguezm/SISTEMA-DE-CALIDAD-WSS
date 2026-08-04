@@ -20,6 +20,7 @@ import NuevoInforme from './pages/NuevoInforme'
 import DetalleInforme from './pages/DetalleInforme'
 import Documentos from './pages/Documentos'
 import Supervisor from './pages/Supervisor'
+import MatrizRiesgos from './pages/MatrizRiesgos'
 import './styles/global.css'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
@@ -59,6 +60,12 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* ── RUTAS PÚBLICAS (sin login) ────────────────────────
+          Se enlazan desde cotizaciones y material comercial.  */}
+      <Route path="/matriz-riesgos"  element={<MatrizRiesgos />} />
+      <Route path="/matriz-de-riesgos" element={<Navigate to="/matriz-riesgos" replace />} />
+      <Route path="/miper"           element={<Navigate to="/matriz-riesgos" replace />} />
+
       <Route
         path="/login"
         element={usuario ? <Navigate to="/dashboard" replace /> : <Login />}
