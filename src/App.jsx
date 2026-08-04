@@ -20,6 +20,7 @@ import NuevoInforme from './pages/NuevoInforme'
 import DetalleInforme from './pages/DetalleInforme'
 import Documentos from './pages/Documentos'
 import Supervisor from './pages/Supervisor'
+import Personal from './pages/Personal'
 import MatrizRiesgos from './pages/MatrizRiesgos'
 import './styles/global.css'
 import { useRegisterSW } from 'virtual:pwa-register/react'
@@ -97,6 +98,7 @@ function AppRoutes() {
       <Route path="/documentos" element={<RutaPrivada><Documentos /></RutaPrivada>} />
 
       <Route path="/supervisor" element={<RutaPrivada><Supervisor /></RutaPrivada>} />
+      <Route path="/personal"   element={<RutaPrivada><Personal /></RutaPrivada>} />
 
       <Route path="/auditoria" element={<RutaPrivada><Auditoria /></RutaPrivada>} />
       <Route path="/catalogos" element={<RutaPrivada><Navigate to="/dashboard" replace /></RutaPrivada>} />
