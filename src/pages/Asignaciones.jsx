@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, mensajeError } from '../lib/supabase'
+import MensajePortal from '../components/MensajePortal'
 import {
   StatusBadge, PersonList, TechniqueList,
   EmptyState, Pagination, TableSkeleton, SummaryStrip,
@@ -98,6 +99,8 @@ export default function Asignaciones() {
 
   return (
     <div style={{ maxWidth: 1440 }}>
+
+      <MensajePortal contexto="ver_asignacion" />
 
       {/* ── Encabezado ─────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
