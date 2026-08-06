@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import MensajePortal from '../components/MensajePortal'
 
 // ── Iconos SVG inline ─────────────────────────────────────────────────────
 const Ic = {
@@ -119,6 +120,9 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth:1280 }}>
+
+      {/* ── Mensaje del día: reflexión, seguridad o Ley Karin ──────── */}
+      <MensajePortal contexto="ingreso" />
 
       {/* ── Encabezado ─────────────────────────────────────────────── */}
       <div style={S.welcome}>
