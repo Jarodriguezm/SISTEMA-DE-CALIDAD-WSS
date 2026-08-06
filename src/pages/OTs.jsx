@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, rpc, mensajeError } from '../lib/supabase'
+import MensajePortal from '../components/MensajePortal'
 import { useAuth } from '../lib/AuthContext'
 import ModalCrearOT from '../components/modules/ModalCrearOT'
 import {
@@ -137,6 +138,8 @@ export default function OTs() {
 
   return (
     <div style={{ maxWidth: 1440 }}>
+
+      <MensajePortal contexto="crear_ot" />
 
       {/* Modal crear OT */}
       {mostrarModal && (
