@@ -55,13 +55,23 @@ export default function Informes() {
 
     try {
       // 1. Asignaciones donde aparece este inspector
-      const { data: asigs } = await supabase
+      //    El filtro por nombre se hace en el cliente: un ilike con nombres
+      //    que traen tildes, comas o paréntesis rompe el parser de PostgREST
+      //    y devolvía un 400 silencioso.
+      const { data: asigsRaw, error: errAsig } = await supabase
         .from('asignaciones')
         .select('id,ot_numero,inspectores_asignados,supervisor,fecha_inspeccion,tipos_inspeccion')
-        .ilike('inspectores_asignados', `%${nombre}%`)
         .order('fecha_inspeccion', { ascending: false })
-        .limit(60)
-      setAsig(asigs || [])
+        .limit(300)
+
+      if (errAsig) console.warn('[Informes] asignaciones:', errAsig.message)
+
+      const nom   = (nombre || '').trim().toLowerCase()
+      const asigs = nom
+        ? (asigsRaw || []).filter(a =>
+            (a.inspectores_asignados || '').toLowerCase().includes(nom))
+        : (asigsRaw || [])
+      setAsig(asigs.slice(0, 60))
 
       // 2. Enriquecer con nombre de cliente desde OTs
       const otNums = [...new Set((asigs || []).map(a => a.ot_numero).filter(Boolean))]
