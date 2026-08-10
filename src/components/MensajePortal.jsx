@@ -205,25 +205,25 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
   },
   modal: {
-    width: '100%', maxWidth: 520, background: '#fff', borderRadius: 18,
+    width: '100%', maxWidth: 700, background: '#fff', borderRadius: 20,
     overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,.35)',
   },
-  mHead: { padding: '22px 26px 20px' },
+  mHead: { padding: '30px 38px 26px' },
   chip: {
     display: 'inline-block', background: 'rgba(255,255,255,.20)', color: '#fff',
-    fontSize: 10.5, fontWeight: 800, letterSpacing: '.7px', textTransform: 'uppercase',
-    padding: '4px 11px', borderRadius: 20, marginBottom: 10,
+    fontSize: 12, fontWeight: 800, letterSpacing: '.9px', textTransform: 'uppercase',
+    padding: '6px 14px', borderRadius: 20, marginBottom: 14,
   },
-  mTitulo: { margin: 0, color: '#fff', fontSize: 20, fontWeight: 800, lineHeight: 1.3 },
-  mBody: { padding: '20px 26px 24px' },
-  mTexto: { margin: 0, fontSize: 14.5, lineHeight: 1.68, color: '#1F2937' },
+  mTitulo: { margin: 0, color: '#fff', fontSize: 27, fontWeight: 800, lineHeight: 1.28 },
+  mBody: { padding: '28px 38px 32px' },
+  mTexto: { margin: 0, fontSize: 18.5, lineHeight: 1.72, color: '#1F2937' },
   mPie: {
-    margin: '16px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6B7280',
-    paddingTop: 14, borderTop: '1px solid #F1F5F9',
+    margin: '22px 0 0', fontSize: 14.5, lineHeight: 1.65, color: '#6B7280',
+    paddingTop: 18, borderTop: '1px solid #F1F5F9',
   },
   btn: {
-    marginTop: 20, width: '100%', background: '#0E2A45', color: '#fff', border: 'none',
-    borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+    marginTop: 26, width: '100%', background: '#0E2A45', color: '#fff', border: 'none',
+    borderRadius: 12, padding: '15px', fontSize: 16, fontWeight: 700, cursor: 'pointer',
   },
   banner: {
     display: 'flex', alignItems: 'flex-start', gap: 14, background: '#fff',
@@ -239,7 +239,7 @@ const S = {
   },
   link: {
     background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer',
-    fontSize: 11.5, padding: 0, marginTop: 8, textDecoration: 'underline',
+    fontSize: 13, padding: 0, marginTop: 14, textDecoration: 'underline',
   },
   pref: {
     display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
