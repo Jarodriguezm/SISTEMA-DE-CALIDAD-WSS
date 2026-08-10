@@ -6,6 +6,7 @@
 // ============================================================
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase, rpc, mensajeError } from './supabase'
+import { setUsuarioMonitor } from './monitor'
 
 const AuthContext = createContext(null)
 
@@ -57,6 +58,7 @@ export function AuthProvider({ children }) {
       }
 
       const userData = perfil[0] || perfil
+      setUsuarioMonitor(userData)
 
       // Obtener menú según rol
       const menuData = await rpc('obtener_menu_por_email', { p_email: email })
