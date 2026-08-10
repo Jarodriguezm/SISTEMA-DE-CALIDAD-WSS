@@ -27,23 +27,29 @@ export default function MensajePortal({ contexto = 'ingreso', soloUnaVezAlDia = 
   const { usuario } = useAuth()
   const [msj,     setMsj]     = useState(null)
   const [visible, setVisible] = useState(false)
-  const [pref,    setPref]    = useState(null)   // null = aún no cargada
+  const [pref,    setPref]    = useState('general')  // nunca bloquea el render
   const [recarga, setRecarga] = useState(0)
 
-  // La preferencia se lee directo de la tabla usuarios
+  // La preferencia se lee por email: es el identificador que el
+  // AuthContext garantiza siempre. Si falla, queda en 'general'.
   useEffect(() => {
-    if (!usuario?.id) return
+    if (!usuario?.email) return
     let cancelado = false
-    supabase.from('usuarios').select('preferencia_mensajes').eq('id', usuario.id).maybeSingle()
-      .then(({ data }) => { if (!cancelado) setPref(data?.preferencia_mensajes || 'general') })
+    supabase.from('usuarios')
+      .select('preferencia_mensajes')
+      .eq('email', usuario.email)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelado && data?.preferencia_mensajes) setPref(data.preferencia_mensajes)
+      })
     return () => { cancelado = true }
   }, [usuario, recarga])
 
   useEffect(() => {
-    if (!usuario || pref === null) return
+    if (!usuario) return
     let cancelado = false
 
-    const claveDia = `wss_msj_${contexto}_${hoy()}_${usuario.id || usuario.email}`
+    const claveDia = `wss_msj_${contexto}_${hoy()}_${usuario.email}`
     if (soloUnaVezAlDia && localStorage.getItem(claveDia)) return
 
     async function cargar() {
@@ -69,17 +75,17 @@ export default function MensajePortal({ contexto = 'ingreso', soloUnaVezAlDia = 
 
       // Rotación: el día y el usuario definen cuál toca, sin repetir
       // hasta recorrer todo el set disponible.
-      const base   = semilla(`${hoy()}|${usuario.id || usuario.email}|${contexto}`)
+      const base   = semilla(`${hoy()}|${usuario.email}|${contexto}`)
       const diaNum = Math.floor(Date.parse(hoy()) / 86400000)
 
-      // En 'ingreso' se alterna: días pares muestran los modales
-      // (seguridad y Ley Karin), impares los de reflexión.
+      // En 'ingreso' se alterna por día: un día toca seguridad o Ley Karin,
+      // al siguiente reflexión o motivación. Todos se muestran como ventana.
       let pool = aplicables
       if (contexto === 'ingreso') {
-        const modales = aplicables.filter(m => m.modal)
-        const banners = aplicables.filter(m => !m.modal)
-        if (diaNum % 2 === 0 && modales.length) pool = modales
-        else if (banners.length)                pool = banners
+        const criticos = aplicables.filter(m => m.categoria === 'seguridad' || m.categoria === 'karin')
+        const resto    = aplicables.filter(m => m.categoria !== 'seguridad' && m.categoria !== 'karin')
+        if (diaNum % 2 === 0 && criticos.length) pool = criticos
+        else if (resto.length)                   pool = resto
       }
 
       const elegido = pool[(base + diaNum) % pool.length]
@@ -99,51 +105,46 @@ export default function MensajePortal({ contexto = 'ingreso', soloUnaVezAlDia = 
   const esKarin = msj.categoria === 'karin'
   const esSeg   = msj.categoria === 'seguridad'
 
-  // ── Modal: seguridad y Ley Karin ──
-  if (msj.modal) {
-    return (
-      <div style={S.overlay} onClick={e => e.target === e.currentTarget && cerrar()}>
-        <div style={S.modal}>
-          <div style={{ ...S.mHead, background: esKarin ? S.gradKarin : S.gradSeg }}>
-            <span style={S.chip}>
-              {esKarin ? 'Ley Karin · Ley 21.643' : 'Seguridad'}
-            </span>
-            <h2 style={S.mTitulo}>{msj.titulo}</h2>
-          </div>
-          <div style={S.mBody}>
-            <p style={S.mTexto}>{msj.texto}</p>
-            {esKarin && (
-              <p style={S.mPie}>
-                Ante cualquier situación de acoso o violencia laboral, puedes acudir a tu jefatura,
-                al Departamento de Calidad o directamente a la Dirección del Trabajo.
-              </p>
-            )}
-            {esSeg && (
-              <p style={S.mPie}>
-                Si las condiciones no son seguras, tienes respaldo de la empresa para detener la actividad.
-              </p>
-            )}
-            <button onClick={cerrar} style={S.btn}>Entendido</button>
-          </div>
+  // ── Ventana emergente: todos los mensajes ──
+  const cfg = esKarin
+    ? { grad: S.gradKarin, chip: 'Ley Karin · Ley 21.643' }
+    : esSeg
+      ? { grad: S.gradSeg, chip: 'Seguridad' }
+      : { grad: S.gradWss, chip: (msj.categoria || 'Mensaje del día').toUpperCase() }
+
+  return (
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && cerrar()}>
+      <div style={S.modal}>
+        <div style={{ ...S.mHead, background: cfg.grad }}>
+          <span style={S.chip}>{cfg.chip}</span>
+          {msj.titulo && <h2 style={S.mTitulo}>{msj.titulo}</h2>}
+        </div>
+        <div style={S.mBody}>
+          <p style={S.mTexto}>{msj.texto}</p>
+
+          {esKarin && (
+            <p style={S.mPie}>
+              Ante cualquier situación de acoso o violencia laboral, puedes acudir a tu jefatura,
+              al Departamento de Calidad o directamente a la Dirección del Trabajo.
+            </p>
+          )}
+          {esSeg && (
+            <p style={S.mPie}>
+              Si las condiciones no son seguras, tienes respaldo de la empresa para detener la actividad.
+            </p>
+          )}
+
+          <button onClick={cerrar} style={S.btn}>Entendido</button>
+
+          {contexto === 'ingreso' && (
+            <div style={{ textAlign: 'center' }}>
+              <SelectorPreferencia
+                email={usuario?.email} actual={pref || 'general'}
+                onCambio={v => { setPref(v); setVisible(false); setRecarga(r => r + 1) }} />
+            </div>
+          )}
         </div>
       </div>
-    )
-  }
-
-  // ── Banner: motivación, reflexión, comercial ──
-  return (
-    <div style={S.banner}>
-      <div style={S.barra} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {msj.titulo && <div style={S.bTitulo}>{msj.titulo}</div>}
-        <div style={S.bTexto}>{msj.texto}</div>
-        {contexto === 'ingreso' && (
-          <SelectorPreferencia
-            usuarioId={usuario?.id} actual={pref || 'general'}
-            onCambio={v => { setPref(v); setVisible(false); setRecarga(r => r + 1) }} />
-        )}
-      </div>
-      <button onClick={cerrar} style={S.bCerrar} aria-label="Cerrar">✕</button>
     </div>
   )
 }
@@ -155,7 +156,7 @@ const OPCIONES = [
   { v: 'biblico', l: 'Pasaje bíblico' },
 ]
 
-function SelectorPreferencia({ usuarioId, actual, onCambio }) {
+function SelectorPreferencia({ email, actual, onCambio }) {
   const [abierto,   setAbierto]   = useState(false)
   const [guardando, setGuardando] = useState(false)
 
@@ -163,7 +164,7 @@ function SelectorPreferencia({ usuarioId, actual, onCambio }) {
     if (v === actual) { setAbierto(false); return }
     try {
       setGuardando(true)
-      await supabase.from('usuarios').update({ preferencia_mensajes: v }).eq('id', usuarioId)
+      await supabase.from('usuarios').update({ preferencia_mensajes: v }).eq('email', email)
       // Limpia la marca del día para que el cambio se vea de inmediato
       Object.keys(localStorage)
         .filter(k => k.startsWith('wss_msj_'))
@@ -198,6 +199,7 @@ function SelectorPreferencia({ usuarioId, actual, onCambio }) {
 const S = {
   gradKarin: 'linear-gradient(135deg, #6D28D9, #9333EA)',
   gradSeg:   'linear-gradient(135deg, #B45309, #D97706)',
+  gradWss:   'linear-gradient(135deg, #0E2A45, #2D5080)',
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(15,23,42,.66)', zIndex: 500,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
