@@ -105,6 +105,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const [error, setError] = useState('')
   const [visorDoc, setVisorDoc] = useState(null)   // { nombre, proxyUrl, driveUrl, ext }
   const [celebrar, setCelebrar] = useState(false)  // fuegos artificiales al llegar a 12/12
+  const [equipoCel, setEquipoCel] = useState([])   // nombres que devuelve la base
   const yaEvaluado = useRef(false)
 
   // Mapa de docs por tipo (clave real de documentos_ot)
@@ -157,7 +158,10 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         localStorage.setItem(clave, '1')
 
         // Solo animamos si esta fue la primera vez que se cerró la OT
-        if (data?.celebrada) setCelebrar(true)
+        if (data?.celebrada) {
+          if (data.equipo) setEquipoCel(String(data.equipo).split(' · ').filter(Boolean))
+          setCelebrar(true)
+        }
       } catch (e) {
         console.warn('[celebracion]', e.message)
       }
@@ -328,7 +332,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         activo={celebrar}
         otNumero={ot?.ot_numero}
         cliente={ot?.cliente}
-        equipo={equipoOT}
+        equipo={equipoCel.length ? equipoCel : equipoOT}
         onCerrar={() => setCelebrar(false)}
       />
 
