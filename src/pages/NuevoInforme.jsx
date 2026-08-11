@@ -1219,7 +1219,7 @@ export default function NuevoInforme() {
       // Cargar OT
       const { data: otData, error: otErr } = await supabase
         .from('ots')
-        .select('ot_numero,cliente,direccion_faena,descripcion,supervisor,sede,email_cliente,contacto')
+        .select('id,ot_numero,cliente,direccion_faena,descripcion,supervisor,sede,email_cliente,contacto')
         .eq('ot_numero', n)
         .maybeSingle()
 
@@ -1229,13 +1229,15 @@ export default function NuevoInforme() {
       setOtCargada(otData)
 
       // Cargar última asignación
-      const { data: asigData } = await supabase
+      // asignaciones enlaza por ot_id (FK a ots.id), no por ot_numero
+      const { data: asigData, error: eAsig } = await supabase
         .from('asignaciones')
-        .select('id,ot_numero,inspectores_asignados,supervisor,fecha_inspeccion,tipos_inspeccion,norma_ejecucion,norma_evaluacion,procedimientos,descripcion_actividad')
-        .eq('ot_numero', n)
+        .select('id,ot_id,inspectores_asignados,supervisor,fecha_inspeccion,tipos_inspeccion,norma_ejecucion,norma_evaluacion,procedimientos,descripcion_actividad')
+        .eq('ot_id', otData.id)
         .order('fecha_inspeccion', { ascending: false })
         .limit(1)
         .maybeSingle()
+      if (eAsig) console.warn('[NuevoInforme] asignaciones:', eAsig.message)
 
       setAsignacion(asigData || null)
 
