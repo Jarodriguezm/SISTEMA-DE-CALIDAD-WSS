@@ -62,24 +62,30 @@ export default function Supervisor() {
   async function cargarAsignaciones() {
     const nombre = usuario?.nombre || ''
     if (!nombre) return
-    const { data } = await supabase
+    // asignaciones enlaza por ot_id (FK a ots.id), no por ot_numero
+    const { data, error: eAsig } = await supabase
       .from('asignaciones')
-      .select('id,ot_numero,inspectores_asignados,fecha_inspeccion,tipos_inspeccion,estado,created_at')
+      .select('id,ot_id,inspectores_asignados,fecha_inspeccion,tipos_inspeccion,estado,created_at')
       .ilike('supervisor', `%${nombre}%`)
       .order('fecha_inspeccion', { ascending: false })
       .limit(100)
 
+    if (eAsig) console.warn('[Supervisor] asignaciones:', eAsig.message)
     if (!data) return
 
     // Enriquecer con datos de la OT
-    const nums = [...new Set(data.map(a => a.ot_numero).filter(Boolean))]
+    const ids = [...new Set(data.map(a => a.ot_id).filter(Boolean))]
     let otsMap = {}
-    if (nums.length) {
+    if (ids.length) {
       const { data: otsData } = await supabase
-        .from('ots').select('ot_numero,cliente,estado').in('ot_numero', nums)
-      ;(otsData || []).forEach(o => { otsMap[o.ot_numero] = o })
+        .from('ots').select('id,ot_numero,cliente,estado').in('id', ids)
+      ;(otsData || []).forEach(o => { otsMap[o.id] = o })
     }
-    setAsignaciones(data.map(a => ({ ...a, ot: otsMap[a.ot_numero] || {} })))
+    setAsignaciones(data.map(a => ({
+      ...a,
+      ot_numero: otsMap[a.ot_id]?.ot_numero || null,
+      ot:        otsMap[a.ot_id] || {},
+    })))
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
