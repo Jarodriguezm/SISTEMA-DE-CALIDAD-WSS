@@ -37,9 +37,10 @@ async function ejecutarHerramienta(nombre, args) {
       const hoy   = new Date().toISOString().slice(0, 10)
       const dias  = args.dias || 7
       const hasta = new Date(Date.now() + dias * 86400000).toISOString().slice(0, 10)
+      // asignaciones enlaza por ot_id (FK a ots.id), no por ot_numero
       let q = supabase
         .from('asignaciones')
-        .select('ot_numero, inspectores_asignados, fecha_inspeccion, hora, estado, tipos_inspeccion, supervisor, vehiculo')
+        .select('ot_id, inspectores_asignados, fecha_inspeccion, hora, estado, tipos_inspeccion, supervisor, vehiculo')
         .gte('fecha_inspeccion', hoy)
         .lte('fecha_inspeccion', hasta)
         .order('fecha_inspeccion', { ascending: true })
@@ -47,7 +48,20 @@ async function ejecutarHerramienta(nombre, args) {
       if (args.estado) q = q.eq('estado', args.estado)
       const { data, error } = await q
       if (error) throw new Error(error.message)
-      return data || []
+
+      // Traducir ot_id a ot_numero para que el chat muestre algo legible
+      const ids = [...new Set((data || []).map(a => a.ot_id).filter(Boolean))]
+      const mapa = {}
+      if (ids.length > 0) {
+        const { data: otsRows } = await supabase
+          .from('ots').select('id, ot_numero, cliente').in('id', ids)
+        ;(otsRows || []).forEach(o => { mapa[o.id] = o })
+      }
+      return (data || []).map(({ ot_id, ...a }) => ({
+        ot_numero: mapa[ot_id]?.ot_numero || null,
+        cliente:   mapa[ot_id]?.cliente   || null,
+        ...a,
+      }))
     }
 
     default:
