@@ -40,12 +40,8 @@ jobs:
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          if [ -z "$DB_URL" ]; then
-            echo "::error::Falta el secreto SUPABASE_DB_URL"
-            exit 1
-          fi
-          FECHA=$(date +%Y-%m-%d)
-          mkdir -p respaldo
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          pg_dump --version
 
           echo "Volcando esquema..."
           pg_dump "$DB_URL" --schema-only --no-owner --no-privileges \
