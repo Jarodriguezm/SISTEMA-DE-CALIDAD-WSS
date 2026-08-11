@@ -1,0 +1,52 @@
+# ============================================================
+# CI — verifica que el proyecto compile antes de desplegar
+# Se ejecuta en cada push y en cada pull request.
+# Si el build falla, Vercel no publica y el aviso llega por correo.
+# Costo: 0 (GitHub Actions es gratuito en repos públicos y da
+#           2.000 minutos al mes en privados).
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Compilar y auditar
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Compilar
+        run: npm run build
+
+      - name: Revisar vulnerabilidades
+        # No bloquea el despliegue, pero deja el reporte visible
+        continue-on-error: true
+        run: npm audit --omit=dev
+
+      - name: Verificar que no haya secretos en el código
+        run: |
+          echo "Buscando tokens expuestos..."
+          if grep -rEn "ghp_[A-Za-z0-9]{20,}|service_role.*ey[A-Za-z0-9_-]{20,}" \
+               --include="*.js" --include="*.jsx" --include="*.json" \
+               --include="*.yml" --include="*.sql" . \
+               | grep -v node_modules; then
+            echo "::error::Se encontraron credenciales en el código. No continuar."
+            exit 1
+          fi
+          echo "Sin secretos expuestos."
