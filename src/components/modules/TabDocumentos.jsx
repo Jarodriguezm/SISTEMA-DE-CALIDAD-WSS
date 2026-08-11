@@ -137,16 +137,19 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const progreso = Math.round((completadas / 12) * 100)
 
   // ── Celebración al completar las 12 etapas ────────────────────────────────
-  // Se dispara una sola vez por OT: la marca queda en la base (ot_celebradas),
-  // así que no se repite aunque otro usuario abra la OT después.
-  const clave = ot?.ot_numero ? `wss_celebrada_${ot.ot_numero}` : null
+  // El CORREO sale una sola vez por OT (marca en ot_celebradas).
+  // La ANIMACIÓN se muestra una vez por persona (marca en ot_celebracion_vista),
+  // para que todo el equipo alcance a verla y no solo el primero que entra.
+  const clave = ot?.ot_numero && usuario?.email
+    ? `wss_celebrada_${ot.ot_numero}_${usuario.email}`
+    : null
 
   useEffect(() => {
     if (!ot?.ot_numero || completadas < 12 || yaEvaluado.current) return
     yaEvaluado.current = true
 
-    // Marca local: evita el parpadeo si el usuario recarga la página
-    if (localStorage.getItem(clave)) return
+    // Marca local: evita el parpadeo si la persona recarga la página
+    if (clave && localStorage.getItem(clave)) return
 
     ;(async () => {
       try {
@@ -155,10 +158,9 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
         if (errCel) { console.warn('[celebracion]', errCel.message); return }
 
-        localStorage.setItem(clave, '1')
+        if (clave) localStorage.setItem(clave, '1')
 
-        // Solo animamos si esta fue la primera vez que se cerró la OT
-        if (data?.celebrada) {
+        if (data?.mostrar) {
           if (data.equipo) setEquipoCel(String(data.equipo).split(' · ').filter(Boolean))
           setCelebrar(true)
         }
@@ -166,7 +168,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         console.warn('[celebracion]', e.message)
       }
     })()
-  }, [completadas, ot?.ot_numero])
+  }, [completadas, ot?.ot_numero, usuario?.email])
 
   // Nombres para mostrar en la tarjeta de celebración
   const equipoOT = [ot?.comercial, ot?.supervisor]
