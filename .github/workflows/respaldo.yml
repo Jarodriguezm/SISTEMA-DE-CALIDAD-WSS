@@ -1,0 +1,73 @@
+# ============================================================
+# RESPALDO DIARIO DE LA BASE DE DATOS
+# Alternativa sin costo al plan Supabase Pro.
+# Genera un volcado completo cada día a las 06:00 UTC (02:00 Chile)
+# y lo guarda como artefacto de GitHub durante 90 días.
+#
+# CONFIGURACIÓN REQUERIDA (una sola vez):
+#   GitHub → Settings → Secrets and variables → Actions → New secret
+#   Nombre:  SUPABASE_DB_URL
+#   Valor:   la cadena de conexión de Supabase
+#            (Project Settings → Database → Connection string → URI)
+#
+# LIMITACIÓN HONESTA: esto NO reemplaza la recuperación a punto en
+# el tiempo del plan Pro. Si la base se corrompe a las 15:00, se
+# recupera el estado de las 02:00 y se pierde el día. Es mucho mejor
+# que nada, pero si el volumen de datos crece, conviene el plan Pro.
+# ============================================================
+name: Respaldo diario
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:        # permite ejecutarlo a mano cuando se quiera
+
+jobs:
+  respaldo:
+    name: Volcado de PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Instalar cliente PostgreSQL 17
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Generar respaldo
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Falta el secreto SUPABASE_DB_URL"
+            exit 1
+          fi
+          FECHA=$(date +%Y-%m-%d)
+          mkdir -p respaldo
+
+          echo "Volcando esquema..."
+          pg_dump "$DB_URL" --schema-only --no-owner --no-privileges \
+            > "respaldo/esquema_${FECHA}.sql"
+
+          echo "Volcando datos..."
+          pg_dump "$DB_URL" --data-only --no-owner --no-privileges \
+            --exclude-table-data='storage.*' --exclude-table-data='auth.*' \
+            > "respaldo/datos_${FECHA}.sql"
+
+          gzip respaldo/*.sql
+          ls -lh respaldo/
+
+      - name: Guardar respaldo
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-wss-${{ github.run_number }}
+          path: respaldo/
+          retention-days: 90
+
+      - name: Resumen
+        run: |
+          echo "### Respaldo completado" >> $GITHUB_STEP_SUMMARY
+          echo "Fecha: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "Descargable desde la pestaña Artifacts durante 90 días." >> $GITHUB_STEP_SUMMARY
