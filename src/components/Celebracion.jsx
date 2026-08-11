@@ -12,9 +12,12 @@ export default function Celebracion({ activo, otNumero, cliente, equipo = [], on
   const rafRef    = useRef(null)
   const [visible, setVisible] = useState(false)
 
+  // 1) Montar el overlay. Recién en el render siguiente existe el <canvas>.
+  useEffect(() => { if (activo) setVisible(true) }, [activo])
+
+  // 2) Animar, ya con el canvas en el DOM.
   useEffect(() => {
-    if (!activo) return
-    setVisible(true)
+    if (!visible) return
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -142,7 +145,7 @@ export default function Celebracion({ activo, otNumero, cliente, equipo = [], on
       cancelAnimationFrame(rafRef.current)
       window.removeEventListener('resize', dimensionar)
     }
-  }, [activo])
+  }, [visible])
 
   if (!visible) return null
 
