@@ -405,12 +405,14 @@ function SeccionCargaInforme({ ot }) {
     setSupervisores(lista)
 
     // Intentar preseleccionar el supervisor de la última asignación de esta OT
-    const { data: asigs } = await supabase
+    // asignaciones enlaza por ot_id (FK a ots.id), no por ot_numero
+    const { data: asigs, error: eAsig } = await supabase
       .from('asignaciones')
       .select('supervisor')
-      .eq('ot_numero', ot.ot_numero)
+      .eq('ot_id', ot.id)
       .order('created_at', { ascending: false })
       .limit(1)
+    if (eAsig) console.warn('[TabInformes] asignaciones:', eAsig.message)
     const supNombre = asigs?.[0]?.supervisor || ot.supervisor || null
     if (supNombre && lista.length > 0) {
       const normalizar = str => str?.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() || ''
