@@ -20,8 +20,10 @@ export default function Celebracion({ activo, otNumero, cliente, equipo = [], on
     if (!visible) return
 
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) { console.warn('[celebracion] no hay canvas'); return }
     const ctx = canvas.getContext('2d')
+    if (!ctx) { console.warn('[celebracion] sin contexto 2d'); return }
+    console.log('[celebracion] animacion iniciada')
 
     const dpr = window.devicePixelRatio || 1
     function dimensionar() {
@@ -183,12 +185,18 @@ export default function Celebracion({ activo, otNumero, cliente, equipo = [], on
 
 const S = {
   overlay: {
-    position: 'fixed', inset: 0, zIndex: 900,
-    background: 'rgba(8,18,32,.82)',
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    width: '100vw', height: '100vh', zIndex: 9000,
+    background: 'rgba(8,18,32,.86)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: 20,
   },
-  canvas: { position: 'absolute', inset: 0, pointerEvents: 'none' },
+  // fixed y no absolute: así no depende de la caja del overlay
+  canvas: {
+    position: 'fixed', top: 0, left: 0,
+    width: '100vw', height: '100vh',
+    pointerEvents: 'none', zIndex: 1,
+  },
   tarjeta: {
     position: 'relative', zIndex: 2, textAlign: 'center',
     background: 'rgba(255,255,255,.97)', borderRadius: 22,
