@@ -58,9 +58,11 @@ export default function Informes() {
       //    El filtro por nombre se hace en el cliente: un ilike con nombres
       //    que traen tildes, comas o paréntesis rompe el parser de PostgREST
       //    y devolvía un 400 silencioso.
+      //    OJO: asignaciones NO tiene ot_numero, enlaza por ot_id (FK a ots.id).
+      //    Pedir ot_numero aquí devolvía un 400 y la lista quedaba vacía.
       const { data: asigsRaw, error: errAsig } = await supabase
         .from('asignaciones')
-        .select('id,ot_numero,inspectores_asignados,supervisor,fecha_inspeccion,tipos_inspeccion')
+        .select('id,ot_id,inspectores_asignados,supervisor,fecha_inspeccion,tipos_inspeccion')
         .order('fecha_inspeccion', { ascending: false })
         .limit(300)
 
@@ -71,18 +73,22 @@ export default function Informes() {
         ? (asigsRaw || []).filter(a =>
             (a.inspectores_asignados || '').toLowerCase().includes(nom))
         : (asigsRaw || [])
-      setAsig(asigs.slice(0, 60))
 
-      // 2. Enriquecer con nombre de cliente desde OTs
-      const otNums = [...new Set((asigs || []).map(a => a.ot_numero).filter(Boolean))]
-      let clienteMap = {}
-      if (otNums.length > 0) {
-        const { data: otsData } = await supabase
-          .from('ots').select('ot_numero,cliente').in('ot_numero', otNums)
-        ;(otsData || []).forEach(o => { clienteMap[o.ot_numero] = o.cliente })
+      // 2. Resolver ot_numero y cliente desde la tabla ots
+      const otIds = [...new Set((asigs || []).map(a => a.ot_id).filter(Boolean))]
+      const otMap = {}
+      if (otIds.length > 0) {
+        const { data: otsData, error: eOts } = await supabase
+          .from('ots').select('id,ot_numero,cliente').in('id', otIds)
+        if (eOts) console.warn('[Informes] ots:', eOts.message)
+        ;(otsData || []).forEach(o => { otMap[o.id] = o })
       }
-      // Inyectar cliente en asignaciones
-      setAsig((asigs || []).map(a => ({ ...a, cliente: clienteMap[a.ot_numero] || '' })))
+
+      setAsig((asigs || []).slice(0, 60).map(a => ({
+        ...a,
+        ot_numero: otMap[a.ot_id]?.ot_numero || null,
+        cliente:   otMap[a.ot_id]?.cliente   || '',
+      })))
 
       // 3. Informes ya creados (puede no existir la tabla aún)
       const { data: infs, error: eInf } = await supabase
