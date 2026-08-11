@@ -8,9 +8,10 @@
 //   ot   — objeto OT con ot.carpetas_drive (JSONB con URLs por etapa)
 // ============================================================
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import Celebracion from '../Celebracion'
 
 // ── Helpers para visor de documentos ─────────────────────────────────────────
 
@@ -103,6 +104,9 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const [mensajeExito, setMensajeExito] = useState('')
   const [error, setError] = useState('')
   const [visorDoc, setVisorDoc] = useState(null)   // { nombre, proxyUrl, driveUrl, ext }
+  const [celebrar, setCelebrar] = useState(false)  // fuegos artificiales al llegar a 12/12
+  const [equipoCel, setEquipoCel] = useState([])   // nombres que devuelve la base
+  const yaEvaluado = useRef(false)
 
   // Mapa de docs por tipo (clave real de documentos_ot)
   const docsPorTipo = {}
@@ -131,6 +135,43 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   // Contar etapas completadas y calcular %
   const completadas = ETAPAS.filter(e => estadoEtapa(e) === 'completa').length
   const progreso = Math.round((completadas / 12) * 100)
+
+  // ── Celebración al completar las 12 etapas ────────────────────────────────
+  // Se dispara una sola vez por OT: la marca queda en la base (ot_celebradas),
+  // así que no se repite aunque otro usuario abra la OT después.
+  const clave = ot?.ot_numero ? `wss_celebrada_${ot.ot_numero}` : null
+
+  useEffect(() => {
+    if (!ot?.ot_numero || completadas < 12 || yaEvaluado.current) return
+    yaEvaluado.current = true
+
+    // Marca local: evita el parpadeo si el usuario recarga la página
+    if (localStorage.getItem(clave)) return
+
+    ;(async () => {
+      try {
+        const { data, error: errCel } = await supabase
+          .rpc('fn_celebrar_ot', { p_ot: ot.ot_numero })
+
+        if (errCel) { console.warn('[celebracion]', errCel.message); return }
+
+        localStorage.setItem(clave, '1')
+
+        // Solo animamos si esta fue la primera vez que se cerró la OT
+        if (data?.celebrada) {
+          if (data.equipo) setEquipoCel(String(data.equipo).split(' · ').filter(Boolean))
+          setCelebrar(true)
+        }
+      } catch (e) {
+        console.warn('[celebracion]', e.message)
+      }
+    })()
+  }, [completadas, ot?.ot_numero])
+
+  // Nombres para mostrar en la tarjeta de celebración
+  const equipoOT = [ot?.comercial, ot?.supervisor]
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
 
   async function handleSubirArchivo(etapa, archivo, driveFolderUrl = null) {
     if (!archivo || !ot || !etapa.tipo) return
@@ -287,6 +328,14 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
   return (
     <div>
+      <Celebracion
+        activo={celebrar}
+        otNumero={ot?.ot_numero}
+        cliente={ot?.cliente}
+        equipo={equipoCel.length ? equipoCel : equipoOT}
+        onCerrar={() => setCelebrar(false)}
+      />
+
       {/* Progreso general */}
       <div style={S.headerProgreso}>
         <div style={{ flex: 1 }}>
