@@ -82,10 +82,25 @@ export default async function handler(req, res) {
   }
 
   // Autorización: token compartido, no la key de Supabase
-  const esperado = process.env.WSS_MAIL_TOKEN
-  const recibido = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if (!esperado || recibido !== esperado) {
-    return res.status(401).json({ ok: false, error: 'No autorizado' })
+  const esperado = (process.env.WSS_MAIL_TOKEN || '').trim()
+  const recibido = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+
+  if (!esperado) {
+    // La variable no llegó al build: falta crearla o falta redesplegar
+    return res.status(500).json({
+      ok: false,
+      error: 'WSS_MAIL_TOKEN no esta configurada en el servidor',
+    })
+  }
+
+  if (recibido !== esperado) {
+    // Pistas sin revelar el valor
+    return res.status(401).json({
+      ok: false,
+      error: 'Token incorrecto',
+      largo_esperado: esperado.length,
+      largo_recibido: recibido.length,
+    })
   }
 
   try {
