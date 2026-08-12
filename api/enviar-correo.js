@@ -66,22 +66,60 @@ function remitenteSeguro(from) {
   return nombre ? `${encabezadoUtf8(nombre)} <${correo}>` : `<${correo}>`
 }
 
-function armarMensaje({ from, to, cc, bcc, subject, html }) {
-  const lineas = [
+// Parte el base64 en líneas de 76 caracteres, como exige el estándar MIME
+function quebrar(b64) {
+  return String(b64).replace(/\s+/g, '').replace(/(.{76})/g, '$1\r\n')
+}
+
+function armarMensaje({ from, to, cc, bcc, subject, html, adjuntos }) {
+  const cabecera = [
     `From: ${remitenteSeguro(from)}`,
     `To: ${to.join(', ')}`,
   ]
-  if (cc?.length)  lineas.push(`Cc: ${cc.join(', ')}`)
-  if (bcc?.length) lineas.push(`Bcc: ${bcc.join(', ')}`)
-  lineas.push(
-    `Subject: ${encabezadoUtf8(subject)}`,
-    'MIME-Version: 1.0',
+  if (cc?.length)  cabecera.push(`Cc: ${cc.join(', ')}`)
+  if (bcc?.length) cabecera.push(`Bcc: ${bcc.join(', ')}`)
+  cabecera.push(`Subject: ${encabezadoUtf8(subject)}`, 'MIME-Version: 1.0')
+
+  // Sin adjuntos: mensaje simple
+  if (!adjuntos?.length) {
+    return [
+      ...cabecera,
+      'Content-Type: text/html; charset="UTF-8"',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      html,
+    ].join('\r\n')
+  }
+
+  // Con adjuntos: multipart/mixed
+  const sep = `wss_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
+  const partes = [
+    ...cabecera,
+    `Content-Type: multipart/mixed; boundary="${sep}"`,
+    '',
+    `--${sep}`,
     'Content-Type: text/html; charset="UTF-8"',
     'Content-Transfer-Encoding: 8bit',
     '',
     html,
-  )
-  return lineas.join('\r\n')
+  ]
+
+  for (const a of adjuntos) {
+    const nombre = a.filename || 'documento.pdf'
+    const tipo   = a.mime_type || 'application/pdf'
+    partes.push(
+      '',
+      `--${sep}`,
+      `Content-Type: ${tipo}; name="${nombre}"`,
+      `Content-Disposition: attachment; filename="${nombre}"`,
+      'Content-Transfer-Encoding: base64',
+      '',
+      quebrar(a.content_base64),
+    )
+  }
+
+  partes.push('', `--${sep}--`, '')
+  return partes.join('\r\n')
 }
 
 // ── Handler ──────────────────────────────────────────────────
@@ -130,12 +168,22 @@ export default async function handler(req, res) {
       })
     }
 
-    const { to, cc, bcc, subject, html } = body
+    const { to, cc, bcc, subject, html, adjuntos } = body
 
     const destinos = Array.isArray(to) ? to.filter(Boolean) : (to ? [to] : [])
     if (destinos.length === 0) return res.status(400).json({ ok: false, error: 'Falta "to"' })
     if (!subject)              return res.status(400).json({ ok: false, error: 'Falta "subject"' })
     if (!html)                 return res.status(400).json({ ok: false, error: 'Falta "html"' })
+
+    // Adjuntos: [{ filename, content_base64, mime_type }]
+    const lista = Array.isArray(adjuntos) ? adjuntos.filter(a => a?.content_base64) : []
+    const pesoMB = lista.reduce((n, a) => n + a.content_base64.length, 0) * 0.75 / 1048576
+    if (pesoMB > 3.5) {
+      return res.status(413).json({
+        ok: false,
+        error: `Los adjuntos pesan ${pesoMB.toFixed(1)} MB. El máximo por envío es 3.5 MB.`,
+      })
+    }
 
     // Gmail permite hasta 100 destinatarios por mensaje
     if (destinos.length > 100) {
@@ -152,6 +200,7 @@ export default async function handler(req, res) {
       bcc: Array.isArray(bcc) ? bcc : undefined,
       subject,
       html,
+      adjuntos: lista,
     }))
 
     const envio = await fetch(GMAIL_URL, {
@@ -174,7 +223,11 @@ export default async function handler(req, res) {
       })
     }
 
-    return res.status(200).json({ ok: true, id: data.id, destinatarios: destinos.length })
+    return res.status(200).json({
+      ok: true, id: data.id,
+      destinatarios: destinos.length,
+      adjuntos: lista.length,
+    })
   } catch (e) {
     console.error('[enviar-correo]', e)
     return res.status(500).json({ ok: false, error: e.message })
