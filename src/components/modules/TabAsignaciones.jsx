@@ -494,6 +494,78 @@ const btnModal = {
 
 // ─── Tarjeta de asignación ────────────────────────────────────────────────────
 function TarjetaAsignacion({ asig, ot, onVerPDF }) {
+  const [envio, setEnvio] = useState(null)   // null | 'enviando' | 'ok' | mensaje de error
+
+  // Reenvía el detalle de la asignación por correo a los inspectores.
+  // Antes solo existía WhatsApp: si el inspector no lo veía, no había respaldo.
+  async function reenviarCorreo() {
+    setEnvio('enviando')
+    try {
+      const nombres = (asig.inspectores_asignados || '')
+        .split(/\s*[·,]\s*/).map(s => s.trim()).filter(Boolean)
+
+      const { data: users, error: eUsr } = await supabase
+        .from('usuarios').select('nombre, apellido, email').not('email', 'is', null)
+      if (eUsr) throw eUsr
+
+      const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+      const destinos = (users || [])
+        .filter(u => nombres.some(n => {
+          const completo = norm(`${u.nombre} ${u.apellido}`)
+          return completo && (completo.includes(norm(n)) || norm(n).includes(completo))
+        }))
+        .map(u => u.email)
+
+      if (destinos.length === 0) throw new Error('No se encontró el correo de los inspectores')
+
+      const fila = (k, v) => v
+        ? `<tr><td style="padding:7px 12px 7px 0;color:#64748B;font-size:13px;white-space:nowrap">${k}</td>
+             <td style="padding:7px 0;color:#0E2A45;font-size:14px;font-weight:600">${v}</td></tr>`
+        : ''
+
+      const html = `
+<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#0F172A">
+  <div style="background:#0E2A45;padding:22px 28px;border-radius:12px 12px 0 0">
+    <div style="color:#D4A017;font-size:11px;font-weight:800;letter-spacing:1.2px">ASIGNACIÓN DE ACTIVIDADES</div>
+    <div style="color:#fff;font-size:20px;font-weight:800;margin-top:6px">OT ${ot?.ot_numero || ''}</div>
+    <div style="color:rgba(255,255,255,.8);font-size:14px;margin-top:3px">${ot?.cliente || ''}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 12px 12px;padding:22px 28px">
+    <table style="border-collapse:collapse;width:100%">
+      ${fila('Inspector(es)',  asig.inspectores_asignados)}
+      ${fila('Supervisor',     asig.supervisor)}
+      ${fila('Fecha',          asig.fecha_inspeccion)}
+      ${fila('Hora',           asig.hora)}
+      ${fila('Vehículo',       asig.vehiculo)}
+      ${fila('Norma ejec.',    asig.norma_ejecucion)}
+      ${fila('Procedimientos', asig.procedimientos)}
+      ${fila('Actividad',      asig.descripcion_actividad)}
+    </table>
+    <p style="margin:20px 0 0;font-size:13px;color:#64748B">
+      REG-DII-036 · El detalle completo está en el portal, OT ${ot?.ot_numero || ''}.
+    </p>
+  </div>
+</div>`
+
+      const { data: r, error: eEnv } = await supabase.functions.invoke('enviar-email', {
+        body: {
+          to: destinos,
+          subject: `[WSS] Asignación OT ${ot?.ot_numero || ''} — ${ot?.cliente || ''}`,
+          html,
+        },
+      })
+      if (eEnv) throw eEnv
+      if (r?.ok === false) throw new Error(r.error || 'Envío rechazado')
+
+      setEnvio('ok')
+      setTimeout(() => setEnvio(null), 4000)
+    } catch (e) {
+      console.warn('[TabAsignaciones] reenviar correo:', e.message)
+      setEnvio(e.message)
+      setTimeout(() => setEnvio(null), 6000)
+    }
+  }
+
   return (
     <div style={{ background:'#fff', border:'1px solid #e8e8e8', borderLeft:'4px solid #1A3A5C', borderRadius:10, padding:'14px 16px', marginBottom:10 }}>
       <div style={{ display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:10 }}>
@@ -552,11 +624,25 @@ function TarjetaAsignacion({ asig, ot, onVerPDF }) {
             💬 Reenviar WhatsApp
           </a>
         )}
+        <button onClick={reenviarCorreo} disabled={envio === 'enviando'}
+          style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, padding:'5px 14px', borderRadius:20,
+                   background: envio === 'ok' ? '#059669' : '#185FA5', color:'#fff', fontWeight:'bold',
+                   border:'none', cursor: envio === 'enviando' ? 'wait' : 'pointer', opacity: envio === 'enviando' ? .7 : 1 }}>
+          {envio === 'enviando' ? '⏳ Enviando…' : envio === 'ok' ? '✅ Correo enviado' : '✉️ Reenviar correo'}
+        </button>
+
         <button onClick={() => onVerPDF(asig)}
           style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, padding:'5px 14px', borderRadius:20, background:'#1A3A5C', color:'#fff', fontWeight:'bold', border:'none', cursor:'pointer' }}>
           📄 Ver documento
         </button>
       </div>
+
+      {envio && envio !== 'enviando' && envio !== 'ok' && (
+        <div style={{ marginTop:8, fontSize:12, color:'#B91C1C', background:'#FEF2F2',
+                      border:'1px solid #FECACA', borderRadius:6, padding:'6px 10px' }}>
+          No se pudo enviar: {envio}
+        </div>
+      )}
     </div>
   )
 }
@@ -933,8 +1019,11 @@ export default function TabAsignaciones({ ot, onActualizar }) {
                 return (
                   <label key={eq.id} style={checkRowStyle(sel)}>
                     <input type="checkbox" checked={sel} onChange={()=>toggle('equiposSeleccionados',val)} style={{width:'auto',cursor:'pointer'}} />
-                    <span style={{flex:1,fontSize:12}}>{eq.equipo_instrumento}</span>
-                    <span style={{fontSize:10,color:'#aaa',fontFamily:'monospace'}}>{eq.codigo}</span>
+                    <span style={{flex:1,fontSize:13}}>{eq.equipo_instrumento}</span>
+                    <span style={{
+                      fontSize:12, fontWeight:700, color:'#334155', fontFamily:'monospace',
+                      background:'#F1F5F9', padding:'2px 7px', borderRadius:5, whiteSpace:'nowrap',
+                    }}>{eq.codigo}</span>
                   </label>
                 )
               })}
