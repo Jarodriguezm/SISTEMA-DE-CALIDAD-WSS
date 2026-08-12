@@ -547,11 +547,30 @@ function TarjetaAsignacion({ asig, ot, onVerPDF }) {
   </div>
 </div>`
 
+      // Adjunta el REG-DII-036 en PDF: en terreno muchas veces no hay señal
+      // para abrir el portal, pero el adjunto queda en el teléfono.
+      let adjuntos = []
+      try {
+        const b64 = await generatePDFBase64(asig, ot)
+        if (b64 && b64.length > 100) {
+          const fecha = asig.fecha_inspeccion || new Date().toISOString().slice(0, 10)
+          adjuntos = [{
+            filename: `REG-DII-036_${ot?.ot_numero || 'OT'}_${fecha}.pdf`,
+            content_base64: b64,
+            mime_type: 'application/pdf',
+          }]
+        }
+      } catch (ePdf) {
+        // Si el PDF falla, el correo igual sale: es mejor avisar sin adjunto
+        console.warn('[TabAsignaciones] PDF no generado:', ePdf.message)
+      }
+
       const { data: r, error: eEnv } = await supabase.functions.invoke('enviar-email', {
         body: {
           to: destinos,
           subject: `[WSS] Asignación OT ${ot?.ot_numero || ''} — ${ot?.cliente || ''}`,
           html,
+          adjuntos,
         },
       })
       if (eEnv) throw eEnv
