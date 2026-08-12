@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import { urlFirmadaDrive } from '../../lib/documentos'
 import Celebracion from '../Celebracion'
 
 // ── Helpers para visor de documentos ─────────────────────────────────────────
@@ -68,9 +69,10 @@ function tieneArchivoViewable(doc) {
 
 // URL proxy para servir el archivo via backend (OAuth2)
 // Todo pasa por proxy-pdf: PDF/imágenes inline, MSG/DOCX/etc. como descarga
-function getProxyUrl(doc) {
+// Pide un permiso firmado antes de abrir. Devuelve una promesa.
+async function getProxyUrl(doc) {
   const fileId = getDriveFileId(doc)
-  if (fileId) return `/api/drive/proxy-pdf?fileId=${fileId}`
+  if (fileId) return await urlFirmadaDrive(fileId)
   const url = doc.drive_url || ''
   if (url.includes('.supabase.co/storage/')) return url
   return null
@@ -96,8 +98,14 @@ const ETAPAS = [
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+// Etapas que puede ver un inspector: solo su propio trabajo.
+// El resto (cotización, OC, envío al cliente, SDF, factura) es comercial
+// y queda fuera de su alcance.
+const ETAPAS_INSPECTOR = new Set(['07', '08', '09'])
+
 export default function TabDocumentos({ docs = [], ot, onActualizar }) {
-  const { usuario, esAuditor } = useAuth()
+  const { usuario, esAuditor, esInspector } = useAuth()
+  const soloInspector = typeof esInspector === 'function' && esInspector()
   const [subiendo, setSubiendo] = useState(null)   // tipo de etapa subiendo
   const [progresoMulti, setProgresoMulti] = useState(null) // { actual, total } para subidas múltiples
   const [sincronizando, setSincronizando] = useState(false)
@@ -137,16 +145,19 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
   const progreso = Math.round((completadas / 12) * 100)
 
   // ── Celebración al completar las 12 etapas ────────────────────────────────
-  // Se dispara una sola vez por OT: la marca queda en la base (ot_celebradas),
-  // así que no se repite aunque otro usuario abra la OT después.
-  const clave = ot?.ot_numero ? `wss_celebrada_${ot.ot_numero}` : null
+  // El CORREO sale una sola vez por OT (marca en ot_celebradas).
+  // La ANIMACIÓN se muestra una vez por persona (marca en ot_celebracion_vista),
+  // para que todo el equipo alcance a verla y no solo el primero que entra.
+  const clave = ot?.ot_numero && usuario?.email
+    ? `wss_celebrada_${ot.ot_numero}_${usuario.email}`
+    : null
 
   useEffect(() => {
     if (!ot?.ot_numero || completadas < 12 || yaEvaluado.current) return
     yaEvaluado.current = true
 
-    // Marca local: evita el parpadeo si el usuario recarga la página
-    if (localStorage.getItem(clave)) return
+    // Marca local: evita el parpadeo si la persona recarga la página
+    if (clave && localStorage.getItem(clave)) return
 
     ;(async () => {
       try {
@@ -155,10 +166,9 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
 
         if (errCel) { console.warn('[celebracion]', errCel.message); return }
 
-        localStorage.setItem(clave, '1')
+        if (clave) localStorage.setItem(clave, '1')
 
-        // Solo animamos si esta fue la primera vez que se cerró la OT
-        if (data?.celebrada) {
+        if (data?.mostrar) {
           if (data.equipo) setEquipoCel(String(data.equipo).split(' · ').filter(Boolean))
           setCelebrar(true)
         }
@@ -166,7 +176,7 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         console.warn('[celebracion]', e.message)
       }
     })()
-  }, [completadas, ot?.ot_numero])
+  }, [completadas, ot?.ot_numero, usuario?.email])
 
   // Nombres para mostrar en la tarjeta de celebración
   const equipoOT = [ot?.comercial, ot?.supervisor]
@@ -456,9 +466,20 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         </div>
       )}
 
+      {soloInspector && (
+        <div style={{
+          background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '4px solid #B8860B',
+          borderRadius: 8, padding: '10px 14px', margin: '0 0 14px',
+          fontSize: 13, color: '#475569',
+        }}>
+          Se muestran solo las etapas de tu alcance. Las etapas comerciales
+          (cotización, orden de compra, facturación) las gestiona el área comercial.
+        </div>
+      )}
+
       {/* Grid de etapas */}
       <div style={S.grid}>
-        {ETAPAS.map(etapa => {
+        {ETAPAS.filter(e => !soloInspector || ETAPAS_INSPECTOR.has(e.num)).map(etapa => {
           const estado = estadoEtapa(etapa)
           const carpetaInfo = carpetas[etapa.num]
           const etapaDocs = docsPorTipo[etapa.tipo] || []
@@ -476,11 +497,16 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               onSubirMultiple={(archivos) => handleSubirMultiples(etapa, archivos, carpetaInfo?.url)}
               onVincularDrive={(url) => handleVincularDrive(etapa, url)}
               soloLectura={esAuditor()}
-              onVerDoc={(doc) => {
-                const proxyUrl = getProxyUrl(doc)
+              onVerDoc={async (doc) => {
                 const driveUrl = getDriveOpenUrl(doc)
                 const ext      = getExt(doc.nombre_archivo)
-                if (proxyUrl || driveUrl) setVisorDoc({ nombre: doc.nombre_archivo, proxyUrl, driveUrl, ext })
+                try {
+                  const proxyUrl = await getProxyUrl(doc)
+                  if (proxyUrl || driveUrl) setVisorDoc({ nombre: doc.nombre_archivo, proxyUrl, driveUrl, ext })
+                } catch (e) {
+                  setError(e.message)
+                  setTimeout(() => setError(''), 5000)
+                }
               }}
             />
           )
