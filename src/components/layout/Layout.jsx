@@ -136,7 +136,7 @@ const NAV_ITEMS = [
   { id: 'informes',      icon: 'Informes',      label: 'Informes DII',       ruta: '/informes',         rol: null },
   { id: 'personal',      icon: 'Usuarios',      label: 'Personal',           ruta: '/personal',         rol: 'adminOSup' },
   { id: 'supervisor',    icon: 'Supervisor',    label: 'Panel Supervisor',   ruta: '/supervisor',       rol: 'adminOSup' },
-  { id: 'auditoria',     icon: 'Auditoria',     label: 'Auditoría',          ruta: '/auditoria',        rol: null },
+  { id: 'auditoria',     icon: 'Auditoria',     label: 'Auditoría',          ruta: '/auditoria',        rol: 'noInspector' },
 ]
 
 const NAV_ADMIN = [
