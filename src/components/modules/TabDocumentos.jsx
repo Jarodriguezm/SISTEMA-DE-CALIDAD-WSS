@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import { urlFirmadaDrive } from '../../lib/documentos'
 import Celebracion from '../Celebracion'
 
 // ── Helpers para visor de documentos ─────────────────────────────────────────
@@ -68,9 +69,10 @@ function tieneArchivoViewable(doc) {
 
 // URL proxy para servir el archivo via backend (OAuth2)
 // Todo pasa por proxy-pdf: PDF/imágenes inline, MSG/DOCX/etc. como descarga
-function getProxyUrl(doc) {
+// Pide un permiso firmado antes de abrir. Devuelve una promesa.
+async function getProxyUrl(doc) {
   const fileId = getDriveFileId(doc)
-  if (fileId) return `/api/drive/proxy-pdf?fileId=${fileId}`
+  if (fileId) return await urlFirmadaDrive(fileId)
   const url = doc.drive_url || ''
   if (url.includes('.supabase.co/storage/')) return url
   return null
@@ -495,11 +497,16 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
               onSubirMultiple={(archivos) => handleSubirMultiples(etapa, archivos, carpetaInfo?.url)}
               onVincularDrive={(url) => handleVincularDrive(etapa, url)}
               soloLectura={esAuditor()}
-              onVerDoc={(doc) => {
-                const proxyUrl = getProxyUrl(doc)
+              onVerDoc={async (doc) => {
                 const driveUrl = getDriveOpenUrl(doc)
                 const ext      = getExt(doc.nombre_archivo)
-                if (proxyUrl || driveUrl) setVisorDoc({ nombre: doc.nombre_archivo, proxyUrl, driveUrl, ext })
+                try {
+                  const proxyUrl = await getProxyUrl(doc)
+                  if (proxyUrl || driveUrl) setVisorDoc({ nombre: doc.nombre_archivo, proxyUrl, driveUrl, ext })
+                } catch (e) {
+                  setError(e.message)
+                  setTimeout(() => setError(''), 5000)
+                }
               }}
             />
           )
