@@ -187,43 +187,73 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
 
       if (err) throw err
 
-      // ── Enviar email a cada inspector vía Edge Function ──────────────────
+      // ── Aviso por correo a los inspectores asignados ─────────────────────
+      // Antes apuntaba a 'send-assignment-email' en OTRO proyecto de Supabase:
+      // la función no existía y el aviso nunca salió. Ahora usa 'enviar-email',
+      // invocada con el cliente (resuelve URL y credenciales solo).
       let emailsEnviados = 0
       let emailError = null
-      try {
-        const supabaseUrl = 'https://ixqadaanxkwdoqvtpbkw.supabase.co'
-        const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || ''
-        const edgeRes = await fetch(
-          `${supabaseUrl}/functions/v1/send-assignment-email`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${anonKey}`,
-              'apikey': anonKey,
+
+      const destinatarios = form.inspectoresSeleccionados
+        .map(i => i.email)
+        .filter(Boolean)
+
+      if (destinatarios.length === 0) {
+        emailError = 'Los inspectores seleccionados no tienen correo registrado'
+      } else {
+        try {
+          const nombres = form.inspectoresSeleccionados
+            .map(i => i.nombre_completo).filter(Boolean).join(', ')
+
+          const fila = (etiqueta, valor) => valor
+            ? `<tr>
+                 <td style="padding:7px 12px 7px 0;color:#64748B;font-size:13px;white-space:nowrap">${etiqueta}</td>
+                 <td style="padding:7px 0;color:#0E2A45;font-size:14px;font-weight:600">${valor}</td>
+               </tr>`
+            : ''
+
+          const html = `
+<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#0F172A">
+  <div style="background:#0E2A45;padding:22px 28px;border-radius:12px 12px 0 0">
+    <div style="color:#D4A017;font-size:11px;font-weight:800;letter-spacing:1.2px">NUEVA ASIGNACIÓN</div>
+    <div style="color:#fff;font-size:20px;font-weight:800;margin-top:6px">OT ${ot.ot_numero}</div>
+    <div style="color:rgba(255,255,255,.8);font-size:14px;margin-top:3px">${ot.cliente || ''}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 12px 12px;padding:22px 28px">
+    <p style="margin:0 0 16px;font-size:14px;color:#334155">
+      ${nombres}, se te asignó la siguiente actividad:
+    </p>
+    <table style="border-collapse:collapse;width:100%">
+      ${fila('Fecha',        form.fechaInspeccion)}
+      ${fila('Hora',         form.hora)}
+      ${fila('Supervisor',   form.supervisor || nombreCompleto)}
+      ${fila('Tipo',         tiposStr)}
+      ${fila('Procedimientos', procedimientosStr)}
+      ${fila('Vehículo',     form.vehiculo)}
+      ${fila('Actividad',    form.descripcionActividad)}
+    </table>
+    <p style="margin:20px 0 0;font-size:13px;color:#64748B">
+      El detalle completo está en el portal, en la OT ${ot.ot_numero}.
+    </p>
+  </div>
+</div>`
+
+          const { data: envio, error: errEnvio } = await supabase.functions.invoke('enviar-email', {
+            body: {
+              to: destinatarios,
+              subject: `[WSS] Asignación OT ${ot.ot_numero} — ${ot.cliente || ''}`,
+              html,
             },
-            body: JSON.stringify({
-              inspectores: form.inspectoresSeleccionados.map(i => ({
-                nombre_completo: i.nombre_completo,
-                email: i.email,
-              })),
-              ot_numero: ot.ot_numero,
-              cliente: ot.cliente,
-              fecha_inspeccion: form.fechaInspeccion,
-              hora: form.hora,
-              supervisor: form.supervisor || nombreCompleto,
-              descripcion_actividad: form.descripcionActividad,
-              tipos_inspeccion: tiposStr || null,
-              procedimientos: procedimientosStr || null,
-              vehiculo: form.vehiculo || null,
-            }),
-          }
-        )
-        const edgeData = await edgeRes.json()
-        emailsEnviados = edgeData.enviados || 0
-        if (!edgeData.ok) emailError = edgeData.error
-      } catch (e) {
-        emailError = e.message
+          })
+
+          if (errEnvio) throw errEnvio
+          if (envio?.ok === false) throw new Error(envio.error || 'Envío rechazado')
+
+          emailsEnviados = destinatarios.length
+        } catch (e) {
+          emailError = e.message
+          console.warn('[ModalAsignarInspector] correo:', e.message)
+        }
       }
 
       setExito({
