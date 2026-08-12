@@ -105,6 +105,22 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
+
+    // Modo diagnóstico: muestra qué credenciales ve el servidor, sin revelarlas
+    if (body.diagnostico === true) {
+      const rec = (v) => v
+        ? { presente: true, largo: v.length, inicio: v.slice(0, 8) + '...' }
+        : { presente: false }
+      return res.status(200).json({
+        ok: true,
+        modo: 'diagnostico',
+        client_id:     rec(process.env.GOOGLE_OAUTH_CLIENT_ID),
+        client_secret: rec(process.env.GOOGLE_OAUTH_CLIENT_SECRET),
+        refresh_token: rec(process.env.GOOGLE_OAUTH_REFRESH_TOKEN),
+        mail_from:     process.env.WSS_MAIL_FROM || '(sin definir)',
+      })
+    }
+
     const { to, cc, bcc, subject, html } = body
 
     const destinos = Array.isArray(to) ? to.filter(Boolean) : (to ? [to] : [])
