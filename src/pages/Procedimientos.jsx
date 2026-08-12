@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { urlFirmadaDrive } from '../lib/documentos'
 
 // Carpeta raíz de procedimientos en Drive
 const FOLDER_ID = '1D4khmD9N_LOqUxFnuWCeJh-QL0LcE5ys'
@@ -14,11 +15,7 @@ function iconoArchivo(mimeType, nombre) {
   return '📄'
 }
 
-// URL de preview: usamos nuestro proxy para evitar restricciones de iframe de Google
-function previewUrl(file) {
-  if (!file?.id) return null
-  return `/api/drive/proxy-pdf?fileId=${file.id}`
-}
+// La URL de preview ahora se pide firmada al backend (ver src/lib/documentos.js)
 
 export default function Procedimientos() {
   const [cargando, setCargando]   = useState(true)
@@ -28,6 +25,19 @@ export default function Procedimientos() {
   const [catActiva, setCatActiva] = useState('__raiz__')
   const [busqueda, setBusqueda]   = useState('')
   const [visor, setVisor]         = useState(null)  // archivo seleccionado
+  const [visorUrl, setVisorUrl]   = useState('')    // URL firmada del archivo abierto
+
+  // Al abrir un archivo, pide el permiso firmado
+  async function abrirArchivo(f) {
+    setVisor(f); setVisorUrl('')
+    try {
+      setVisorUrl(await urlFirmadaDrive(f.id))
+    } catch (e) {
+      setError(e.message)
+      setVisor(null)
+      setTimeout(() => setError(''), 5000)
+    }
+  }
 
   useEffect(() => { cargar() }, [])
 
@@ -83,9 +93,9 @@ export default function Procedimientos() {
               </div>
             </div>
             <div style={{ flex: 1, background: '#1E293B' }}>
-              {previewUrl(visor) ? (
+              {visorUrl ? (
                 <iframe
-                  src={previewUrl(visor)}
+                  src={visorUrl}
                   style={{ width: '100%', height: '100%', border: 'none' }}
                   title={visor.name}
                   allow="autoplay"
@@ -169,7 +179,7 @@ export default function Procedimientos() {
       {!cargando && !error && archivosActivos.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
           {archivosActivos.map(f => (
-            <div key={f.id} style={S.card} onClick={() => setVisor(f)}>
+            <div key={f.id} style={S.card} onClick={() => abrirArchivo(f)}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                 <div style={S.cardIcon}>{iconoArchivo(f.mimeType, f.name)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
