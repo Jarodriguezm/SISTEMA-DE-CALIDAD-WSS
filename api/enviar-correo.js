@@ -57,9 +57,18 @@ function encabezadoUtf8(texto) {
   return '=?UTF-8?B?' + Buffer.from(texto, 'utf-8').toString('base64') + '?='
 }
 
+// "Inspección Industrial WSS <correo@dominio>" → codifica solo el nombre.
+// Sin esto, los acentos del remitente llegan como "InspecciÃƒÂ³n".
+function remitenteSeguro(from) {
+  const m = String(from).match(/^\s*(.*?)\s*<([^>]+)>\s*$/)
+  if (!m) return from
+  const [, nombre, correo] = m
+  return nombre ? `${encabezadoUtf8(nombre)} <${correo}>` : `<${correo}>`
+}
+
 function armarMensaje({ from, to, cc, bcc, subject, html }) {
   const lineas = [
-    `From: ${from}`,
+    `From: ${remitenteSeguro(from)}`,
     `To: ${to.join(', ')}`,
   ]
   if (cc?.length)  lineas.push(`Cc: ${cc.join(', ')}`)
