@@ -4,6 +4,7 @@
 // ============================================================
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { urlFirmadaDrive } from '../lib/documentos'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
@@ -58,6 +59,8 @@ export default function Supervisor() {
       setCargando(false)
     }
   }
+
+  // (VisorPDFFirmado está definido al final del archivo)
 
   async function cargarAsignaciones() {
     const nombre = usuario?.nombre || ''
@@ -500,15 +503,11 @@ function ModalRevision({ informe, modoRechazo, setModoRechazo, observacion, setO
           )}
         </div>
 
-        {/* PDF */}
+        {/* PDF — la URL se pide firmada al backend */}
         {informe.drive_pdf_id && (
           <div style={{ padding: '0 24px 20px' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Documento PDF</div>
-            <iframe
-              src={`/api/drive/proxy-pdf?fileId=${informe.drive_pdf_id}`}
-              style={{ width: '100%', height: 400, border: '1px solid #E2E8F0', borderRadius: 8 }}
-              title="Informe PDF"
-            />
+            <VisorPDFFirmado fileId={informe.drive_pdf_id} />
           </div>
         )}
 
@@ -568,5 +567,39 @@ function ModalRevision({ informe, modoRechazo, setModoRechazo, observacion, setO
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Visor de PDF con permiso firmado ─────────────────────────────────────────
+// El endpoint ya no sirve archivos con solo el fileId: hay que pedir permiso
+// con la sesión del usuario. Este componente lo resuelve solo.
+function VisorPDFFirmado({ fileId }) {
+  const [url, setUrl]     = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let vigente = true
+    setUrl(''); setError('')
+    urlFirmadaDrive(fileId)
+      .then(u => { if (vigente) setUrl(u) })
+      .catch(e => { if (vigente) setError(e.message) })
+    return () => { vigente = false }
+  }, [fileId])
+
+  const marco = {
+    width: '100%', height: 400, border: '1px solid #E2E8F0', borderRadius: 8,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, color: '#64748B', background: '#F8FAFC',
+  }
+
+  if (error) return <div style={{ ...marco, color: '#B91C1C', background: '#FEF2F2' }}>{error}</div>
+  if (!url)  return <div style={marco}>Abriendo documento…</div>
+
+  return (
+    <iframe
+      src={url}
+      style={{ width: '100%', height: 400, border: '1px solid #E2E8F0', borderRadius: 8 }}
+      title="Informe PDF"
+    />
   )
 }
