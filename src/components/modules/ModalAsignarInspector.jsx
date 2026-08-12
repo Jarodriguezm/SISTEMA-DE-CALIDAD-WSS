@@ -455,8 +455,11 @@ export default function ModalAsignarInspector({ ot, onClose, onAsignada }) {
                     return (
                       <label key={eq.id} style={S.checkRow(sel)}>
                         <input type="checkbox" checked={sel} onChange={() => toggleEquipo(eq)} style={{ width: 'auto', cursor: 'pointer' }} />
-                        <span style={{ flex: 1, fontSize: 12 }}>{eq.equipo_instrumento}</span>
-                        <span style={{ fontSize: 10, color: '#aaa', fontFamily: 'monospace' }}>{eq.codigo}</span>
+                        <span style={{ flex: 1, fontSize: 13 }}>{eq.equipo_instrumento}</span>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700, color: '#334155', fontFamily: 'monospace',
+                          background: '#F1F5F9', padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap',
+                        }}>{eq.codigo}</span>
                       </label>
                     )
                   })}
