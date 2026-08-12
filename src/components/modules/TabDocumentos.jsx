@@ -96,8 +96,14 @@ const ETAPAS = [
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+// Etapas que puede ver un inspector: solo su propio trabajo.
+// El resto (cotización, OC, envío al cliente, SDF, factura) es comercial
+// y queda fuera de su alcance.
+const ETAPAS_INSPECTOR = new Set(['07', '08', '09'])
+
 export default function TabDocumentos({ docs = [], ot, onActualizar }) {
-  const { usuario, esAuditor } = useAuth()
+  const { usuario, esAuditor, esInspector } = useAuth()
+  const soloInspector = typeof esInspector === 'function' && esInspector()
   const [subiendo, setSubiendo] = useState(null)   // tipo de etapa subiendo
   const [progresoMulti, setProgresoMulti] = useState(null) // { actual, total } para subidas múltiples
   const [sincronizando, setSincronizando] = useState(false)
@@ -458,9 +464,20 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         </div>
       )}
 
+      {soloInspector && (
+        <div style={{
+          background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '4px solid #B8860B',
+          borderRadius: 8, padding: '10px 14px', margin: '0 0 14px',
+          fontSize: 13, color: '#475569',
+        }}>
+          Se muestran solo las etapas de tu alcance. Las etapas comerciales
+          (cotización, orden de compra, facturación) las gestiona el área comercial.
+        </div>
+      )}
+
       {/* Grid de etapas */}
       <div style={S.grid}>
-        {ETAPAS.map(etapa => {
+        {ETAPAS.filter(e => !soloInspector || ETAPAS_INSPECTOR.has(e.num)).map(etapa => {
           const estado = estadoEtapa(etapa)
           const carpetaInfo = carpetas[etapa.num]
           const etapaDocs = docsPorTipo[etapa.tipo] || []
