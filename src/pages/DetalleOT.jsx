@@ -36,7 +36,7 @@ function badgeEstado(estado) {
 export default function DetalleOT() {
   const { numero } = useParams()
   const navigate = useNavigate()
-  const { usuario, esAdmin, esComercial, esSupervisor } = useAuth()
+  const { usuario, esAdmin, esComercial, esSupervisor, esInspector } = useAuth()
 
   const [ot, setOT] = useState(null)
   const [documentos, setDocumentos] = useState([])
@@ -282,9 +282,9 @@ export default function DetalleOT() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — el inspector no ve Facturación (información comercial) */}
       <div style={styles.tabBar}>
-        {TABS.map(t => (
+        {TABS.filter(t => !(t.id === 'facturacion' && esInspector())).map(t => (
           <button
             key={t.id}
             onClick={() => setTabActivo(t.id)}
@@ -311,7 +311,7 @@ export default function DetalleOT() {
         {tabActivo === 'asignaciones' && <TabAsignaciones ot={ot} onActualizar={cargarTodo} />}
         {tabActivo === 'actas'        && <TabActa ot={ot} asignaciones={asignaciones} onActaCreada={cargarTodo} />}
         {tabActivo === 'informes'     && <TabInformes ot={ot} onInformeCreado={cargarTodo} />}
-        {tabActivo === 'facturacion'  && <TabFacturacion ot={ot} onDocumentoSubido={cargarTodo} />}
+        {tabActivo === 'facturacion' && !esInspector() && <TabFacturacion ot={ot} onDocumentoSubido={cargarTodo} />}
       </div>
     </div>
   )
