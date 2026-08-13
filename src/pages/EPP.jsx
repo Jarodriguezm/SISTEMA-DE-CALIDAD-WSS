@@ -578,7 +578,7 @@ function PanelFirma({ entrega, onCerrar, onFirmada, onError }) {
           </div>
           <div style={{ textAlign: 'right', fontSize: 10, color: '#64748B' }}>
             <div style={{ fontWeight: 800, color: '#0E2A45' }}>REG-SEG-011</div>
-            <div>Rev. 04</div>
+            <div>Rev. 05</div>
             <div>{entrega.correlativo}</div>
           </div>
         </div>
@@ -720,7 +720,7 @@ function htmlAviso(e, items) {
       Responsable de la entrega: ${e.entregado_por}
     </div>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid #EEF2F7;font-size:12px;color:#94A3B8">
-      REG-SEG-011 Rev. 04 · DS N°44 · El comprobante firmado va adjunto.
+      REG-SEG-011 Rev. 05 · DS N°44 · El comprobante firmado va adjunto.
     </div>
   </div>
 </div>`
