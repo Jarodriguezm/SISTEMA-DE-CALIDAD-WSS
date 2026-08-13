@@ -20,7 +20,11 @@ import { useAuth } from '../lib/AuthContext'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 
-const ROLES_OK = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR', 'APR', 'SECRETARIA', 'PREVENCIONISTA']
+// Ven el stock y todas las entregas
+const ROLES_VER_TODO = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR', 'APR',
+                        'SECRETARIA', 'PREVENCIONISTA', 'AUDITOR']
+// Cargan compras y registran entregas
+const ROLES_MODIFICAR = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR', 'SECRETARIA']
 
 const MOTIVOS = ['Entrega inicial', 'Recambio por uso', 'Extravío', 'Deterioro', 'Reposición']
 
@@ -30,9 +34,10 @@ const hoy = () => new Date().toISOString().slice(0, 10)
 export default function EPP() {
   const { usuario } = useAuth()
   const rol = (usuario?.rol || '').toUpperCase()
-  const autorizado = ROLES_OK.includes(rol)
+  const verTodo   = ROLES_VER_TODO.includes(rol)
+  const modificar = ROLES_MODIFICAR.includes(rol)
 
-  const [vista, setVista]       = useState('stock')
+  const [vista, setVista]       = useState(verTodo ? 'stock' : 'entregas')
   const [stock, setStock]       = useState([])
   const [entregas, setEntregas] = useState([])
   const [personal, setPersonal] = useState([])
@@ -43,37 +48,44 @@ export default function EPP() {
   const cargar = useCallback(async () => {
     setCargando(true); setError('')
     try {
-      const [rs, re, rp] = await Promise.all([
-        supabase.from('v_epp_stock').select('*').eq('activo', true).order('nombre'),
+      // Las políticas de la base ya limitan lo que cada rol puede leer:
+      // un trabajador solo recibe sus propias entregas.
+      const consultas = [
         supabase.from('epp_entregas').select('*').order('fecha', { ascending: false }).limit(200),
-        supabase.from('personal').select('id,nombre,apellido,email,cargo,sede,jefe_email')
-          .eq('activo', true).order('nombre'),
-      ])
-      if (rs.error) throw rs.error
-      setStock(rs.data || [])
+      ]
+      if (verTodo) {
+        consultas.push(
+          supabase.from('v_epp_stock').select('*').eq('activo', true).order('nombre'))
+      }
+      if (modificar) {
+        consultas.push(
+          supabase.from('personal').select('id,nombre,apellido,email,cargo,sede,jefe_email')
+            .eq('activo', true).order('nombre'))
+      }
+
+      const res = await Promise.all(consultas)
+      let i = 0
+      const re = res[i++]
       if (re.error) console.warn('[EPP] entregas:', re.error.message)
       setEntregas(re.data || [])
-      if (rp.error) console.warn('[EPP] personal:', rp.error.message)
-      setPersonal(rp.data || [])
+
+      if (verTodo) {
+        const rs = res[i++]
+        if (rs.error) console.warn('[EPP] stock:', rs.error.message)
+        setStock(rs.data || [])
+      }
+      if (modificar) {
+        const rp = res[i++]
+        if (rp.error) console.warn('[EPP] personal:', rp.error.message)
+        setPersonal(rp.data || [])
+      }
     } catch (e) { setError(e.message) }
     finally { setCargando(false) }
-  }, [])
+  }, [verTodo, modificar])
 
-  useEffect(() => { if (autorizado) cargar() }, [autorizado, cargar])
+  useEffect(() => { cargar() }, [cargar])
 
   function notificar(msg) { setAviso(msg); setTimeout(() => setAviso(''), 5000) }
-
-  if (!autorizado) {
-    return (
-      <div style={{ padding: 48, textAlign: 'center' }}>
-        <div style={{ fontSize: 44, marginBottom: 14 }}>🔒</div>
-        <h2 style={{ color: '#DC2626', margin: '0 0 8px' }}>Acceso restringido</h2>
-        <p style={{ color: '#64748B', margin: 0 }}>
-          El módulo de EPP es para administración, supervisores, APR y secretaría.
-        </p>
-      </div>
-    )
-  }
 
   const bajoStock = stock.filter(s => Number(s.stock) <= 2)
   const sinStock  = stock.filter(s => Number(s.stock) <= 0)
@@ -92,31 +104,55 @@ export default function EPP() {
       </div>
 
       {/* Indicadores */}
-      <div style={S.kpis}>
-        <KPI label="Artículos en catálogo" valor={stock.length} />
-        <KPI label="Sin stock" valor={sinStock.length} color={sinStock.length ? '#DC2626' : '#059669'} />
-        <KPI label="Stock bajo (≤2)" valor={bajoStock.length} color={bajoStock.length ? '#B8860B' : '#059669'} />
-        <KPI label="Entregas sin firmar" valor={pendFirma.length} color={pendFirma.length ? '#B8860B' : '#059669'} />
-      </div>
+      {verTodo ? (
+        <div style={S.kpis}>
+          <KPI label="Artículos en catálogo" valor={stock.length} />
+          <KPI label="Sin stock" valor={sinStock.length} color={sinStock.length ? '#DC2626' : '#059669'} />
+          <KPI label="Stock bajo (≤2)" valor={bajoStock.length} color={bajoStock.length ? '#B8860B' : '#059669'} />
+          <KPI label="Entregas sin firmar" valor={pendFirma.length} color={pendFirma.length ? '#B8860B' : '#059669'} />
+        </div>
+      ) : (
+        <div style={S.kpis}>
+          <KPI label="EPP que he recibido" valor={entregas.length} />
+          <KPI label="Pendientes de mi firma" valor={pendFirma.length}
+               color={pendFirma.length ? '#B8860B' : '#059669'} />
+        </div>
+      )}
 
-      {/* Pestañas */}
-      <div style={S.tabs}>
-        {[['stock','Stock'], ['compras','Cargar compra'], ['entregas','Entregas']].map(([id, txt]) => (
-          <button key={id} onClick={() => setVista(id)} style={S.tab(vista === id)}>{txt}</button>
-        ))}
-      </div>
+      {/* Pestañas — solo si hay más de una vista disponible */}
+      {verTodo && (
+        <div style={S.tabs}>
+          {[
+            ['stock', 'Stock'],
+            ...(modificar ? [['compras', 'Cargar compra']] : []),
+            ['entregas', 'Entregas'],
+          ].map(([id, txt]) => (
+            <button key={id} onClick={() => setVista(id)} style={S.tab(vista === id)}>{txt}</button>
+          ))}
+        </div>
+      )}
+
+      {!verTodo && (
+        <div style={{ ...S.aviso, background: '#F8FAFC', borderColor: '#E2E8F0', color: '#475569' }}>
+          Aquí ves los elementos de protección personal que has recibido.
+          Si alguno está pendiente de firma, ábrelo y firma la recepción.
+        </div>
+      )}
 
       {aviso && <div style={S.aviso}>{aviso}</div>}
       {error && <div style={S.error}>{error}</div>}
 
       {cargando ? <p style={{ color: '#64748B' }}>Cargando…</p> : (
         <>
-          {vista === 'stock'    && <VistaStock stock={stock} />}
-          {vista === 'compras'  && <VistaCompra stock={stock} onListo={() => { cargar(); notificar('Compra registrada. El stock ya está actualizado.') }} />}
+          {verTodo && vista === 'stock' && <VistaStock stock={stock} />}
+          {modificar && vista === 'compras' && (
+            <VistaCompra stock={stock}
+              onListo={() => { cargar(); notificar('Compra registrada. El stock ya está actualizado.') }} />
+          )}
           {vista === 'entregas' && (
             <VistaEntregas
               entregas={entregas} stock={stock} personal={personal}
-              usuario={usuario}
+              usuario={usuario} puedeModificar={modificar}
               onListo={(m) => { cargar(); notificar(m) }}
               onError={setError}
             />
@@ -271,7 +307,7 @@ function VistaCompra({ stock, onListo }) {
 }
 
 // ── Vista: entregas ──────────────────────────────────────────
-function VistaEntregas({ entregas, stock, personal, usuario, onListo, onError }) {
+function VistaEntregas({ entregas, stock, personal, usuario, puedeModificar, onListo, onError }) {
   const [nueva, setNueva]   = useState(false)
   const [firmando, setFirmando] = useState(null)   // entrega a firmar
 
@@ -295,7 +331,9 @@ function VistaEntregas({ entregas, stock, personal, usuario, onListo, onError })
     <div style={S.tarjeta}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <span style={{ fontSize: 13, color: '#64748B' }}>{entregas.length} entrega(s) registrada(s)</span>
-        <button onClick={() => setNueva(true)} style={S.btnPrimario}>+ Nueva entrega</button>
+        {puedeModificar && (
+          <button onClick={() => setNueva(true)} style={S.btnPrimario}>+ Nueva entrega</button>
+        )}
       </div>
 
       <div style={{ overflowX: 'auto' }}>
