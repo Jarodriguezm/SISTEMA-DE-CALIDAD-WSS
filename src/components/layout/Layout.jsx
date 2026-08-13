@@ -135,10 +135,17 @@ const NAV_ITEMS = [
   { id: 'acreditaciones',icon: 'Acreditaciones',label: 'Acreditaciones',     ruta: '/acreditaciones',   rol: null },
   { id: 'informes',      icon: 'Informes',      label: 'Informes DII',       ruta: '/informes',         rol: null },
   { id: 'personal',      icon: 'Usuarios',      label: 'Personal',           ruta: '/personal',         rol: 'adminOSup' },
-  { id: 'epp',           icon: 'Acreditaciones',label: 'EPP',                ruta: '/epp',              rol: 'epp' },
+  { id: 'epp',           icon: 'Acreditaciones',label: 'EPP',                ruta: '/epp',              rol: null },
   { id: 'supervisor',    icon: 'Supervisor',    label: 'Panel Supervisor',   ruta: '/supervisor',       rol: 'adminOSup' },
   { id: 'auditoria',     icon: 'Auditoria',     label: 'Auditoría',          ruta: '/auditoria',        rol: 'noInspector' },
 ]
+
+// Roles con menú acotado: solo ven estos módulos y nada más.
+// El cambio de contraseña está aparte, al pie de la barra, y lo tienen todos.
+const MENU_ACOTADO = {
+  APR:        ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
+  SECRETARIA: ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
+}
 
 const NAV_ADMIN = [
   { id: 'usuarios', icon: 'Usuarios', label: 'Usuarios', ruta: '/usuarios' },
@@ -201,13 +208,13 @@ export default function Layout({ children }) {
     return location.pathname.startsWith(ruta)
   }
 
+  const acotado = MENU_ACOTADO[rol] || null
+
   function visible(item) {
+    // APR y secretaría: lista blanca, se ignora el resto de las reglas
+    if (acotado) return acotado.includes(item.id)
     if (item.rol === 'noInspector') return !esInspector()
     if (item.rol === 'adminOSup')   return esAdmin() || esSupervisor()
-    // Módulo EPP: administración, supervisores, APR y secretaría
-    if (item.rol === 'epp') {
-      return ['ADMIN','ADMINISTRADOR','SUPERVISOR','APR','SECRETARIA','PREVENCIONISTA'].includes(rol)
-    }
     return true
   }
 
