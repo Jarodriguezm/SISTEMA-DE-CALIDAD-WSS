@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION', 'AUDITOR']
+const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION', 'AUDITOR', 'APR', 'SECRETARIA']
 const SEDES = ['SCL', 'ANF', 'CCP']
 
 const BADGE_ROL = {
