@@ -135,6 +135,7 @@ const NAV_ITEMS = [
   { id: 'acreditaciones',icon: 'Acreditaciones',label: 'Acreditaciones',     ruta: '/acreditaciones',   rol: null },
   { id: 'informes',      icon: 'Informes',      label: 'Informes DII',       ruta: '/informes',         rol: null },
   { id: 'personal',      icon: 'Usuarios',      label: 'Personal',           ruta: '/personal',         rol: 'adminOSup' },
+  { id: 'epp',           icon: 'Acreditaciones',label: 'EPP',                ruta: '/epp',              rol: 'epp' },
   { id: 'supervisor',    icon: 'Supervisor',    label: 'Panel Supervisor',   ruta: '/supervisor',       rol: 'adminOSup' },
   { id: 'auditoria',     icon: 'Auditoria',     label: 'Auditoría',          ruta: '/auditoria',        rol: 'noInspector' },
 ]
@@ -152,6 +153,8 @@ const ROL_COLOR = {
   'INSPECTOR':     'badge-amber',
   'FACTURACION':   'badge-gray',
   'AUDITOR':       'badge-purple',
+  'APR':           'badge-blue',
+  'SECRETARIA':    'badge-gray',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -201,6 +204,10 @@ export default function Layout({ children }) {
   function visible(item) {
     if (item.rol === 'noInspector') return !esInspector()
     if (item.rol === 'adminOSup')   return esAdmin() || esSupervisor()
+    // Módulo EPP: administración, supervisores, APR y secretaría
+    if (item.rol === 'epp') {
+      return ['ADMIN','ADMINISTRADOR','SUPERVISOR','APR','SECRETARIA','PREVENCIONISTA'].includes(rol)
+    }
     return true
   }
 
