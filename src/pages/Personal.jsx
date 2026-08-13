@@ -59,10 +59,20 @@ export default function Personal() {
       if (c.error) throw c.error
       if (e.error) throw e.error
       if (t.error) throw t.error
-      setCumpl(c.data || []); setEstados(e.data || []); setTipos(t.data || [])
+
+      // El APR solo tiene acceso a los documentos de salud y seguridad.
+      // Si le mostráramos las 18 columnas, 11 le aparecerían siempre
+      // vacías y parecería que falta documentación.
+      const rolActual = (usuario?.rol || '').toUpperCase()
+      const esApr = ['APR', 'PREVENCIONISTA'].includes(rolActual)
+      const tiposVisibles = esApr
+        ? (t.data || []).filter(x => x.es_sso)
+        : (t.data || [])
+
+      setCumpl(c.data || []); setEstados(e.data || []); setTipos(tiposVisibles)
     } catch (err) { setError(mensajeError(err)) }
     finally { setCargando(false) }
-  }, [])
+  }, [usuario?.rol])
 
   useEffect(() => { cargar() }, [cargar])
 
