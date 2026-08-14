@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
+import CharlaDiaria from '../CharlaDiaria'
 import { supabase } from '../../lib/supabase'
 import ChatWidget from '../chat/ChatWidget'
 
@@ -225,6 +226,11 @@ export default function Layout({ children }) {
 
   return (
     <div style={S.shell}>
+
+      {/* Charla diaria de seguridad: bloquea hasta responder.
+          Va en el Layout para que aparezca en cualquier página,
+          no solo si la persona pasa por el Dashboard. */}
+      <CharlaDiaria />
 
       {/* ── Modal contraseña ─────────────────────────────────────────── */}
       {mostrarClave && (
