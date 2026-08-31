@@ -22,6 +22,24 @@ const ESTADOS = [
 ]
 const SEDES = ['ANF','SCL','CCP']
 
+// Etapas del checklist que le corresponden al área comercial.
+// El resto (asignación, acta, informes) las carga supervisión o el inspector.
+const ETAPAS_COMERCIAL = [
+  { tipo: 'correo_cotizacion', label: 'Correo cotización' },
+  { tipo: 'cotizacion',        label: 'Cotización' },
+  { tipo: 'envio_cotizacion',  label: 'Envío cotización' },
+  { tipo: 'orden_compra',      label: 'Orden de compra' },
+  { tipo: 'correo_oc',         label: 'Correo OC' },
+  { tipo: 'sdf',               label: 'SDF' },
+  { tipo: 'factura',           label: 'Factura' },
+]
+
+// Devuelve las etapas comerciales que faltan por cargar en una OT
+function faltantesComercial(otNumero, docsPorOT) {
+  const cargados = docsPorOT[otNumero] || new Set()
+  return ETAPAS_COMERCIAL.filter(e => !cargados.has(e.tipo))
+}
+
 const GRUPOS = {
   pendientes:  ['Pendiente de asignación','Sin inspector'],
   asignadas:   ['Asignado','Asignada'],
@@ -44,6 +62,9 @@ export default function OTs() {
   const [filtroSede, setFiltroSede]       = useState(searchParams.get('sede') || '')
   const [filtroEstado, setFiltroEstado]   = useState(searchParams.get('estado') || '')
   const [filtroResumen, setFiltroResumen] = useState(null)
+  const [filtroComercial, setFiltroComercial] = useState('')
+  const [soloPendientesCom, setSoloPendientesCom] = useState(false)
+  const [docsPorOT, setDocsPorOT]         = useState({})
   const [pagina, setPagina]               = useState(0)
   const [mostrarModal, setMostrarModal]   = useState(false)
   const [mensajeExito, setMensajeExito]   = useState('')
@@ -70,6 +91,17 @@ export default function OTs() {
         data = res.data
       }
       setOTs(data || [])
+
+      // Qué etapas comerciales tiene cargada cada OT, para saber qué falta
+      const { data: docs, error: eDocs } = await supabase
+        .from('documentos_ot').select('ot_numero, tipo')
+      if (eDocs) console.warn('[OTs] documentos:', eDocs.message)
+      const mapa = {}
+      for (const d of (docs || [])) {
+        if (!d.ot_numero || !d.tipo) continue
+        ;(mapa[d.ot_numero] ||= new Set()).add(d.tipo)
+      }
+      setDocsPorOT(mapa)
     } catch (e) { setError(mensajeError(e)) }
     finally     { setCargando(false) }
   }, [usuario?.email])
@@ -96,7 +128,8 @@ export default function OTs() {
   }
 
   function limpiarFiltros() {
-    setBusqueda(''); setFiltroSede(''); setFiltroEstado(''); setFiltroResumen(null); setPagina(0)
+    setBusqueda(''); setFiltroSede(''); setFiltroEstado(''); setFiltroResumen(null)
+    setFiltroComercial(''); setSoloPendientesCom(false); setPagina(0)
   }
 
   function handleResumen(key) {
@@ -120,12 +153,27 @@ export default function OTs() {
     const matchDocs = !filtroDocs
       || (filtroDocs === 'pendientes' && progreso < 100 && o.estado !== 'Cerrada documentalmente')
       || (filtroDocs === 'cargados'   && progreso === 100)
-    return matchQ && matchSede && matchEstado && matchDocs
+    const matchComercial = !filtroComercial
+      || (o.comercial || '').trim().toLowerCase() === filtroComercial.trim().toLowerCase()
+    const matchPendCom = !soloPendientesCom
+      || faltantesComercial(o.ot_numero, docsPorOT).length > 0
+    return matchQ && matchSede && matchEstado && matchDocs && matchComercial && matchPendCom
+  })
+
+  // Comerciales que aparecen en las OT, para el desplegable
+  const comerciales = [...new Set(ots.map(o => (o.comercial || '').trim()).filter(Boolean))].sort()
+
+  // Nombre del usuario conectado, para el atajo "Mis OT"
+  const miNombre = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ').trim()
+  const miCoincidencia = comerciales.find(c => {
+    const n = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+    return n(c) === n(miNombre) || n(c).includes(n(usuario?.nombre)) && n(usuario?.nombre).length > 2
   })
 
   const otsVisibles  = otsFiltradas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA)
   const totalPaginas = Math.ceil(otsFiltradas.length / POR_PAGINA)
-  const hayFiltros   = !!(busqueda || filtroSede || filtroEstado || filtroResumen)
+  const hayFiltros   = !!(busqueda || filtroSede || filtroEstado || filtroResumen
+                          || filtroComercial || soloPendientesCom)
 
   // ── Summary strip (sobre datos sin filtrar) ───────────────────────────
   const summaryItems = [
@@ -233,6 +281,47 @@ export default function OTs() {
             <option value="">Todos los estados</option>
             {ESTADOS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+          {/* Comercial */}
+          <select
+            style={{ ...SELECT_STYLE, flex: 1.2, minWidth: 150, color: filtroComercial ? '#0F172A' : '#94A3B8' }}
+            value={filtroComercial}
+            onChange={e => { setFiltroComercial(e.target.value); setPagina(0) }}
+          >
+            <option value="">Todos los comerciales</option>
+            {comerciales.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {/* Mis OT */}
+          {miCoincidencia && (
+            <button
+              onClick={() => {
+                setFiltroComercial(filtroComercial === miCoincidencia ? '' : miCoincidencia)
+                setPagina(0)
+              }}
+              style={{
+                flexShrink: 0, padding: '9px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                border: `1px solid ${filtroComercial === miCoincidencia ? '#185FA5' : '#CBD5E1'}`,
+                background: filtroComercial === miCoincidencia ? '#E6F1FB' : '#fff',
+                color: filtroComercial === miCoincidencia ? '#185FA5' : '#475569',
+              }}
+            >
+              Mis OT
+            </button>
+          )}
+          {/* Pendientes de cargar */}
+          <button
+            onClick={() => { setSoloPendientesCom(v => !v); setPagina(0) }}
+            title="Solo OT con documentos comerciales sin cargar"
+            style={{
+              flexShrink: 0, padding: '9px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              border: `1px solid ${soloPendientesCom ? '#B8860B' : '#CBD5E1'}`,
+              background: soloPendientesCom ? '#FEF3C7' : '#fff',
+              color: soloPendientesCom ? '#92400E' : '#475569',
+            }}
+          >
+            Falta por cargar
+          </button>
           {/* Limpiar */}
           {hayFiltros && (
             <button
@@ -294,6 +383,7 @@ export default function OTs() {
                   <FilaOT
                     key={ot.id || ot.ot_numero}
                     ot={ot}
+                    faltantes={faltantesComercial(ot.ot_numero, docsPorOT)}
                     puedeEliminar={puedeEliminar}
                     onVerDetalle={() => navigate(`/ots/${ot.ot_numero}`)}
                     onEliminar={() => eliminarOT(ot)}
@@ -318,7 +408,7 @@ export default function OTs() {
 }
 
 // ── Fila de la tabla ───────────────────────────────────────────────────────
-function FilaOT({ ot, puedeEliminar, onVerDetalle, onEliminar }) {
+function FilaOT({ ot, faltantes = [], puedeEliminar, onVerDetalle, onEliminar }) {
   const [hover, setHover] = useState(false)
   return (
     <tr
@@ -346,6 +436,18 @@ function FilaOT({ ot, puedeEliminar, onVerDetalle, onEliminar }) {
         {(ot.tipo_servicio || ot.servicio_contratado) && (
           <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {ot.tipo_servicio || ot.servicio_contratado}
+          </div>
+        )}
+        {faltantes.length > 0 && (
+          <div
+            title={'Falta cargar: ' + faltantes.map(f => f.label).join(', ')}
+            style={{
+              display: 'inline-block', marginTop: 4, fontSize: 10.5, fontWeight: 700,
+              background: '#FEF3C7', color: '#92400E', borderRadius: 12, padding: '2px 9px',
+            }}
+          >
+            Falta {faltantes.length}: {faltantes.slice(0, 2).map(f => f.label).join(', ')}
+            {faltantes.length > 2 ? '…' : ''}
           </div>
         )}
       </td>
