@@ -23,10 +23,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' })
 
   try {
-    const { folder_id, file_name, file_content_base64, mime_type } = req.body
+    const { folder_id, file_name, file_content_base64, mime_type, source_url } = req.body
 
-    if (!folder_id || !file_name || !file_content_base64) {
-      return res.status(400).json({ ok: false, error: 'Parámetros requeridos: folder_id, file_name, file_content_base64' })
+    if (!folder_id || !file_name || (!file_content_base64 && !source_url)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Parámetros requeridos: folder_id, file_name y (file_content_base64 o source_url)',
+      })
     }
 
     const token = await getUploadToken()
@@ -34,10 +37,26 @@ export default async function handler(req, res) {
     // Resolver MIME type por extensión si el cliente no lo envió
     const mimeType = resolverMime(mime_type, file_name)
 
+    // ── De dónde salen los bytes ─────────────────────────────────────────────
+    // Vercel limita el cuerpo de la petición a 4,5 MB y eso NO se puede subir
+    // con configuración. En base64 el archivo crece 33%, así que por esa vía
+    // el máximo real era ~3,3 MB: un correo .msg con la cotización adjunta no
+    // pasaba. Con source_url el archivo ya está en Storage y el servidor lo
+    // descarga aquí, sin pasar por el cuerpo de la petición.
+    let fileBytes
+    if (source_url) {
+      const orig = await fetch(source_url)
+      if (!orig.ok) {
+        throw new Error(`No se pudo leer el archivo temporal (HTTP ${orig.status})`)
+      }
+      fileBytes = Buffer.from(await orig.arrayBuffer())
+    } else {
+      fileBytes = Buffer.from(file_content_base64, 'base64')
+    }
+
     // Multipart upload a Drive
     // IMPORTANTE: mimeType va TAMBIÉN en el metadata JSON para evitar
     // que Drive haga content-sniffing y clasifique mal el archivo.
-    const fileBytes = Buffer.from(file_content_base64, 'base64')
     const boundary  = 'wssBoundary' + Date.now()
     const CRLF      = '\r\n'
 
