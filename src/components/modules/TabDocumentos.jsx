@@ -198,32 +198,74 @@ export default function TabDocumentos({ docs = [], ot, onActualizar }) {
         const folderId = driveFolderUrl.match(/folders\/([a-zA-Z0-9_-]+)/)?.[1]
         if (!folderId) throw new Error('No se pudo obtener el ID de la carpeta Drive desde la URL')
 
-        // Convertir archivo a base64 en trozos para no romper la pila con archivos grandes
-        const arrayBuffer = await archivo.arrayBuffer()
-        const bytes = new Uint8Array(arrayBuffer)
-        const CHUNK = 8192
-        let binary = ''
-        for (let i = 0; i < bytes.length; i += CHUNK) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+        // Vercel corta las peticiones sobre 4,5 MB y el base64 infla el archivo
+        // un 33%. Por eso los archivos grandes —típicamente correos .msg con la
+        // cotización adjunta— van primero a Storage y el servidor los toma de
+        // ahí, en vez de viajar dentro de la petición.
+        const LIMITE_DIRECTO = 3 * 1024 * 1024   // 3 MB
+        let cuerpo
+        let rutaTemporal = null
+
+        if (archivo.size > LIMITE_DIRECTO) {
+          const limpio = archivo.name
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-zA-Z0-9._-]/g, '_')
+          rutaTemporal = `temp/${ot.ot_numero}/${Date.now()}_${limpio}`
+
+          const { error: eTmp } = await supabase.storage
+            .from('documentos-ot')
+            .upload(rutaTemporal, archivo, { upsert: true, contentType: archivo.type || undefined })
+          if (eTmp) throw new Error(`No se pudo preparar el archivo: ${eTmp.message}`)
+
+          const { data: pub } = supabase.storage.from('documentos-ot').getPublicUrl(rutaTemporal)
+          cuerpo = {
+            folder_id:  folderId,
+            file_name:  archivo.name,
+            source_url: pub.publicUrl,
+            mime_type:  archivo.type || '',
+          }
+        } else {
+          const arrayBuffer = await archivo.arrayBuffer()
+          const bytes = new Uint8Array(arrayBuffer)
+          const CHUNK = 8192
+          let binary = ''
+          for (let i = 0; i < bytes.length; i += CHUNK) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+          }
+          cuerpo = {
+            folder_id:           folderId,
+            file_name:           archivo.name,
+            file_content_base64: btoa(binary),
+            mime_type:           archivo.type || '',
+          }
         }
-        const base64 = btoa(binary)
 
         const resp = await fetch('/api/drive/subir-archivo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            folder_id:           folderId,
-            file_name:           archivo.name,
-            file_content_base64: base64,
-            mime_type:           archivo.type || '',
-          }),
+          body: JSON.stringify(cuerpo),
         })
 
-        const data = await resp.json()
+        // Un 413 de Vercel no devuelve JSON: sin esto el usuario veía un error
+        // de parseo en vez de saber que el archivo era muy grande.
+        let data
+        try {
+          data = await resp.json()
+        } catch {
+          if (resp.status === 413) {
+            throw new Error(`El archivo pesa ${(archivo.size / 1048576).toFixed(1)} MB y superó el límite del servidor. Avisa a soporte.`)
+          }
+          throw new Error(`El servidor respondió ${resp.status} al subir a Drive`)
+        }
         if (!data.ok) throw new Error(data.error || `Error HTTP ${resp.status} al subir a Drive`)
 
         fileUrl     = data.file_url
         driveFileId = data.file_id
+
+        // El temporal ya cumplió: el archivo quedó en Drive
+        if (rutaTemporal) {
+          await supabase.storage.from('documentos-ot').remove([rutaTemporal])
+        }
 
       } else {
         // ── Ruta Supabase Storage (OT sin carpeta Drive configurada)
