@@ -63,6 +63,8 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     descripcion: '',
     supervisor_id: '',
     observaciones: '',
+    fecha_tentativa: '',
+    hora_tentativa: '',
   })
 
   useEffect(() => { cargarSupervisores() }, [])
@@ -167,6 +169,20 @@ export default function ModalCrearOT({ onClose, onCreada }) {
         p_descripcion:                  form.descripcion.trim() || null,
         p_observaciones:                form.observaciones.trim() || null,
       })
+
+      // Fecha tentativa de ejecución: es lo que ubica la OT en el calendario.
+      // Va aparte porque crear_ot_portal tiene parámetros fijos y no conviene
+      // cambiarle la firma a una función que ya está en producción.
+      if (form.fecha_tentativa) {
+        const { error: eFecha } = await supabase
+          .from('ots')
+          .update({
+            fecha_tentativa: form.fecha_tentativa,
+            hora_tentativa:  form.hora_tentativa || null,
+          })
+          .eq('ot_numero', otNumero)
+        if (eFecha) console.warn('[ModalCrearOT] fecha tentativa:', eFecha.message)
+      }
 
       // ── Paso 2: Crear carpetas en Google Drive ────────────────────────────
       setMensajePaso('Creando carpetas en Google Drive... 📁')
@@ -521,6 +537,19 @@ export default function ModalCrearOT({ onClose, onCreada }) {
                       </label>
                     ))}
                   </div>
+                </div>
+                <div className="col-4 field">
+                  <label>Fecha tentativa de ejecución</label>
+                  <input className="input" type="date"
+                    value={form.fecha_tentativa} onChange={e => set('fecha_tentativa', e.target.value)} disabled={guardando} />
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 3 }}>
+                    Es la fecha con que la OT aparece en el calendario. Se puede mover después.
+                  </div>
+                </div>
+                <div className="col-2 field">
+                  <label>Hora</label>
+                  <input className="input" type="time"
+                    value={form.hora_tentativa} onChange={e => set('hora_tentativa', e.target.value)} disabled={guardando} />
                 </div>
                 <div className="col-12 field">
                   <label>Dirección / Faena</label>
