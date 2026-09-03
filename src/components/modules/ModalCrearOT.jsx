@@ -63,7 +63,9 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     descripcion: '',
     supervisor_id: '',
     observaciones: '',
-    fecha_tentativa: '',
+    // Por defecto una semana hacia adelante: es una estimación razonable
+    // y evita que quede vacía, que es lo que dejaba al calendario sin datos
+    fecha_tentativa: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
     hora_tentativa: '',
   })
 
@@ -130,6 +132,10 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     if (!form.tipo_servicio.trim()) return 'Ingresa el producto / servicio contratado'
     if (!form.descripcion.trim()) return 'Ingresa la descripción del trabajo'
     if (!form.supervisor_id) return 'Selecciona un supervisor para la OT'
+    // Sin esta fecha la OT no se puede programar y el calendario queda ciego
+    if (!form.fecha_tentativa) {
+      return 'Indica la fecha tentativa de ejecución. Si aún no está confirmada, pon una estimación: se puede mover después desde el calendario.'
+    }
     return null
   }
 
@@ -539,11 +545,12 @@ export default function ModalCrearOT({ onClose, onCreada }) {
                   </div>
                 </div>
                 <div className="col-4 field">
-                  <label>Fecha tentativa de ejecución</label>
+                  <label>Fecha tentativa de ejecución *</label>
                   <input className="input" type="date"
                     value={form.fecha_tentativa} onChange={e => set('fecha_tentativa', e.target.value)} disabled={guardando} />
                   <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 3 }}>
-                    Es la fecha con que la OT aparece en el calendario. Se puede mover después.
+                    Con esta fecha la OT aparece en el calendario. Si aún no está confirmada,
+                    pon una estimación: se puede mover después desde el calendario.
                   </div>
                 </div>
                 <div className="col-2 field">
