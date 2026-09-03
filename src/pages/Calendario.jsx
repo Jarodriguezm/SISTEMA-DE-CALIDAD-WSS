@@ -53,6 +53,10 @@ function toISO(val) {
 export default function Calendario() {
   const { usuario, esAdmin, esSupervisor } = useAuth()
   const puedeCrear  = esAdmin() || esSupervisor() || (usuario?.rol || '').toUpperCase() === 'COMERCIAL'
+  // Mover la fecha de una OT: comercial, supervisor y administración.
+  // El inspector la ve, pero reprogramar es de quien coordina con el cliente.
+  const puedeReprogramar = ['ADMIN','ADMINISTRADOR','SUPERVISOR','COMERCIAL']
+    .includes((usuario?.rol || '').toUpperCase())
   const puedeEditar = esAdmin() || esSupervisor()
 
   const [vista, setVista]               = useState('mes')
@@ -71,6 +75,12 @@ export default function Calendario() {
 
   // Modal crear/editar
   const [modalAbierto, setModalAbierto]         = useState(false)
+  // Reprogramación de OT desde el calendario
+  const [reprogOT, setReprogOT]                 = useState(null)
+  const [reprogFecha, setReprogFecha]           = useState('')
+  const [reprogMotivo, setReprogMotivo]         = useState('')
+  const [reprogGuardando, setReprogGuardando]   = useState(false)
+  const [reprogError, setReprogError]           = useState('')
   const [actSeleccionada, setActSeleccionada]   = useState(null)
   const [fechaInicioModal, setFechaInicioModal] = useState('')
 
@@ -114,23 +124,17 @@ export default function Calendario() {
         if (!errOT && otsData && otsData.length > 0) {
           actsOTs = otsData
             .map(ot => {
-              // Fecha operacional: primera no-nula según prioridad
+              // Fecha con que la OT se ubica en el calendario.
+              // La tentativa manda: es la que define el comercial y la que
+              // se puede mover. Las demás son respaldo para OT antiguas.
               const fechaEfectiva = toISO(
-                ot.fecha_programacion ||
-                ot.fecha_inspeccion   ||
-                ot.fecha_ejecucion    ||
-                ot.fecha_inicio       ||
-                ot.fecha_termino      ||
-                ot.fecha_cierre       ||
+                ot.fecha_tentativa ||
+                ot.fecha_solicitud ||
                 ot.fecha_creacion
               )
               const tipeFecha =
-                ot.fecha_programacion ? 'programación' :
-                ot.fecha_inspeccion   ? 'inspección'   :
-                ot.fecha_ejecucion    ? 'ejecución'    :
-                ot.fecha_inicio       ? 'inicio'       :
-                ot.fecha_termino      ? 'término'      :
-                ot.fecha_cierre       ? 'cierre'       : 'creación'
+                ot.fecha_tentativa ? 'tentativa' :
+                ot.fecha_solicitud ? 'solicitud' : 'creación'
 
               return {
                 id:                 `ot-${ot.ot_numero}`,
@@ -143,7 +147,9 @@ export default function Calendario() {
                 ubicacion:          '',
                 fecha_inicio:       fechaEfectiva,
                 fecha_termino:      null,
-                hora_inicio:        null,
+                hora_inicio:        ot.hora_tentativa || null,
+                fecha_tentativa:    ot.fecha_tentativa || null,
+                veces_reprogramada: ot.veces_reprogramada || 0,
                 hora_termino:       null,
                 responsable_nombre: ot.supervisor || '',
                 inspector_nombre:   ot.inspector  || '',
@@ -197,7 +203,16 @@ export default function Calendario() {
   }
 
   function abrirEditar(act) {
-    if (act.es_ot) return  // OTs solo se editan desde el módulo OTs
+    // Las OT no se editan acá, pero sí se pueden reprogramar
+    if (act.es_ot) {
+      if (!puedeReprogramar) return
+      setDetalleAbierto(false)
+      setReprogOT(act)
+      setReprogFecha(act.fecha_inicio || '')
+      setReprogMotivo('')
+      setReprogError('')
+      return
+    }
     setDetalleAbierto(false)
     setActSeleccionada(act)
     setFechaInicioModal(act.fecha_inicio)
@@ -218,6 +233,30 @@ export default function Calendario() {
     if (!error) { setDetalleAbierto(false); cargar() }
   }
 
+  async function guardarReprogramacion() {
+    setReprogError('')
+    if (!reprogFecha)              return setReprogError('Indica la fecha nueva')
+    if (!reprogMotivo.trim())      return setReprogError('El motivo es obligatorio: queda registrado por qué se movió')
+    if (reprogMotivo.trim().length < 5) return setReprogError('Escribe un motivo un poco más claro')
+
+    setReprogGuardando(true)
+    try {
+      const { error: err } = await supabase.rpc('fn_ot_reprogramar', {
+        p_ot_numero: reprogOT.ot_numero,
+        p_fecha:     reprogFecha,
+        p_hora:      null,
+        p_motivo:    reprogMotivo.trim(),
+      })
+      if (err) throw err
+      setReprogOT(null)
+      cargar()
+    } catch (e) {
+      setReprogError(e.message)
+    } finally {
+      setReprogGuardando(false)
+    }
+  }
+
   function navAnterior()  { setFechaRef(f => moverFecha(f, -1, vista)) }
   function navSiguiente() { setFechaRef(f => moverFecha(f,  1, vista)) }
   function irHoy()        { setFechaRef(new Date()) }
@@ -226,6 +265,99 @@ export default function Calendario() {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+
+      {/* ── Reprogramar una OT ─────────────────────────────────────────────── */}
+      {reprogOT && (
+        <div
+          style={{
+            position:'fixed', inset:0, zIndex:9000, background:'rgba(8,18,32,.72)',
+            display:'flex', alignItems:'center', justifyContent:'center', padding:20,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setReprogOT(null) }}
+        >
+          <div style={{
+            background:'#fff', borderRadius:16, padding:'26px 28px', maxWidth:460, width:'100%',
+            boxShadow:'0 24px 70px rgba(0,0,0,.4)',
+          }}>
+            <div style={{ fontSize:11, fontWeight:800, color:'#94A3B8', letterSpacing:'.8px' }}>
+              REPROGRAMAR
+            </div>
+            <h3 style={{ margin:'6px 0 2px', fontSize:20, fontWeight:800, color:'#0E2A45' }}>
+              {reprogOT.titulo}
+            </h3>
+            <div style={{ fontSize:13.5, color:'#64748B' }}>{reprogOT.cliente}</div>
+
+            {Number(reprogOT.veces_reprogramada) > 0 && (
+              <div style={{
+                marginTop:12, background:'#FEF3C7', color:'#92400E', borderRadius:8,
+                padding:'8px 12px', fontSize:12.5, fontWeight:600,
+              }}>
+                Esta OT ya se movió {reprogOT.veces_reprogramada}{' '}
+                {Number(reprogOT.veces_reprogramada) === 1 ? 'vez' : 'veces'}.
+              </div>
+            )}
+
+            <div style={{ marginTop:18 }}>
+              <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
+                Fecha actual
+              </label>
+              <div style={{ fontSize:14, color:'#64748B', marginBottom:14 }}>
+                {reprogOT.fecha_inicio}
+              </div>
+
+              <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
+                Fecha nueva *
+              </label>
+              <input
+                type="date" value={reprogFecha}
+                onChange={e => setReprogFecha(e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
+                         borderRadius:8, fontSize:14, boxSizing:'border-box' }}
+              />
+
+              <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569',
+                              margin:'14px 0 5px' }}>
+                Motivo del cambio *
+              </label>
+              <textarea
+                rows={3} value={reprogMotivo}
+                onChange={e => setReprogMotivo(e.target.value)}
+                placeholder="Ej: el cliente pidió postergar por parada de planta"
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
+                         borderRadius:8, fontSize:14, boxSizing:'border-box', resize:'vertical' }}
+              />
+              <div style={{ fontSize:11.5, color:'#94A3B8', marginTop:4 }}>
+                Queda registrado con tu nombre y la fecha. Sirve para saber por qué se atrasan los trabajos.
+              </div>
+            </div>
+
+            {reprogError && (
+              <div style={{ marginTop:14, background:'#FEF2F2', border:'1px solid #FECACA',
+                            color:'#B91C1C', borderRadius:8, padding:'9px 12px', fontSize:13 }}>
+                {reprogError}
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              <button
+                onClick={guardarReprogramacion} disabled={reprogGuardando}
+                style={{ flex:1, background:'#0E2A45', color:'#fff', border:'none', borderRadius:10,
+                         padding:'12px', fontSize:14.5, fontWeight:700, cursor:'pointer',
+                         opacity: reprogGuardando ? .6 : 1 }}
+              >
+                {reprogGuardando ? 'Guardando…' : 'Mover la OT'}
+              </button>
+              <button
+                onClick={() => setReprogOT(null)}
+                style={{ background:'#fff', color:'#475569', border:'1px solid #CBD5E1',
+                         borderRadius:10, padding:'12px 20px', fontSize:14.5, cursor:'pointer' }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={s.header}>
