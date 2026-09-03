@@ -25,11 +25,18 @@ const SERVICIOS = [
   { cod: 'O', nombre: 'Otros' },
 ]
 
+// Postgres devuelve la hora como "08:00:00"; el input type=time quiere "08:00"
+function hhmm(valor) {
+  if (!valor) return ''
+  return String(valor).slice(0, 5)
+}
+
 export default function ModalEditarOT({ ot, onClose, onGuardada }) {
   const { usuario } = useAuth()
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
+  const [motivoCambio, setMotivoCambio] = useState('')
 
   const [form, setForm] = useState({
     cliente: '',
@@ -43,6 +50,8 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
     direccion_faena: '',
     descripcion: '',
     observaciones: '',
+    fecha_tentativa: '',
+    hora_tentativa: '',
   })
 
   useEffect(() => {
@@ -59,7 +68,10 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
         direccion_faena:              ot.direccion_faena || '',
         descripcion:                  ot.descripcion || '',
         observaciones:                ot.observaciones || '',
+        fecha_tentativa:              ot.fecha_tentativa || '',
+        hora_tentativa:               hhmm(ot.hora_tentativa),
       })
+      setMotivoCambio('')
       if (ot.servicios_seleccionados) {
         setServiciosSeleccionados(
           ot.servicios_seleccionados.split(',').map(s => s.trim()).filter(Boolean)
@@ -73,6 +85,13 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
     if (error) setError('')
   }
 
+  // Cambiar una fecha que ya existía es reprogramar: exige motivo y deja
+  // historial. Poner la fecha por primera vez es programación inicial.
+  const esReprogramacion =
+    !!ot?.fecha_tentativa &&
+    !!form.fecha_tentativa &&
+    form.fecha_tentativa !== ot.fecha_tentativa
+
   function toggleServicio(cod) {
     setServiciosSeleccionados(prev =>
       prev.includes(cod) ? prev.filter(s => s !== cod) : [...prev, cod]
@@ -83,6 +102,10 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
     e.preventDefault()
     if (!form.cliente.trim()) { setError('El cliente es obligatorio'); return }
     if (!form.producto_servicio_contratado.trim()) { setError('El producto/servicio contratado es obligatorio'); return }
+    if (esReprogramacion && motivoCambio.trim().length < 5) {
+      setError('Estás moviendo la fecha de una OT ya programada. Indica el motivo (mínimo 5 caracteres).')
+      return
+    }
 
     try {
       setGuardando(true)
@@ -104,6 +127,39 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
         p_descripcion:                 form.descripcion.trim() || null,
         p_observaciones:               form.observaciones.trim() || null,
       })
+
+      // ── Fecha tentativa ────────────────────────────────────────────────
+      // Si la OT ya tenía fecha y cambió, es una reprogramación y pasa por
+      // la función que exige motivo y deja historial. Si no tenía, es la
+      // programación inicial: se graba directo, sin pedir explicaciones.
+      const fechaPrevia = ot.fecha_tentativa || ''
+      const fechaNueva  = form.fecha_tentativa || ''
+
+      if (fechaNueva && fechaNueva !== fechaPrevia) {
+        if (fechaPrevia) {
+          const { error: eRep } = await supabase.rpc('fn_ot_reprogramar', {
+            p_ot_numero: ot.ot_numero,
+            p_fecha:     fechaNueva,
+            p_hora:      form.hora_tentativa || null,
+            p_motivo:    motivoCambio.trim(),
+          })
+          if (eRep) throw eRep
+        } else {
+          const { error: eFecha } = await supabase
+            .from('ots')
+            .update({
+              fecha_tentativa: fechaNueva,
+              hora_tentativa:  form.hora_tentativa || null,
+            })
+            .eq('ot_numero', ot.ot_numero)
+          if (eFecha) throw eFecha
+        }
+      } else if (fechaNueva && form.hora_tentativa !== hhmm(ot.hora_tentativa)) {
+        // Solo cambió la hora: no es reprogramación
+        await supabase.from('ots')
+          .update({ hora_tentativa: form.hora_tentativa || null })
+          .eq('ot_numero', ot.ot_numero)
+      }
 
       onGuardada && onGuardada()
     } catch (err) {
@@ -189,6 +245,36 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
                 <label>Dirección / Faena</label>
                 <input className="input" value={form.direccion_faena} onChange={e => set('direccion_faena', e.target.value)} disabled={guardando} />
               </div>
+              <div className="col-6 field">
+                <label>Fecha tentativa de ejecución</label>
+                <input type="date" className="input" value={form.fecha_tentativa}
+                  onChange={e => set('fecha_tentativa', e.target.value)} disabled={guardando} />
+                <small style={{ color: 'var(--txt-3, #7b8794)', fontSize: 12 }}>
+                  {ot?.fecha_tentativa
+                    ? 'Se muestra en el calendario. Si la mueves, queda registrado el motivo.'
+                    : 'Al ponerla, la OT aparece en el calendario.'}
+                </small>
+              </div>
+              <div className="col-6 field">
+                <label>Hora tentativa</label>
+                <input type="time" className="input" value={form.hora_tentativa}
+                  onChange={e => set('hora_tentativa', e.target.value)} disabled={guardando} />
+              </div>
+
+              {esReprogramacion && (
+                <div className="col-12 field">
+                  <label style={{ color: '#b45309' }}>
+                    Motivo del cambio de fecha *
+                  </label>
+                  <input className="input" value={motivoCambio} placeholder="Ej: el cliente pospuso la detención de planta"
+                    onChange={e => { setMotivoCambio(e.target.value); if (error) setError('') }}
+                    disabled={guardando} />
+                  <small style={{ color: '#b45309', fontSize: 12 }}>
+                    Estás moviendo la fecha del {ot.fecha_tentativa} al {form.fecha_tentativa}. Queda en el historial de la OT.
+                  </small>
+                </div>
+              )}
+
               <div className="col-12 field">
                 <label>Descripción del trabajo</label>
                 <textarea className="input" rows={4} style={{ resize: 'vertical' }}
