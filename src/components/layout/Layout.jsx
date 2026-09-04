@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
+import CharlaDiaria from '../CharlaDiaria'
 import { supabase } from '../../lib/supabase'
 import ChatWidget from '../chat/ChatWidget'
 
@@ -136,6 +137,7 @@ const NAV_ITEMS = [
   { id: 'informes',      icon: 'Informes',      label: 'Informes DII',       ruta: '/informes',         rol: null },
   { id: 'personal',      icon: 'Usuarios',      label: 'Personal',           ruta: '/personal',         rol: 'adminOSup' },
   { id: 'epp',           icon: 'Acreditaciones',label: 'EPP',                ruta: '/epp',              rol: null },
+  { id: 'arranque',      icon: 'Acreditaciones',label: 'Carpeta de arranque',ruta: '/arranque',         rol: 'arranque' },
   { id: 'supervisor',    icon: 'Supervisor',    label: 'Panel Supervisor',   ruta: '/supervisor',       rol: 'adminOSup' },
   { id: 'auditoria',     icon: 'Auditoria',     label: 'Auditoría',          ruta: '/auditoria',        rol: 'noInspector' },
 ]
@@ -143,7 +145,7 @@ const NAV_ITEMS = [
 // Roles con menú acotado: solo ven estos módulos y nada más.
 // El cambio de contraseña está aparte, al pie de la barra, y lo tienen todos.
 const MENU_ACOTADO = {
-  APR:        ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
+  APR:        ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp', 'arranque'],
   SECRETARIA: ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
 }
 
@@ -215,11 +217,20 @@ export default function Layout({ children }) {
     if (acotado) return acotado.includes(item.id)
     if (item.rol === 'noInspector') return !esInspector()
     if (item.rol === 'adminOSup')   return esAdmin() || esSupervisor()
+    // Carpeta de arranque: prevención, supervisores, administración y auditoría
+    if (item.rol === 'arranque') {
+      return ['ADMIN','ADMINISTRADOR','SUPERVISOR','APR','PREVENCIONISTA','AUDITOR'].includes(rol)
+    }
     return true
   }
 
   return (
     <div style={S.shell}>
+
+      {/* Charla diaria de seguridad: bloquea hasta responder.
+          Va en el Layout para que aparezca en cualquier página,
+          no solo si la persona pasa por el Dashboard. */}
+      <CharlaDiaria />
 
       {/* ── Modal contraseña ─────────────────────────────────────────── */}
       {mostrarClave && (
