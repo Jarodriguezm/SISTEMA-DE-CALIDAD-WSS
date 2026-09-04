@@ -51,6 +51,7 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
     descripcion: '',
     observaciones: '',
     fecha_tentativa: '',
+    fecha_tentativa_fin: '',
     hora_tentativa: '',
   })
 
@@ -69,6 +70,7 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
         descripcion:                  ot.descripcion || '',
         observaciones:                ot.observaciones || '',
         fecha_tentativa:              ot.fecha_tentativa || '',
+        fecha_tentativa_fin:          ot.fecha_tentativa_fin || ot.fecha_tentativa || '',
         hora_tentativa:               hhmm(ot.hora_tentativa),
       })
       setMotivoCambio('')
@@ -81,12 +83,30 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
   }, [ot])
 
   function set(campo, valor) {
-    setForm(f => ({ ...f, [campo]: valor }))
+    setForm(f => {
+      const next = { ...f, [campo]: valor }
+      // El término sigue al inicio si quedó antes
+      if (campo === 'fecha_tentativa' && valor) {
+        if (!f.fecha_tentativa_fin || f.fecha_tentativa_fin < valor) {
+          next.fecha_tentativa_fin = valor
+        }
+      }
+      return next
+    })
     if (error) setError('')
   }
 
   // Cambiar una fecha que ya existía es reprogramar: exige motivo y deja
   // historial. Poner la fecha por primera vez es programación inicial.
+  // Días que el trabajo ocupará en el calendario, ambos extremos incluidos
+  const diasTentativos = (() => {
+    if (!form.fecha_tentativa || !form.fecha_tentativa_fin) return 0
+    const ini = new Date(form.fecha_tentativa + 'T00:00:00')
+    const fin = new Date(form.fecha_tentativa_fin + 'T00:00:00')
+    if (isNaN(ini) || isNaN(fin) || fin < ini) return 0
+    return Math.round((fin - ini) / 86400000) + 1
+  })()
+
   const esReprogramacion =
     !!ot?.fecha_tentativa &&
     !!form.fecha_tentativa &&
@@ -102,6 +122,14 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
     e.preventDefault()
     if (!form.cliente.trim()) { setError('El cliente es obligatorio'); return }
     if (!form.producto_servicio_contratado.trim()) { setError('El producto/servicio contratado es obligatorio'); return }
+    if (form.fecha_tentativa && !form.fecha_tentativa_fin) {
+      setError('Indica la fecha tentativa de término. Si el trabajo es de un día, ponla igual a la de inicio.')
+      return
+    }
+    if (form.fecha_tentativa_fin && form.fecha_tentativa_fin < form.fecha_tentativa) {
+      setError('La fecha de término no puede ser anterior a la de inicio.')
+      return
+    }
     if (esReprogramacion && motivoCambio.trim().length < 5) {
       setError('Estás moviendo la fecha de una OT ya programada. Indica el motivo (mínimo 5 caracteres).')
       return
@@ -134,31 +162,34 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
       // programación inicial: se graba directo, sin pedir explicaciones.
       const fechaPrevia = ot.fecha_tentativa || ''
       const fechaNueva  = form.fecha_tentativa || ''
+      const finPrevio   = ot.fecha_tentativa_fin || ''
+      const finNuevo    = form.fecha_tentativa_fin || fechaNueva
 
-      if (fechaNueva && fechaNueva !== fechaPrevia) {
-        if (fechaPrevia) {
-          const { error: eRep } = await supabase.rpc('fn_ot_reprogramar', {
-            p_ot_numero: ot.ot_numero,
-            p_fecha:     fechaNueva,
-            p_hora:      form.hora_tentativa || null,
-            p_motivo:    motivoCambio.trim(),
-          })
-          if (eRep) throw eRep
-        } else {
-          const { error: eFecha } = await supabase
-            .from('ots')
-            .update({
-              fecha_tentativa: fechaNueva,
-              hora_tentativa:  form.hora_tentativa || null,
-            })
-            .eq('ot_numero', ot.ot_numero)
-          if (eFecha) throw eFecha
-        }
-      } else if (fechaNueva && form.hora_tentativa !== hhmm(ot.hora_tentativa)) {
-        // Solo cambió la hora: no es reprogramación
-        await supabase.from('ots')
-          .update({ hora_tentativa: form.hora_tentativa || null })
-          .eq('ot_numero', ot.ot_numero)
+      const cambioInicio = fechaNueva && fechaNueva !== fechaPrevia
+      const cambioFin    = finNuevo   && finNuevo   !== finPrevio
+      const cambioHora   = form.hora_tentativa !== hhmm(ot.hora_tentativa)
+
+      if (cambioInicio && fechaPrevia) {
+        // Mover una fecha ya comprometida: pasa por la función que
+        // exige motivo y deja historial.
+        const { error: eRep } = await supabase.rpc('fn_ot_reprogramar', {
+          p_ot_numero: ot.ot_numero,
+          p_fecha:     fechaNueva,
+          p_fecha_fin: finNuevo || null,
+          p_hora:      form.hora_tentativa || null,
+          p_motivo:    motivoCambio.trim(),
+        })
+        if (eRep) throw eRep
+
+      } else if (cambioInicio || cambioFin || (fechaNueva && cambioHora)) {
+        // Programación inicial, ajuste de duración o de hora:
+        // no es reprogramación, se graba directo.
+        const cambios = { hora_tentativa: form.hora_tentativa || null }
+        if (fechaNueva) cambios.fecha_tentativa     = fechaNueva
+        if (finNuevo)   cambios.fecha_tentativa_fin = finNuevo
+        const { error: eFecha } = await supabase
+          .from('ots').update(cambios).eq('ot_numero', ot.ot_numero)
+        if (eFecha) throw eFecha
       }
 
       onGuardada && onGuardada()
@@ -245,17 +276,28 @@ export default function ModalEditarOT({ ot, onClose, onGuardada }) {
                 <label>Dirección / Faena</label>
                 <input className="input" value={form.direccion_faena} onChange={e => set('direccion_faena', e.target.value)} disabled={guardando} />
               </div>
-              <div className="col-6 field">
-                <label>Fecha tentativa de ejecución</label>
+              <div className="col-4 field">
+                <label>Fecha tentativa de inicio</label>
                 <input type="date" className="input" value={form.fecha_tentativa}
                   onChange={e => set('fecha_tentativa', e.target.value)} disabled={guardando} />
                 <small style={{ color: 'var(--txt-3, #7b8794)', fontSize: 12 }}>
                   {ot?.fecha_tentativa
-                    ? 'Se muestra en el calendario. Si la mueves, queda registrado el motivo.'
+                    ? 'Si la mueves, queda registrado el motivo.'
                     : 'Al ponerla, la OT aparece en el calendario.'}
                 </small>
               </div>
-              <div className="col-6 field">
+              <div className="col-4 field">
+                <label>Fecha tentativa de término</label>
+                <input type="date" className="input" min={form.fecha_tentativa || undefined}
+                  value={form.fecha_tentativa_fin}
+                  onChange={e => set('fecha_tentativa_fin', e.target.value)} disabled={guardando} />
+                <small style={{ color: 'var(--txt-3, #7b8794)', fontSize: 12 }}>
+                  {diasTentativos > 1
+                    ? `Ocupa ${diasTentativos} días en el calendario.`
+                    : 'Trabajo de un día.'}
+                </small>
+              </div>
+              <div className="col-4 field">
                 <label>Hora tentativa</label>
                 <input type="time" className="input" value={form.hora_tentativa}
                   onChange={e => set('hora_tentativa', e.target.value)} disabled={guardando} />
