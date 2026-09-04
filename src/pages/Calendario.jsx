@@ -80,6 +80,7 @@ export default function Calendario() {
   // Reprogramación de OT desde el calendario
   const [reprogOT, setReprogOT]                 = useState(null)
   const [reprogFecha, setReprogFecha]           = useState('')
+  const [reprogFin, setReprogFin]               = useState('')
   const [reprogMotivo, setReprogMotivo]         = useState('')
   const [reprogGuardando, setReprogGuardando]   = useState(false)
   const [reprogError, setReprogError]           = useState('')
@@ -235,6 +236,15 @@ export default function Calendario() {
     setModalAbierto(true)
   }
 
+  // Días que quedará ocupando tras el ajuste, ambos extremos incluidos
+  const diasReprog = (() => {
+    if (!reprogFecha || !reprogFin) return 0
+    const a = new Date(reprogFecha + 'T00:00:00')
+    const b = new Date(reprogFin + 'T00:00:00')
+    if (isNaN(a) || isNaN(b) || b < a) return 0
+    return Math.round((b - a) / 86400000) + 1
+  })()
+
   function abrirEditar(act) {
     // Las OT no se editan acá, pero sí se pueden reprogramar
     if (act.es_ot) {
@@ -245,6 +255,7 @@ export default function Calendario() {
       // OT de varios días puede ser uno intermedio. Lo que se reprograma es
       // el INICIO de la OT, no el día en que el usuario hizo clic.
       setReprogFecha(act.fecha_tentativa || act.fecha_inicio || '')
+      setReprogFin(act.fecha_tentativa_fin || act.fecha_termino || act.fecha_tentativa || act.fecha_inicio || '')
       setReprogMotivo('')
       setReprogError('')
       return
@@ -271,7 +282,9 @@ export default function Calendario() {
 
   async function guardarReprogramacion() {
     setReprogError('')
-    if (!reprogFecha)              return setReprogError('Indica la fecha nueva')
+    if (!reprogFecha)              return setReprogError('Indica la fecha de inicio')
+    if (!reprogFin)                return setReprogError('Indica la fecha de término. Si es de un día, ponla igual al inicio.')
+    if (reprogFin < reprogFecha)   return setReprogError('El término no puede ser anterior al inicio')
     if (!reprogMotivo.trim())      return setReprogError('El motivo es obligatorio: queda registrado por qué se movió')
     if (reprogMotivo.trim().length < 5) return setReprogError('Escribe un motivo un poco más claro')
 
@@ -280,6 +293,7 @@ export default function Calendario() {
       const { error: err } = await supabase.rpc('fn_ot_reprogramar', {
         p_ot_numero: reprogOT.ot_numero,
         p_fecha:     reprogFecha,
+        p_fecha_fin: reprogFin,
         p_hora:      null,
         p_motivo:    reprogMotivo.trim(),
       })
@@ -316,7 +330,7 @@ export default function Calendario() {
             boxShadow:'0 24px 70px rgba(0,0,0,.4)',
           }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94A3B8', letterSpacing:'.8px' }}>
-              REPROGRAMAR
+              REPROGRAMAR O AJUSTAR DURACIÓN
             </div>
             <h3 style={{ margin:'6px 0 2px', fontSize:20, fontWeight:800, color:'#0E2A45' }}>
               {reprogOT.titulo}
@@ -335,26 +349,47 @@ export default function Calendario() {
 
             <div style={{ marginTop:18 }}>
               <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
-                Fecha actual
+                Programación actual
               </label>
               <div style={{ fontSize:14, color:'#64748B', marginBottom:14 }}>
-                {reprogOT.fecha_inicio}
+                {reprogOT.fecha_tentativa || reprogOT.fecha_inicio}
+                {reprogOT.fecha_termino && reprogOT.fecha_termino !== (reprogOT.fecha_tentativa || reprogOT.fecha_inicio)
+                  ? ` → ${reprogOT.fecha_termino}` : ''}
+                {reprogOT.dias_total > 1 ? `  ·  ${reprogOT.dias_total} días` : '  ·  1 día'}
               </div>
 
-              <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
-                Fecha nueva de inicio *
-              </label>
-              <input
-                type="date" value={reprogFecha}
-                onChange={e => setReprogFecha(e.target.value)}
-                style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
-                         borderRadius:8, fontSize:14, boxSizing:'border-box' }}
-              />
-              {reprogOT?.dias_total > 1 && (
+              <div style={{ display:'flex', gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
+                    Inicio *
+                  </label>
+                  <input
+                    type="date" value={reprogFecha}
+                    onChange={e => {
+                      const v = e.target.value
+                      setReprogFecha(v)
+                      // El término acompaña al inicio si quedó antes
+                      if (v && (!reprogFin || reprogFin < v)) setReprogFin(v)
+                    }}
+                    style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
+                             borderRadius:8, fontSize:14, boxSizing:'border-box' }}
+                  />
+                </div>
+                <div style={{ flex:1 }}>
+                  <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
+                    Término *
+                  </label>
+                  <input
+                    type="date" value={reprogFin} min={reprogFecha || undefined}
+                    onChange={e => setReprogFin(e.target.value)}
+                    style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
+                             borderRadius:8, fontSize:14, boxSizing:'border-box' }}
+                  />
+                </div>
+              </div>
+              {diasReprog > 0 && (
                 <div style={{ fontSize:11.5, color:'#64748B', marginTop:5 }}>
-                  El trabajo dura {reprogOT.dias_total} días y se mueve completo:
-                  el término se corre la misma cantidad. Si además cambió la
-                  duración, ajústala editando la OT.
+                  Quedará ocupando {diasReprog} {diasReprog === 1 ? 'día' : 'días'} en el calendario.
                 </div>
               )}
 
@@ -471,7 +506,7 @@ export default function Calendario() {
         </span>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
           <span style={{ width:10, height:10, borderRadius:2, border:'2px dashed #1E4D7B', display:'inline-block' }} />
-          Órdenes de Trabajo (fecha: programación → inspección → ejecución → creación)
+          Órdenes de Trabajo (fechas tentativas de inicio y término)
         </span>
       </div>
 
@@ -540,7 +575,7 @@ export default function Calendario() {
       {detalleAbierto && actDetalle && (
         <ModalDetalle
           act={actDetalle}
-          puedeEditar={puedeEditar && !actDetalle.es_ot}
+          puedeEditar={actDetalle.es_ot ? puedeReprogramar : puedeEditar}
           onEditar={() => abrirEditar(actDetalle)}
           onEliminar={() => eliminar(actDetalle.id)}
           onCerrar={() => setDetalleAbierto(false)}
@@ -989,7 +1024,8 @@ function ModalDetalle({ act, puedeEditar, onEditar, onEliminar, onCerrar }) {
         <div style={s.modalBody}>
           {act.es_ot && (
             <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:6, padding:'6px 10px', fontSize:11, marginBottom:12 }}>
-              Este evento proviene de una Orden de Trabajo. Para modificarla, usa el módulo OTs.
+              Proviene de una Orden de Trabajo. Desde aquí puedes cambiar las fechas
+              y extender los días. El resto de los datos se edita en el módulo OTs.
             </div>
           )}
           <span style={{ ...s.estadoBadge, background: ESTADO_COLOR[act.estado] || '#1E4D7B', display:'inline-block', marginBottom:12 }}>
@@ -1031,8 +1067,14 @@ function ModalDetalle({ act, puedeEditar, onEditar, onEliminar, onCerrar }) {
         </div>
         {puedeEditar && (
           <div style={s.modalFooter}>
-            <button className="btn btn-danger btn-sm" onClick={onEliminar}>🗑 Cancelar actividad</button>
-            <button className="btn btn-primary btn-sm" onClick={onEditar}>✏️ Editar</button>
+            {/* Una OT no se cancela desde el calendario: eso se hace en el
+                módulo OTs, donde queda el registro correspondiente. */}
+            {!act.es_ot && (
+              <button className="btn btn-danger btn-sm" onClick={onEliminar}>🗑 Cancelar actividad</button>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={onEditar}>
+              {act.es_ot ? '🗓 Cambiar fechas' : '✏️ Editar'}
+            </button>
           </div>
         )}
       </div>
