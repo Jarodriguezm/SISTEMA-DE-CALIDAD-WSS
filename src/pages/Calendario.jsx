@@ -67,9 +67,11 @@ export default function Calendario() {
   const [fuenteInfo, setFuenteInfo]     = useState({ cal: 0, ots: 0 })
 
   // Filtros
-  const [filtroSede, setFiltroSede]     = useState(
-    (esAdmin() || esSupervisor()) ? '' : (usuario?.sede || '')
-  )
+  // El calendario arranca mostrando todas las sedes, para todos los roles.
+  // Antes se pre-filtraba por la sede del usuario, lo que dejaba el mes en
+  // blanco si su sede no tenía trabajos programados. El selector de sede
+  // sigue arriba: quien quiera acotar, lo hace en un clic.
+  const [filtroSede, setFiltroSede]     = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroResp, setFiltroResp]     = useState('')
 
