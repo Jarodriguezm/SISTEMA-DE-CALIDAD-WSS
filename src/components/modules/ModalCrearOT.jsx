@@ -66,6 +66,8 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     // Por defecto una semana hacia adelante: es una estimación razonable
     // y evita que quede vacía, que es lo que dejaba al calendario sin datos
     fecha_tentativa: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    // Arranca igual al inicio: la mayoría de los trabajos son de un día
+    fecha_tentativa_fin: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
     hora_tentativa: '',
   })
 
@@ -115,9 +117,28 @@ export default function ModalCrearOT({ onClose, onCreada }) {
   }
 
   function set(campo, valor) {
-    setForm(f => ({ ...f, [campo]: valor }))
+    setForm(f => {
+      const next = { ...f, [campo]: valor }
+      // Al mover el inicio, el término lo sigue si quedó antes.
+      // Evita que el comercial tenga que corregir dos campos por uno.
+      if (campo === 'fecha_tentativa' && valor) {
+        if (!f.fecha_tentativa_fin || f.fecha_tentativa_fin < valor) {
+          next.fecha_tentativa_fin = valor
+        }
+      }
+      return next
+    })
     if (error) setError('')
   }
+
+  // Días que el trabajo ocupará en el calendario, ambos extremos incluidos
+  const diasTentativos = (() => {
+    if (!form.fecha_tentativa || !form.fecha_tentativa_fin) return 0
+    const ini = new Date(form.fecha_tentativa + 'T00:00:00')
+    const fin = new Date(form.fecha_tentativa_fin + 'T00:00:00')
+    if (isNaN(ini) || isNaN(fin) || fin < ini) return 0
+    return Math.round((fin - ini) / 86400000) + 1
+  })()
 
   function toggleServicio(cod) {
     setServiciosSeleccionados(prev =>
@@ -134,7 +155,13 @@ export default function ModalCrearOT({ onClose, onCreada }) {
     if (!form.supervisor_id) return 'Selecciona un supervisor para la OT'
     // Sin esta fecha la OT no se puede programar y el calendario queda ciego
     if (!form.fecha_tentativa) {
-      return 'Indica la fecha tentativa de ejecución. Si aún no está confirmada, pon una estimación: se puede mover después desde el calendario.'
+      return 'Indica la fecha tentativa de inicio. Si aún no está confirmada, pon una estimación: se puede mover después desde el calendario.'
+    }
+    if (!form.fecha_tentativa_fin) {
+      return 'Indica la fecha tentativa de término. Si el trabajo es de un día, ponla igual a la de inicio.'
+    }
+    if (form.fecha_tentativa_fin < form.fecha_tentativa) {
+      return 'La fecha de término no puede ser anterior a la de inicio.'
     }
     return null
   }
@@ -183,8 +210,9 @@ export default function ModalCrearOT({ onClose, onCreada }) {
         const { error: eFecha } = await supabase
           .from('ots')
           .update({
-            fecha_tentativa: form.fecha_tentativa,
-            hora_tentativa:  form.hora_tentativa || null,
+            fecha_tentativa:     form.fecha_tentativa,
+            fecha_tentativa_fin: form.fecha_tentativa_fin || form.fecha_tentativa,
+            hora_tentativa:      form.hora_tentativa || null,
           })
           .eq('ot_numero', otNumero)
         if (eFecha) console.warn('[ModalCrearOT] fecha tentativa:', eFecha.message)
@@ -545,12 +573,23 @@ export default function ModalCrearOT({ onClose, onCreada }) {
                   </div>
                 </div>
                 <div className="col-4 field">
-                  <label>Fecha tentativa de ejecución *</label>
+                  <label>Fecha tentativa de inicio *</label>
                   <input className="input" type="date"
                     value={form.fecha_tentativa} onChange={e => set('fecha_tentativa', e.target.value)} disabled={guardando} />
                   <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 3 }}>
                     Con esta fecha la OT aparece en el calendario. Si aún no está confirmada,
                     pon una estimación: se puede mover después desde el calendario.
+                  </div>
+                </div>
+                <div className="col-4 field">
+                  <label>Fecha tentativa de término *</label>
+                  <input className="input" type="date"
+                    min={form.fecha_tentativa || undefined}
+                    value={form.fecha_tentativa_fin} onChange={e => set('fecha_tentativa_fin', e.target.value)} disabled={guardando} />
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 3 }}>
+                    {diasTentativos > 1
+                      ? `El trabajo ocupará ${diasTentativos} días en el calendario.`
+                      : 'Si el trabajo es de un día, déjala igual a la de inicio.'}
                   </div>
                 </div>
                 <div className="col-2 field">
