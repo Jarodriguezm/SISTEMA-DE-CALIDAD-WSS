@@ -124,45 +124,76 @@ export default function Calendario() {
         const { data: otsData, error: errOT } = await queryOTs
 
         if (!errOT && otsData && otsData.length > 0) {
-          actsOTs = otsData
-            .map(ot => {
-              // Fecha con que la OT se ubica en el calendario.
-              // La tentativa manda: es la que define el comercial y la que
-              // se puede mover. Las demás son respaldo para OT antiguas.
-              const fechaEfectiva = toISO(
-                ot.fecha_tentativa ||
-                ot.fecha_solicitud ||
-                ot.fecha_creacion
-              )
-              const tipeFecha =
-                ot.fecha_tentativa ? 'tentativa' :
-                ot.fecha_solicitud ? 'solicitud' : 'creación'
+          // Una OT ocupa el rango completo entre su fecha de inicio y la de
+          // término. Se genera una entrada por día para que la barra se vea
+          // continua en el mes: las vistas filtran por día exacto, así que
+          // expandir acá evita tocar las tres vistas.
+          actsOTs = otsData.flatMap(ot => {
+            // Fecha con que la OT se ubica en el calendario.
+            // La tentativa manda: es la que define el comercial y la que
+            // se puede mover. Las demás son respaldo para OT antiguas.
+            const inicio = toISO(
+              ot.fecha_tentativa ||
+              ot.fecha_solicitud ||
+              ot.fecha_creacion
+            )
+            if (!inicio) return []
 
-              return {
-                id:                 `ot-${ot.ot_numero}`,
-                titulo:             `OT ${ot.ot_numero}`,
-                descripcion:        ot.tipo_servicio || '',
-                cliente:            ot.cliente || '',
-                sede:               ot.sede || '',
-                area_servicio:      ot.tipo_servicio || '',
-                tipo_servicio:      ot.tipo_servicio || '',
-                ubicacion:          '',
-                fecha_inicio:       fechaEfectiva,
-                fecha_termino:      null,
-                hora_inicio:        ot.hora_tentativa || null,
-                fecha_tentativa:    ot.fecha_tentativa || null,
-                veces_reprogramada: ot.veces_reprogramada || 0,
-                hora_termino:       null,
-                responsable_nombre: ot.supervisor || '',
-                inspector_nombre:   ot.inspector  || '',
-                estado:             OT_ESTADO_MAP[ot.estado] || 'Programada',
-                observaciones:      `Estado OT: ${ot.estado || ''} · Fecha: ${tipeFecha}`,
-                ot_numero:          ot.ot_numero,
-                es_ot:              true,
-              }
-            })
-            // Filtrar por el rango de fechas del período actual
-            .filter(a => a.fecha_inicio && a.fecha_inicio >= isoInicio && a.fecha_inicio <= isoFin)
+            const fin = toISO(ot.fecha_tentativa_fin) || inicio
+            const tipeFecha =
+              ot.fecha_tentativa ? 'tentativa' :
+              ot.fecha_solicitud ? 'solicitud' : 'creación'
+
+            // Días del rango que caen dentro del período visible.
+            // El tope de 120 es una salvaguarda: una fecha mal tecleada
+            // (2206 en vez de 2026) no debe colgar el navegador.
+            const dias = []
+            const cursor = new Date(inicio + 'T00:00:00')
+            const tope   = new Date(fin + 'T00:00:00')
+            let guarda = 0
+            while (cursor <= tope && guarda++ < 120) {
+              const iso = isoFecha(cursor)
+              if (iso >= isoInicio && iso <= isoFin) dias.push(iso)
+              cursor.setDate(cursor.getDate() + 1)
+            }
+            if (dias.length === 0) return []
+
+            const total = Math.round(
+              (new Date(fin + 'T00:00:00') - new Date(inicio + 'T00:00:00')) / 86400000
+            ) + 1
+
+            return dias.map(dia => ({
+              id:                 `ot-${ot.ot_numero}-${dia}`,
+              titulo:             `OT ${ot.ot_numero}`,
+              descripcion:        ot.tipo_servicio || '',
+              cliente:            ot.cliente || '',
+              sede:               ot.sede || '',
+              area_servicio:      ot.tipo_servicio || '',
+              tipo_servicio:      ot.tipo_servicio || '',
+              ubicacion:          '',
+              fecha_inicio:       dia,
+              fecha_termino:      fin,
+              hora_inicio:        dia === inicio ? (ot.hora_tentativa || null) : null,
+              fecha_tentativa:     ot.fecha_tentativa || null,
+              fecha_tentativa_fin: ot.fecha_tentativa_fin || null,
+              veces_reprogramada: ot.veces_reprogramada || 0,
+              hora_termino:       null,
+              responsable_nombre: ot.supervisor || '',
+              inspector_nombre:   ot.inspector  || '',
+              estado:             OT_ESTADO_MAP[ot.estado] || 'Programada',
+              observaciones:      `Estado OT: ${ot.estado || ''} · Fecha: ${tipeFecha}`,
+              ot_numero:          ot.ot_numero,
+              es_ot:              true,
+              // Posición dentro de la barra, para dibujarla continua
+              dias_total:  total,
+              dia_ordinal: Math.round(
+                (new Date(dia + 'T00:00:00') - new Date(inicio + 'T00:00:00')) / 86400000
+              ) + 1,
+              tramo: total === 1 ? 'unico'
+                   : dia === inicio ? 'inicio'
+                   : dia === fin    ? 'fin' : 'medio',
+            }))
+          })
         }
       } catch (e) {
         console.warn('Error cargando OTs para calendario:', e.message)
@@ -210,7 +241,10 @@ export default function Calendario() {
       if (!puedeReprogramar) return
       setDetalleAbierto(false)
       setReprogOT(act)
-      setReprogFecha(act.fecha_inicio || '')
+      // Ojo: act.fecha_inicio es el día del tramo que se clickeó, que en una
+      // OT de varios días puede ser uno intermedio. Lo que se reprograma es
+      // el INICIO de la OT, no el día en que el usuario hizo clic.
+      setReprogFecha(act.fecha_tentativa || act.fecha_inicio || '')
       setReprogMotivo('')
       setReprogError('')
       return
@@ -308,7 +342,7 @@ export default function Calendario() {
               </div>
 
               <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
-                Fecha nueva *
+                Fecha nueva de inicio *
               </label>
               <input
                 type="date" value={reprogFecha}
@@ -316,6 +350,13 @@ export default function Calendario() {
                 style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
                          borderRadius:8, fontSize:14, boxSizing:'border-box' }}
               />
+              {reprogOT?.dias_total > 1 && (
+                <div style={{ fontSize:11.5, color:'#64748B', marginTop:5 }}>
+                  El trabajo dura {reprogOT.dias_total} días y se mueve completo:
+                  el término se corre la misma cantidad. Si además cambió la
+                  duración, ajústala editando la OT.
+                </div>
+              )}
 
               <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569',
                               margin:'14px 0 5px' }}>
@@ -544,21 +585,40 @@ function VistaMes({ fechaRef, actividades, onDiaClick, onActClick, puedeCrear })
             <div style={{ ...s.mesDiaNum, color: esHoy ? 'var(--azul)' : '#334155', fontWeight: esHoy ? 800 : 400 }}>
               {fecha.getDate()}
             </div>
-            {acts.slice(0, 3).map(a => (
-              <div
-                key={a.id}
-                onClick={e => { e.stopPropagation(); onActClick(a) }}
-                style={{
-                  ...s.mesChip,
-                  background: ESTADO_COLOR[a.estado] || '#1E4D7B',
-                  border: a.es_ot ? '1px dashed rgba(255,255,255,.6)' : 'none',
-                  opacity: a.es_ot ? 0.85 : 1,
-                }}
-                title={`${a.titulo}${a.cliente ? ' — ' + a.cliente : ''}`}
-              >
-                {a.es_ot ? '📋 ' : ''}{fmtHora(a.hora_inicio)} {a.titulo}
-              </div>
-            ))}
+            {acts.slice(0, 3).map(a => {
+              // OT de varios días: se dibuja como tramo de barra. Los bordes
+              // que continúan van cuadrados; el texto se repite al empezar
+              // cada semana para que la fila de abajo también se entienda.
+              const barra = a.es_ot && a.dias_total > 1
+              const abre  = !barra || a.tramo === 'inicio'
+              const cierra= !barra || a.tramo === 'fin'
+              const rotula = abre || fecha.getDay() === 0
+              return (
+                <div
+                  key={a.id}
+                  onClick={e => { e.stopPropagation(); onActClick(a) }}
+                  style={{
+                    ...s.mesChip,
+                    background: ESTADO_COLOR[a.estado] || '#1E4D7B',
+                    border: a.es_ot ? '1px dashed rgba(255,255,255,.6)' : 'none',
+                    borderLeftWidth:  abre   ? undefined : 0,
+                    borderRightWidth: cierra ? undefined : 0,
+                    borderTopLeftRadius:     abre   ? 4 : 0,
+                    borderBottomLeftRadius:  abre   ? 4 : 0,
+                    borderTopRightRadius:    cierra ? 4 : 0,
+                    borderBottomRightRadius: cierra ? 4 : 0,
+                    opacity: a.es_ot ? 0.85 : 1,
+                  }}
+                  title={`${a.titulo}${a.cliente ? ' — ' + a.cliente : ''}${
+                    barra ? ` · día ${a.dia_ordinal} de ${a.dias_total}` : ''}`}
+                >
+                  {rotula
+                    ? <>{a.es_ot ? '📋 ' : ''}{fmtHora(a.hora_inicio)} {a.titulo}
+                        {barra && abre ? ` · ${a.dias_total}d` : ''}</>
+                    : '·'}
+                </div>
+              )
+            })}
             {acts.length > 3 && (
               <div style={{ fontSize:10, color:'var(--gris)', marginTop:2 }}>+{acts.length - 3} más</div>
             )}
@@ -610,7 +670,13 @@ function VistaSemana({ fechaRef, actividades, onDiaClick, onActClick, puedeCrear
                     opacity: a.es_ot ? 0.85 : 1,
                   }}
                 >
-                  <div style={{ fontWeight:700, fontSize:10 }}>{a.es_ot ? '📋 OT' : fmtHora(a.hora_inicio)}</div>
+                  <div style={{ fontWeight:700, fontSize:10 }}>
+                    {a.es_ot ? '📋 OT' : fmtHora(a.hora_inicio)}
+                    {a.es_ot && a.dias_total > 1 &&
+                      <span style={{ marginLeft:4, fontWeight:500, opacity:.9 }}>
+                        día {a.dia_ordinal}/{a.dias_total}
+                      </span>}
+                  </div>
                   <div style={{ fontSize:11, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{a.titulo}</div>
                   {a.cliente && <div style={{ fontSize:10, opacity:.85 }}>{a.cliente}</div>}
                 </div>
@@ -930,8 +996,11 @@ function ModalDetalle({ act, puedeEditar, onEditar, onEliminar, onCerrar }) {
             {act.estado}
           </span>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 16px', fontSize:13 }}>
-            <Fila label="Fecha inicio"  val={fmtFecha(act.fecha_inicio)} />
+            <Fila label="Fecha inicio"
+                  val={fmtFecha(act.es_ot ? (act.fecha_tentativa || act.fecha_inicio) : act.fecha_inicio)} />
             <Fila label="Fecha término" val={fmtFecha(act.fecha_termino)} />
+            {act.es_ot && act.dias_total > 1 &&
+              <Fila label="Duración" val={`${act.dias_total} días`} />}
             <Fila label="Horario" val={`${fmtHora(act.hora_inicio) || '—'}${act.hora_termino ? ' → ' + fmtHora(act.hora_termino) : ''}`} />
             <Fila label="Sede"          val={act.sede} />
             <Fila label="Cliente"       val={act.cliente} />
