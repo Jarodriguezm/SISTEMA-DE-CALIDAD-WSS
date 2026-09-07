@@ -434,6 +434,15 @@ function FormEntrega({ stock, personal, usuario, onCancelar, onCreada, onError }
               </option>
             ))}
           </select>
+          {/* Una lista vacía por permisos no genera error: la consulta
+              devuelve cero filas y el desplegable queda mudo. Sin este
+              aviso, el usuario cree que la nómina está vacía. */}
+          {personal.length === 0 && (
+            <div style={{ fontSize: 12, color: '#B45309', marginTop: 6 }}>
+              No hay trabajadores disponibles para seleccionar. Puede ser un
+              tema de permisos de tu perfil: avisa a administración.
+            </div>
+          )}
         </Campo>
 
         <Campo label="Motivo">
