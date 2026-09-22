@@ -197,6 +197,9 @@ function FormActaDigital({ ot, asignacion, onGuardada, onCancel }) {
         atencion:               form.atencion,
         direccion:              form.direccion,
         fecha_inspeccion:       form.fecha_inspeccion,
+        // El acta digital es de un día. Se graba igual para que la columna
+        // nunca quede nula y el calendario no tenga que adivinar.
+        fecha_inspeccion_fin:   form.fecha_inspeccion,
         proyecto:               form.proyecto || null,
         procedimientos_wss:     form.procedimientos_wss || null,
         norma_evaluacion:       form.norma_evaluacion || null,
@@ -526,6 +529,10 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [numeroManual, setNumeroManual] = useState('')
+  // La fecha de ejecución no se puede deducir: la fecha en que se sube la
+  // foto no es la fecha en que se hizo el trabajo. Hay que preguntarla.
+  const [fechaIni, setFechaIni] = useState('')
+  const [fechaFin, setFechaFin] = useState('')
 
   function onFile(e) {
     const f = e.target.files[0]
@@ -537,6 +544,10 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
 
   async function guardar() {
     if (!archivo) { setError('Selecciona una foto o archivo del acta'); return }
+    if (!fechaIni) { setError('Indica la fecha en que se ejecutó la inspección'); return }
+    const hoy = new Date().toISOString().slice(0, 10)
+    if (fechaIni > hoy) { setError('La fecha de ejecución no puede ser futura'); return }
+    if (fechaFin && fechaFin < fechaIni) { setError('El término no puede ser anterior al inicio'); return }
     setGuardando(true)
     setError('')
     try {
@@ -564,6 +575,8 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
           ot_numero:          ot.ot_numero,
           solicitante:        ot.cliente || '',
           sede_wss:           sede,
+          fecha_inspeccion:   fechaIni,
+          fecha_inspeccion_fin: fechaFin || fechaIni,
           modo:               'manual',
           imagen_manual_url,
           numero_acta_manual: numeroManual || null,
@@ -605,6 +618,27 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
         <input style={{ ...inp, maxWidth: 200 }} value={numeroManual} onChange={e => setNumeroManual(e.target.value)} placeholder="Ej: 4193" />
       </div>
 
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <Lbl>Fecha en que se ejecutó *</Lbl>
+          <input type="date" style={{ ...inp, maxWidth: 190 }} max={new Date().toISOString().slice(0, 10)}
+            value={fechaIni}
+            onChange={e => { setFechaIni(e.target.value); if (error) setError('')
+                             if (e.target.value && (!fechaFin || fechaFin < e.target.value)) setFechaFin(e.target.value) }} />
+        </div>
+        <div>
+          <Lbl>Fecha de término (si duró varios días)</Lbl>
+          <input type="date" style={{ ...inp, maxWidth: 190 }} min={fechaIni || undefined}
+            max={new Date().toISOString().slice(0, 10)}
+            value={fechaFin} onChange={e => { setFechaFin(e.target.value); if (error) setError('') }} />
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D',
+                    borderRadius: 8, padding: '9px 13px', marginBottom: 18, lineHeight: 1.55 }}>
+        Pon la fecha en que <b>se hizo el trabajo en terreno</b>, no la de hoy. Es el dato que
+        queda como evidencia de cuándo se ejecutó la inspección, y el que usa el calendario.
+      </div>
+
       <div style={{ marginBottom: 20 }}>
         <Lbl>Foto / Scan del Acta (JPG, PNG o PDF)</Lbl>
         <label style={{
@@ -636,7 +670,7 @@ function SubirActaManual({ ot, onGuardada, onCancel }) {
 
       <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={guardando}>Cancelar</button>
-        <button type="button" className="btn btn-primary" onClick={guardar} disabled={guardando || !archivo}
+        <button type="button" className="btn btn-primary" onClick={guardar} disabled={guardando || !archivo || !fechaIni}
           style={{ minWidth: 140 }}>
           {guardando ? (
             <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Subiendo...</>
