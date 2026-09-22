@@ -67,9 +67,11 @@ export default function Calendario() {
   const [fuenteInfo, setFuenteInfo]     = useState({ cal: 0, ots: 0 })
 
   // Filtros
-  const [filtroSede, setFiltroSede]     = useState(
-    (esAdmin() || esSupervisor()) ? '' : (usuario?.sede || '')
-  )
+  // El calendario arranca mostrando todas las sedes, para todos los roles.
+  // Antes se pre-filtraba por la sede del usuario, lo que dejaba el mes en
+  // blanco si su sede no tenía trabajos programados. El selector de sede
+  // sigue arriba: quien quiera acotar, lo hace en un clic.
+  const [filtroSede, setFiltroSede]     = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroResp, setFiltroResp]     = useState('')
 
@@ -78,6 +80,7 @@ export default function Calendario() {
   // Reprogramación de OT desde el calendario
   const [reprogOT, setReprogOT]                 = useState(null)
   const [reprogFecha, setReprogFecha]           = useState('')
+  const [reprogFin, setReprogFin]               = useState('')
   const [reprogMotivo, setReprogMotivo]         = useState('')
   const [reprogGuardando, setReprogGuardando]   = useState(false)
   const [reprogError, setReprogError]           = useState('')
@@ -122,45 +125,81 @@ export default function Calendario() {
         const { data: otsData, error: errOT } = await queryOTs
 
         if (!errOT && otsData && otsData.length > 0) {
-          actsOTs = otsData
-            .map(ot => {
-              // Fecha con que la OT se ubica en el calendario.
-              // La tentativa manda: es la que define el comercial y la que
-              // se puede mover. Las demás son respaldo para OT antiguas.
-              const fechaEfectiva = toISO(
-                ot.fecha_tentativa ||
-                ot.fecha_solicitud ||
-                ot.fecha_creacion
-              )
-              const tipeFecha =
-                ot.fecha_tentativa ? 'tentativa' :
-                ot.fecha_solicitud ? 'solicitud' : 'creación'
+          // Una OT ocupa el rango completo entre su fecha de inicio y la de
+          // término. Se genera una entrada por día para que la barra se vea
+          // continua en el mes: las vistas filtran por día exacto, así que
+          // expandir acá evita tocar las tres vistas.
+          actsOTs = otsData.flatMap(ot => {
+            // Fecha con que la OT se ubica en el calendario. Manda lo
+            // EJECUTADO sobre lo programado, y lo programado sobre lo
+            // estimado: fecha_real la resuelve la vista v_ot_fecha_real.
+            // El encadenado posterior es respaldo por si el SQL aún no
+            // se aplicó en este entorno.
+            const inicio = toISO(
+              ot.fecha_real ||
+              ot.fecha_tentativa ||
+              ot.fecha_solicitud ||
+              ot.fecha_creacion
+            )
+            if (!inicio) return []
 
-              return {
-                id:                 `ot-${ot.ot_numero}`,
-                titulo:             `OT ${ot.ot_numero}`,
-                descripcion:        ot.tipo_servicio || '',
-                cliente:            ot.cliente || '',
-                sede:               ot.sede || '',
-                area_servicio:      ot.tipo_servicio || '',
-                tipo_servicio:      ot.tipo_servicio || '',
-                ubicacion:          '',
-                fecha_inicio:       fechaEfectiva,
-                fecha_termino:      null,
-                hora_inicio:        ot.hora_tentativa || null,
-                fecha_tentativa:    ot.fecha_tentativa || null,
-                veces_reprogramada: ot.veces_reprogramada || 0,
-                hora_termino:       null,
-                responsable_nombre: ot.supervisor || '',
-                inspector_nombre:   ot.inspector  || '',
-                estado:             OT_ESTADO_MAP[ot.estado] || 'Programada',
-                observaciones:      `Estado OT: ${ot.estado || ''} · Fecha: ${tipeFecha}`,
-                ot_numero:          ot.ot_numero,
-                es_ot:              true,
-              }
-            })
-            // Filtrar por el rango de fechas del período actual
-            .filter(a => a.fecha_inicio && a.fecha_inicio >= isoInicio && a.fecha_inicio <= isoFin)
+            const fin = toISO(ot.fecha_real_fin) || toISO(ot.fecha_tentativa_fin) || inicio
+            const tipeFecha = ot.origen_fecha || (
+              ot.fecha_tentativa ? 'tentativa' :
+              ot.fecha_solicitud ? 'solicitud' : 'creación')
+
+            // Días del rango que caen dentro del período visible.
+            // El tope de 120 es una salvaguarda: una fecha mal tecleada
+            // (2206 en vez de 2026) no debe colgar el navegador.
+            const dias = []
+            const cursor = new Date(inicio + 'T00:00:00')
+            const tope   = new Date(fin + 'T00:00:00')
+            let guarda = 0
+            while (cursor <= tope && guarda++ < 120) {
+              const iso = isoFecha(cursor)
+              if (iso >= isoInicio && iso <= isoFin) dias.push(iso)
+              cursor.setDate(cursor.getDate() + 1)
+            }
+            if (dias.length === 0) return []
+
+            const total = Math.round(
+              (new Date(fin + 'T00:00:00') - new Date(inicio + 'T00:00:00')) / 86400000
+            ) + 1
+
+            return dias.map(dia => ({
+              id:                 `ot-${ot.ot_numero}-${dia}`,
+              titulo:             `OT ${ot.ot_numero}`,
+              descripcion:        ot.tipo_servicio || '',
+              cliente:            ot.cliente || '',
+              sede:               ot.sede || '',
+              area_servicio:      ot.tipo_servicio || '',
+              tipo_servicio:      ot.tipo_servicio || '',
+              ubicacion:          '',
+              fecha_inicio:       dia,
+              fecha_termino:      fin,
+              hora_inicio:        dia === inicio ? (ot.hora_tentativa || null) : null,
+              fecha_tentativa:     ot.fecha_tentativa || null,
+              fecha_tentativa_fin: ot.fecha_tentativa_fin || null,
+              veces_reprogramada: ot.veces_reprogramada || 0,
+              hora_termino:       null,
+              responsable_nombre: ot.supervisor || '',
+              inspector_nombre:   ot.inspector  || '',
+              estado:             OT_ESTADO_MAP[ot.estado] || 'Programada',
+              origen_fecha:       ot.origen_fecha || null,
+              desvio_dias:        ot.desvio_dias ?? null,
+              observaciones:      `Estado OT: ${ot.estado || ''} · Fecha: ${tipeFecha}`,
+              ot_numero:          ot.ot_numero,
+              es_ot:              true,
+              // Posición dentro de la barra, para dibujarla continua
+              dias_total:  total,
+              dia_ordinal: Math.round(
+                (new Date(dia + 'T00:00:00') - new Date(inicio + 'T00:00:00')) / 86400000
+              ) + 1,
+              tramo: total === 1 ? 'unico'
+                   : dia === inicio ? 'inicio'
+                   : dia === fin    ? 'fin' : 'medio',
+            }))
+          })
         }
       } catch (e) {
         console.warn('Error cargando OTs para calendario:', e.message)
@@ -202,13 +241,26 @@ export default function Calendario() {
     setModalAbierto(true)
   }
 
+  // Días que quedará ocupando tras el ajuste, ambos extremos incluidos
+  const diasReprog = (() => {
+    if (!reprogFecha || !reprogFin) return 0
+    const a = new Date(reprogFecha + 'T00:00:00')
+    const b = new Date(reprogFin + 'T00:00:00')
+    if (isNaN(a) || isNaN(b) || b < a) return 0
+    return Math.round((b - a) / 86400000) + 1
+  })()
+
   function abrirEditar(act) {
     // Las OT no se editan acá, pero sí se pueden reprogramar
     if (act.es_ot) {
       if (!puedeReprogramar) return
       setDetalleAbierto(false)
       setReprogOT(act)
-      setReprogFecha(act.fecha_inicio || '')
+      // Ojo: act.fecha_inicio es el día del tramo que se clickeó, que en una
+      // OT de varios días puede ser uno intermedio. Lo que se reprograma es
+      // el INICIO de la OT, no el día en que el usuario hizo clic.
+      setReprogFecha(act.fecha_tentativa || act.fecha_inicio || '')
+      setReprogFin(act.fecha_tentativa_fin || act.fecha_termino || act.fecha_tentativa || act.fecha_inicio || '')
       setReprogMotivo('')
       setReprogError('')
       return
@@ -235,7 +287,9 @@ export default function Calendario() {
 
   async function guardarReprogramacion() {
     setReprogError('')
-    if (!reprogFecha)              return setReprogError('Indica la fecha nueva')
+    if (!reprogFecha)              return setReprogError('Indica la fecha de inicio')
+    if (!reprogFin)                return setReprogError('Indica la fecha de término. Si es de un día, ponla igual al inicio.')
+    if (reprogFin < reprogFecha)   return setReprogError('El término no puede ser anterior al inicio')
     if (!reprogMotivo.trim())      return setReprogError('El motivo es obligatorio: queda registrado por qué se movió')
     if (reprogMotivo.trim().length < 5) return setReprogError('Escribe un motivo un poco más claro')
 
@@ -244,6 +298,7 @@ export default function Calendario() {
       const { error: err } = await supabase.rpc('fn_ot_reprogramar', {
         p_ot_numero: reprogOT.ot_numero,
         p_fecha:     reprogFecha,
+        p_fecha_fin: reprogFin,
         p_hora:      null,
         p_motivo:    reprogMotivo.trim(),
       })
@@ -280,7 +335,7 @@ export default function Calendario() {
             boxShadow:'0 24px 70px rgba(0,0,0,.4)',
           }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94A3B8', letterSpacing:'.8px' }}>
-              REPROGRAMAR
+              REPROGRAMAR O AJUSTAR DURACIÓN
             </div>
             <h3 style={{ margin:'6px 0 2px', fontSize:20, fontWeight:800, color:'#0E2A45' }}>
               {reprogOT.titulo}
@@ -299,21 +354,49 @@ export default function Calendario() {
 
             <div style={{ marginTop:18 }}>
               <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
-                Fecha actual
+                Programación actual
               </label>
               <div style={{ fontSize:14, color:'#64748B', marginBottom:14 }}>
-                {reprogOT.fecha_inicio}
+                {reprogOT.fecha_tentativa || reprogOT.fecha_inicio}
+                {reprogOT.fecha_termino && reprogOT.fecha_termino !== (reprogOT.fecha_tentativa || reprogOT.fecha_inicio)
+                  ? ` → ${reprogOT.fecha_termino}` : ''}
+                {reprogOT.dias_total > 1 ? `  ·  ${reprogOT.dias_total} días` : '  ·  1 día'}
               </div>
 
-              <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
-                Fecha nueva *
-              </label>
-              <input
-                type="date" value={reprogFecha}
-                onChange={e => setReprogFecha(e.target.value)}
-                style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
-                         borderRadius:8, fontSize:14, boxSizing:'border-box' }}
-              />
+              <div style={{ display:'flex', gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
+                    Inicio *
+                  </label>
+                  <input
+                    type="date" value={reprogFecha}
+                    onChange={e => {
+                      const v = e.target.value
+                      setReprogFecha(v)
+                      // El término acompaña al inicio si quedó antes
+                      if (v && (!reprogFin || reprogFin < v)) setReprogFin(v)
+                    }}
+                    style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
+                             borderRadius:8, fontSize:14, boxSizing:'border-box' }}
+                  />
+                </div>
+                <div style={{ flex:1 }}>
+                  <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569', marginBottom:5 }}>
+                    Término *
+                  </label>
+                  <input
+                    type="date" value={reprogFin} min={reprogFecha || undefined}
+                    onChange={e => setReprogFin(e.target.value)}
+                    style={{ width:'100%', padding:'10px 12px', border:'1px solid #CBD5E1',
+                             borderRadius:8, fontSize:14, boxSizing:'border-box' }}
+                  />
+                </div>
+              </div>
+              {diasReprog > 0 && (
+                <div style={{ fontSize:11.5, color:'#64748B', marginTop:5 }}>
+                  Quedará ocupando {diasReprog} {diasReprog === 1 ? 'día' : 'días'} en el calendario.
+                </div>
+              )}
 
               <label style={{ display:'block', fontSize:11.5, fontWeight:700, color:'#475569',
                               margin:'14px 0 5px' }}>
@@ -428,7 +511,7 @@ export default function Calendario() {
         </span>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
           <span style={{ width:10, height:10, borderRadius:2, border:'2px dashed #1E4D7B', display:'inline-block' }} />
-          Órdenes de Trabajo (fecha: programación → inspección → ejecución → creación)
+          Órdenes de Trabajo (fechas tentativas de inicio y término)
         </span>
       </div>
 
@@ -497,7 +580,7 @@ export default function Calendario() {
       {detalleAbierto && actDetalle && (
         <ModalDetalle
           act={actDetalle}
-          puedeEditar={puedeEditar && !actDetalle.es_ot}
+          puedeEditar={actDetalle.es_ot ? puedeReprogramar : puedeEditar}
           onEditar={() => abrirEditar(actDetalle)}
           onEliminar={() => eliminar(actDetalle.id)}
           onCerrar={() => setDetalleAbierto(false)}
@@ -542,21 +625,40 @@ function VistaMes({ fechaRef, actividades, onDiaClick, onActClick, puedeCrear })
             <div style={{ ...s.mesDiaNum, color: esHoy ? 'var(--azul)' : '#334155', fontWeight: esHoy ? 800 : 400 }}>
               {fecha.getDate()}
             </div>
-            {acts.slice(0, 3).map(a => (
-              <div
-                key={a.id}
-                onClick={e => { e.stopPropagation(); onActClick(a) }}
-                style={{
-                  ...s.mesChip,
-                  background: ESTADO_COLOR[a.estado] || '#1E4D7B',
-                  border: a.es_ot ? '1px dashed rgba(255,255,255,.6)' : 'none',
-                  opacity: a.es_ot ? 0.85 : 1,
-                }}
-                title={`${a.titulo}${a.cliente ? ' — ' + a.cliente : ''}`}
-              >
-                {a.es_ot ? '📋 ' : ''}{fmtHora(a.hora_inicio)} {a.titulo}
-              </div>
-            ))}
+            {acts.slice(0, 3).map(a => {
+              // OT de varios días: se dibuja como tramo de barra. Los bordes
+              // que continúan van cuadrados; el texto se repite al empezar
+              // cada semana para que la fila de abajo también se entienda.
+              const barra = a.es_ot && a.dias_total > 1
+              const abre  = !barra || a.tramo === 'inicio'
+              const cierra= !barra || a.tramo === 'fin'
+              const rotula = abre || fecha.getDay() === 0
+              return (
+                <div
+                  key={a.id}
+                  onClick={e => { e.stopPropagation(); onActClick(a) }}
+                  style={{
+                    ...s.mesChip,
+                    background: ESTADO_COLOR[a.estado] || '#1E4D7B',
+                    border: a.es_ot ? '1px dashed rgba(255,255,255,.6)' : 'none',
+                    borderLeftWidth:  abre   ? undefined : 0,
+                    borderRightWidth: cierra ? undefined : 0,
+                    borderTopLeftRadius:     abre   ? 4 : 0,
+                    borderBottomLeftRadius:  abre   ? 4 : 0,
+                    borderTopRightRadius:    cierra ? 4 : 0,
+                    borderBottomRightRadius: cierra ? 4 : 0,
+                    opacity: a.es_ot ? 0.85 : 1,
+                  }}
+                  title={`${a.titulo}${a.cliente ? ' — ' + a.cliente : ''}${
+                    barra ? ` · día ${a.dia_ordinal} de ${a.dias_total}` : ''}`}
+                >
+                  {rotula
+                    ? <>{a.es_ot ? '📋 ' : ''}{fmtHora(a.hora_inicio)} {a.titulo}
+                        {barra && abre ? ` · ${a.dias_total}d` : ''}</>
+                    : '·'}
+                </div>
+              )
+            })}
             {acts.length > 3 && (
               <div style={{ fontSize:10, color:'var(--gris)', marginTop:2 }}>+{acts.length - 3} más</div>
             )}
@@ -608,7 +710,13 @@ function VistaSemana({ fechaRef, actividades, onDiaClick, onActClick, puedeCrear
                     opacity: a.es_ot ? 0.85 : 1,
                   }}
                 >
-                  <div style={{ fontWeight:700, fontSize:10 }}>{a.es_ot ? '📋 OT' : fmtHora(a.hora_inicio)}</div>
+                  <div style={{ fontWeight:700, fontSize:10 }}>
+                    {a.es_ot ? '📋 OT' : fmtHora(a.hora_inicio)}
+                    {a.es_ot && a.dias_total > 1 &&
+                      <span style={{ marginLeft:4, fontWeight:500, opacity:.9 }}>
+                        día {a.dia_ordinal}/{a.dias_total}
+                      </span>}
+                  </div>
                   <div style={{ fontSize:11, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{a.titulo}</div>
                   {a.cliente && <div style={{ fontSize:10, opacity:.85 }}>{a.cliente}</div>}
                 </div>
@@ -921,15 +1029,28 @@ function ModalDetalle({ act, puedeEditar, onEditar, onEliminar, onCerrar }) {
         <div style={s.modalBody}>
           {act.es_ot && (
             <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:6, padding:'6px 10px', fontSize:11, marginBottom:12 }}>
-              Este evento proviene de una Orden de Trabajo. Para modificarla, usa el módulo OTs.
+              Proviene de una Orden de Trabajo. Desde aquí puedes cambiar las fechas
+              y extender los días. El resto de los datos se edita en el módulo OTs.
             </div>
           )}
           <span style={{ ...s.estadoBadge, background: ESTADO_COLOR[act.estado] || '#1E4D7B', display:'inline-block', marginBottom:12 }}>
             {act.estado}
           </span>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 16px', fontSize:13 }}>
-            <Fila label="Fecha inicio"  val={fmtFecha(act.fecha_inicio)} />
+            <Fila label="Fecha inicio"
+                  val={fmtFecha(act.es_ot ? (act.fecha_tentativa || act.fecha_inicio) : act.fecha_inicio)} />
             <Fila label="Fecha término" val={fmtFecha(act.fecha_termino)} />
+            {act.es_ot && act.dias_total > 1 &&
+              <Fila label="Duración" val={`${act.dias_total} días`} />}
+            {act.es_ot && act.origen_fecha &&
+              <Fila label="Origen de la fecha" val={{
+                ejecutada:'Acta de terreno · lo que ocurrió',
+                programada:'Asignación del supervisor',
+                tentativa:'Estimación del comercial',
+                'sin fecha':'Sin fecha registrada'}[act.origen_fecha] || act.origen_fecha} />}
+            {act.es_ot && act.desvio_dias != null && act.desvio_dias !== 0 &&
+              <Fila label="Desvío vs. lo estimado"
+                    val={`${act.desvio_dias > 0 ? '+' : ''}${act.desvio_dias} días`} />}
             <Fila label="Horario" val={`${fmtHora(act.hora_inicio) || '—'}${act.hora_termino ? ' → ' + fmtHora(act.hora_termino) : ''}`} />
             <Fila label="Sede"          val={act.sede} />
             <Fila label="Cliente"       val={act.cliente} />
@@ -960,8 +1081,14 @@ function ModalDetalle({ act, puedeEditar, onEditar, onEliminar, onCerrar }) {
         </div>
         {puedeEditar && (
           <div style={s.modalFooter}>
-            <button className="btn btn-danger btn-sm" onClick={onEliminar}>🗑 Cancelar actividad</button>
-            <button className="btn btn-primary btn-sm" onClick={onEditar}>✏️ Editar</button>
+            {/* Una OT no se cancela desde el calendario: eso se hace en el
+                módulo OTs, donde queda el registro correspondiente. */}
+            {!act.es_ot && (
+              <button className="btn btn-danger btn-sm" onClick={onEliminar}>🗑 Cancelar actividad</button>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={onEditar}>
+              {act.es_ot ? '🗓 Cambiar fechas' : '✏️ Editar'}
+            </button>
           </div>
         )}
       </div>
