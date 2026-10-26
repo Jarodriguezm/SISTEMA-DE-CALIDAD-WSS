@@ -347,6 +347,7 @@ function MiJornada({ usuario }) {
       {marcas.length > 0 && (
         <div style={S.tarjeta}>
           <h3 style={S.h3}>Marcas de hoy</h3>
+          <MapaMarcas marcas={marcas} />
           {marcas.map(m => <FilaMarca key={m.id} m={m} />)}
         </div>
       )}
@@ -409,6 +410,7 @@ function MiJornada({ usuario }) {
             {marcasDet.length === 0
               ? <div style={S.vacio}>Esta jornada no tiene marcas registradas</div>
               : <>
+                  <MapaMarcas marcas={marcasDet} />
                   <BotonRecorrido marcas={marcasDet} />
                   {marcasDet.map(m => <FilaMarca key={m.id} m={m} />)}
                 </>}
@@ -658,6 +660,7 @@ function Supervision() {
             </div>
             {marcas.length === 0 ? <div style={S.vacio}>Sin marcas</div>
               : <>
+                  <MapaMarcas marcas={marcas} />
                   <BotonRecorrido marcas={marcas} />
                   {marcas.map(m => <FilaMarca key={m.id} m={m} />)}
                 </>}
@@ -669,6 +672,123 @@ function Supervision() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// MAPA — Leaflet con OpenStreetMap
+//
+// Se carga desde CDN en vez de instalarlo como dependencia: así no
+// hay que tocar package.json, que es donde ya nos falló la compilación
+// antes por quedar desincronizado con el lock.
+//
+// Si el CDN o los mosaicos están bloqueados por la red de la faena, el
+// mapa simplemente no aparece y quedan los enlaces a Google Maps. Nunca
+// debe impedir ver las coordenadas.
+// ═══════════════════════════════════════════════════════════════
+let leafletPromesa = null
+function cargarLeaflet() {
+  if (window.L) return Promise.resolve(window.L)
+  if (leafletPromesa) return leafletPromesa
+  leafletPromesa = new Promise((resolve, reject) => {
+    const css = document.createElement('link')
+    css.rel = 'stylesheet'
+    css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'
+    document.head.appendChild(css)
+    const js = document.createElement('script')
+    js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
+    js.onload = () => resolve(window.L)
+    js.onerror = () => reject(new Error('No se pudo cargar el mapa'))
+    document.head.appendChild(js)
+  })
+  return leafletPromesa
+}
+
+function MapaMarcas({ marcas }) {
+  const caja = useRef(null)
+  const mapa = useRef(null)
+  const [fallo, setFallo] = useState('')
+  const puntos = marcas.filter(m => m.lat != null)
+
+  useEffect(() => {
+    if (!puntos.length || !caja.current) return
+    let vivo = true
+    cargarLeaflet().then(L => {
+      if (!vivo || !caja.current) return
+      if (mapa.current) { mapa.current.remove(); mapa.current = null }
+
+      const m = L.map(caja.current, { scrollWheelZoom: false })
+      mapa.current = m
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap',
+      }).addTo(m)
+
+      const coords = puntos.map(p => [Number(p.lat), Number(p.lng)])
+
+      // Línea del recorrido
+      if (coords.length > 1) {
+        L.polyline(coords, { color: '#1E4D7B', weight: 3, opacity: .75, dashArray: '6,6' }).addTo(m)
+      }
+
+      puntos.forEach((p, i) => {
+        const paso = PASOS.find(x => x.tipo === p.tipo)
+        const color = paso?.color || '#1E4D7B'
+        // Marcador numerado: se ve el orden del recorrido de un vistazo
+        const icono = L.divIcon({
+          className: '',
+          html: `<div style="background:${color};color:#fff;width:26px;height:26px;
+                   border-radius:50%;display:grid;place-items:center;font-weight:800;
+                   font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)">${i + 1}</div>`,
+          iconSize: [26, 26], iconAnchor: [13, 13],
+        })
+        L.marker([Number(p.lat), Number(p.lng)], { icon: icono }).addTo(m)
+          .bindPopup(
+            `<b>${paso?.label || p.tipo}</b><br>${fmtHora(p.momento)}` +
+            (p.precision_m != null ? `<br>Precisión ±${p.precision_m} m` : '') +
+            (p.referencia ? `<br>${p.referencia}` : '') +
+            (p.diferida ? '<br><i>marcada sin señal</i>' : '')
+          )
+        // Círculo de precisión: muestra honestamente cuánto puede errar
+        if (p.precision_m != null && Number(p.precision_m) > 25) {
+          L.circle([Number(p.lat), Number(p.lng)], {
+            radius: Number(p.precision_m), color, weight: 1, opacity: .5, fillOpacity: .08,
+          }).addTo(m)
+        }
+      })
+
+      if (coords.length === 1) m.setView(coords[0], 16)
+      else m.fitBounds(L.latLngBounds(coords), { padding: [30, 30] })
+
+      // El contenedor nace dentro de un modal: Leaflet necesita que le
+      // avisen del tamaño real una vez que ya está pintado.
+      setTimeout(() => m.invalidateSize(), 120)
+    }).catch(() => { if (vivo) setFallo('No se pudo cargar el mapa. Usa los enlaces de abajo.') })
+
+    return () => {
+      vivo = false
+      if (mapa.current) { mapa.current.remove(); mapa.current = null }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marcas])
+
+  if (!puntos.length) return null
+  if (fallo) {
+    return (
+      <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB',
+                    border: '1px solid #FCD34D', borderRadius: 8,
+                    padding: '9px 12px', marginBottom: 12 }}>{fallo}</div>
+    )
+  }
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div ref={caja} style={{ height: 280, borderRadius: 10, border: '1px solid #DDE5EE',
+                               overflow: 'hidden', background: '#EEF2F7' }} />
+      <div style={{ fontSize: 10.5, color: '#94A3B8', marginTop: 5, fontStyle: 'italic' }}>
+        Los números siguen el orden del recorrido. El círculo alrededor de un punto es el
+        margen de error del GPS en ese momento.
+      </div>
+    </div>
+  )
+}
+
 // Recorrido completo en un solo mapa: salida, trabajo y regreso.
 // Google Maps acepta una ruta con puntos intermedios por URL, así que
 // el supervisor ve de una vez de dónde salió, dónde trabajó y dónde
@@ -792,6 +912,6 @@ const S = {
   fondo: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
            background: 'rgba(8,18,32,.55)', display: 'grid', placeItems: 'center',
            zIndex: 9000, padding: 20 },
-  modal: { background: '#fff', borderRadius: 14, padding: 20, width: 'min(560px,100%)',
+  modal: { background: '#fff', borderRadius: 14, padding: 20, width: 'min(700px,100%)',
            maxHeight: '82vh', overflowY: 'auto', boxShadow: '0 24px 70px rgba(0,0,0,.35)' },
 }
