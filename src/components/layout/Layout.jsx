@@ -149,6 +149,8 @@ const NAV_ITEMS = [
 const MENU_ACOTADO = {
   APR:        ['calendario', 'jornada', 'procedimientos', 'acreditaciones', 'personal', 'epp', 'arranque'],
   SECRETARIA: ['calendario', 'jornada', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
+  // Recursos Humanos: horas y personas. Nada comercial ni técnico.
+  RRHH:       ['jornada', 'personal'],
 }
 
 const NAV_ADMIN = [
@@ -166,6 +168,7 @@ const ROL_COLOR = {
   'AUDITOR':       'badge-purple',
   'APR':           'badge-blue',
   'SECRETARIA':    'badge-gray',
+  'RRHH':          'badge-purple',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
