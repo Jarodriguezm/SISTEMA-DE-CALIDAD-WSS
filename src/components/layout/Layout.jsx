@@ -131,6 +131,8 @@ const NAV_ITEMS = [
   { id: 'actas',         icon: 'Actas',         label: 'Actas',              ruta: '/actas',            rol: null },
   { id: 'reservas',      icon: 'Reservas',      label: 'Reserva Informes',   ruta: '/reservas',         rol: null },
   { id: 'calendario',    icon: 'Calendario',    label: 'Calendario',         ruta: '/calendario',       rol: null },
+  // Jornada: la marca todo el mundo, incluidos APR y secretaría
+  { id: 'jornada',       icon: 'Calendario',    label: 'Jornada y horas',    ruta: '/jornada',          rol: null },
   { id: 'clientes',      icon: 'Clientes',      label: 'Clientes',           ruta: '/clientes',         rol: 'noInspector' },
   { id: 'procedimientos',icon: 'Procedimientos',label: 'Procedimientos',     ruta: '/procedimientos',   rol: null },
   { id: 'acreditaciones',icon: 'Acreditaciones',label: 'Acreditaciones',     ruta: '/acreditaciones',   rol: null },
@@ -145,8 +147,8 @@ const NAV_ITEMS = [
 // Roles con menú acotado: solo ven estos módulos y nada más.
 // El cambio de contraseña está aparte, al pie de la barra, y lo tienen todos.
 const MENU_ACOTADO = {
-  APR:        ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp', 'arranque'],
-  SECRETARIA: ['calendario', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
+  APR:        ['calendario', 'jornada', 'procedimientos', 'acreditaciones', 'personal', 'epp', 'arranque'],
+  SECRETARIA: ['calendario', 'jornada', 'procedimientos', 'acreditaciones', 'personal', 'epp'],
 }
 
 const NAV_ADMIN = [
