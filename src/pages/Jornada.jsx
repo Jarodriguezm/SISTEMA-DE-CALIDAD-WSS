@@ -21,7 +21,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const ROLES_SUPERVISION = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR',
-                           'AUDITOR', 'APR', 'PREVENCIONISTA']
+                           'AUDITOR', 'APR', 'PREVENCIONISTA', 'RRHH']
+
+// Validar es confirmar que el trabajo ocurrió: le corresponde a quien
+// lo supervisa. Debe coincidir con la política jor_validar de la base.
+// Antes el botón aparecía a todos los de supervisión, y para Auditor o
+// APR la base actualizaba cero filas SIN error: parecía validado y no.
+const ROLES_VALIDAR = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR']
 
 const PASOS = [
   { tipo: 'viaje_ida_inicio', label: 'Iniciar viaje',    icono: '🚗',
@@ -694,11 +700,20 @@ function Supervision() {
     setMarcas(data || [])
   }
 
+  const puedeValidar = ROLES_VALIDAR.includes((usuario?.rol || '').toUpperCase())
+
   async function validar(j) {
-    const { error: e } = await supabase.from('jornadas')
+    // .select() devuelve las filas realmente actualizadas. Sin esto, un
+    // UPDATE bloqueado por permisos responde "éxito" con cero filas.
+    const { data, error: e } = await supabase.from('jornadas')
       .update({ validada_por: usuario?.email, validada_en: new Date().toISOString() })
       .eq('id', j.id)
+      .select('id')
     if (e) { setError(e.message); return }
+    if (!data || data.length === 0) {
+      setError('No se pudo validar: tu perfil no tiene permiso para validar jornadas.')
+      return
+    }
     cargar(); if (detalle?.id === j.id) setDetalle({ ...detalle, validada_por: usuario?.email })
   }
 
@@ -862,7 +877,7 @@ function Supervision() {
                       <td style={S.td}>{j.validada_por ? '✓ ' + j.validada_por.split('@')[0] : '—'}</td>
                       <td style={S.td}>
                         <button onClick={() => abrir(j)} style={S.btnChico}>Ver</button>
-                        {!j.validada_por && j.estado === 'cerrada' &&
+                        {puedeValidar && !j.validada_por && j.estado === 'cerrada' &&
                           <button onClick={() => validar(j)} style={{ ...S.btnChico, marginLeft: 5 }}>Validar</button>}
                       </td>
                     </tr>
