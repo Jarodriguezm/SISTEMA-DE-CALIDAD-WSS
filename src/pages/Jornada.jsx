@@ -23,11 +23,58 @@ import { useAuth } from '../lib/AuthContext'
 const ROLES_SUPERVISION = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR',
                            'AUDITOR', 'APR', 'PREVENCIONISTA', 'RRHH']
 
-// Validar es confirmar que el trabajo ocurrió: le corresponde a quien
-// lo supervisa. Debe coincidir con la política jor_validar de la base.
-// Antes el botón aparecía a todos los de supervisión, y para Auditor o
-// APR la base actualizaba cero filas SIN error: parecía validado y no.
-const ROLES_VALIDAR = ['ADMIN', 'ADMINISTRADOR', 'SUPERVISOR']
+// ── Revisión de HHEE en dos niveles ─────────────────────────────
+// La revisión pasa por fn_jornada_revisar, que aplica las mismas reglas
+// en la base. Estas listas solo deciden qué botones se MUESTRAN; quién
+// puede hacer qué lo decide la base. Así un botón nunca promete algo
+// que después falla en silencio.
+const ROLES_REVISA_SUP = ['SUPERVISOR', 'ADMIN', 'ADMINISTRADOR']
+const ROLES_REVISA_ADM = ['ADMIN', 'ADMINISTRADOR']
+
+const ESTADO_REV = {
+  pendiente:           { label: 'Pendiente',            bg: '#FEF3C7', fg: '#92400E' },
+  aprobada_supervisor: { label: 'Aprobada supervisor',  bg: '#DBEAFE', fg: '#1E3A8A' },
+  observada:           { label: 'Observada',            bg: '#FFEDD5', fg: '#9A3412' },
+  aprobada:            { label: 'Aprobada',             bg: '#DEF7EC', fg: '#036C4B' },
+  rechazada:           { label: 'Rechazada',            bg: '#FEE2E2', fg: '#991B1B' },
+}
+const ACCION_LBL = {
+  aprobar: 'aprobó', rechazar: 'rechazó', observar: 'observó', comentar: 'comentó',
+}
+
+// Qué acciones le corresponden a este rol sobre esta jornada.
+// Refleja las reglas de fn_jornada_revisar.
+function accionesPara(rol, jornada, emailPropio) {
+  const r = (rol || '').toUpperCase()
+  const esAdm = ROLES_REVISA_ADM.includes(r)
+  const esSup = ROLES_REVISA_SUP.includes(r)
+  if (!esSup || !jornada || jornada.estado !== 'cerrada') return []
+  if ((jornada.email || '').toLowerCase() === (emailPropio || '').toLowerCase()) return []
+  const est = jornada.estado_revision
+  if (est === 'aprobada' || est === 'rechazada') return ['comentar']
+  if (esAdm) return ['aprobar', 'observar', 'rechazar', 'comentar']
+  if (est === 'pendiente' || est === 'observada') return ['aprobar', 'rechazar', 'comentar']
+  return ['comentar']   // aprobada por supervisor: espera a administración
+}
+
+function PillRev({ estado }) {
+  const e = ESTADO_REV[estado] || ESTADO_REV.pendiente
+  return (
+    <span style={{ background: e.bg, color: e.fg, borderRadius: 11, padding: '2px 8px',
+                   fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{e.label}</span>
+  )
+}
+
+function HorasExtra({ horas, excede }) {
+  const h = Number(horas || 0)
+  if (h <= 0) return <span style={{ color: '#94A3B8' }}>—</span>
+  return (
+    <span style={{ fontWeight: 800, color: '#C0392B' }}
+          title={excede ? 'Supera el tope legal de 2 horas extra diarias' : undefined}>
+      {h} h{excede && ' ⚠'}
+    </span>
+  )
+}
 
 const PASOS = [
   { tipo: 'viaje_ida_inicio', label: 'Iniciar viaje',    icono: '🚗',
@@ -129,6 +176,7 @@ function MiJornada({ usuario }) {
   const [sinGps, setSinGps]         = useState(null)   // { tipo, motivo, error }
   const [justificacion, setJustif]  = useState('')
   const [verificacion, setVerif]    = useState(null)   // resultado de "Verificar GPS"
+  const [mes, setMes]               = useState(null)   // HHEE del mes por estado
   const [enLinea, setEnLinea]   = useState(navigator.onLine)
   const tic = useRef(null)
   const [, forzar] = useState(0)
@@ -175,6 +223,21 @@ function MiJornada({ usuario }) {
         .select('*').eq('email', (usuario?.email || '').toLowerCase())
         .order('fecha', { ascending: false }).limit(20)
       setHistorial(hist || [])
+
+      // Resumen de HHEE del mes en curso, separado por estado de revisión
+      const hoy = new Date()
+      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
+      const { data: delMes } = await supabase.from('v_jornadas')
+        .select('horas_hhee, estado_revision, estado')
+        .eq('email', (usuario?.email || '').toLowerCase())
+        .gte('fecha', inicioMes)
+      const suma = f => (delMes || []).filter(f).reduce((s, j) => s + Number(j.horas_hhee || 0), 0)
+      setMes({
+        aprobadas:  suma(j => j.estado_revision === 'aprobada'),
+        porRevisar: suma(j => j.estado === 'cerrada' &&
+                       ['pendiente', 'aprobada_supervisor', 'observada'].includes(j.estado_revision)),
+        rechazadas: suma(j => j.estado_revision === 'rechazada'),
+      })
     } catch (e) { setError(e.message) }
     finally { setCargando(false) }
   }, [usuario])
@@ -530,6 +593,17 @@ function MiJornada({ usuario }) {
         </div>
       )}
 
+      {/* ── Mis horas extra del mes ── */}
+      {mes && (
+        <div style={{ display: 'grid', gap: 10, marginBottom: 14,
+                      gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
+          <Dato etq="HHEE aprobadas este mes" val={`${mes.aprobadas.toFixed(2)} h`} color="#159A6B" />
+          <Dato etq="En revisión" val={`${mes.porRevisar.toFixed(2)} h`} color="#E08A1E" />
+          {mes.rechazadas > 0 &&
+            <Dato etq="Rechazadas" val={`${mes.rechazadas.toFixed(2)} h`} color="#C0392B" />}
+        </div>
+      )}
+
       {/* ── Historial ── */}
       <div style={S.tarjeta}>
         <h3 style={S.h3}>Mis últimas jornadas</h3>
@@ -542,7 +616,8 @@ function MiJornada({ usuario }) {
                   <th style={S.th}>Fecha</th><th style={S.th}>OT</th>
                   <th style={{ ...S.th, textAlign: 'right' }}>Trabajo</th>
                   <th style={{ ...S.th, textAlign: 'right' }}>Viaje</th>
-                  <th style={S.th}>Estado</th><th style={S.th}>Validada</th><th style={S.th}>Ubicaciones</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>HHEE</th>
+                  <th style={S.th}>Revisión</th><th style={S.th}>Detalle</th>
                 </tr></thead>
                 <tbody>
                   {historial.map(j => (
@@ -551,13 +626,23 @@ function MiJornada({ usuario }) {
                       <td style={S.td}>{j.ot_numero || '—'}</td>
                       <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{j.horas_trabajo} h</td>
                       <td style={{ ...S.td, textAlign: 'right' }}>{j.horas_viaje} h</td>
-                      <td style={S.td}>
-                        <span style={j.estado === 'cerrada' ? S.pillOk : S.pillPend}>{j.estado}</span>
+                      <td style={{ ...S.td, textAlign: 'right' }}>
+                        <HorasExtra horas={j.horas_hhee} excede={j.excede_tope} />
                       </td>
-                      <td style={S.td}>{j.validada_por ? '✓' : '—'}</td>
+                      <td style={S.td}>
+                        {j.estado === 'abierta'
+                          ? <span style={S.pillPend}>en curso</span>
+                          : <PillRev estado={j.estado_revision} />}
+                        {j.ultimo_comentario && (
+                          <div style={{ fontSize: 11, color: '#64748B', marginTop: 3, maxWidth: 220 }}
+                               title={j.ultimo_comentario}>
+                            💬 {j.ultimo_comentario.length > 40 ? j.ultimo_comentario.slice(0, 38) + '…' : j.ultimo_comentario}
+                          </div>
+                        )}
+                      </td>
                       <td style={S.td}>
                         <button onClick={() => abrirDetalle(j)} style={S.btnChico}>
-                          📍 Ver marcas
+                          📍 Ver
                         </button>
                       </td>
                     </tr>
@@ -634,6 +719,10 @@ function MiJornada({ usuario }) {
                   <BotonRecorrido marcas={marcasDet} />
                   {marcasDet.map(m => <FilaMarca key={m.id} m={m} />)}
                 </>}
+            {detalle.estado === 'cerrada' && (
+              <PanelRevision jornada={detalle} rol={usuario?.rol}
+                emailPropio={usuario?.email} onHecho={cargar} />
+            )}
           </div>
         </div>
       )}
@@ -655,6 +744,7 @@ function Supervision() {
   })
   const [hasta, setHasta] = useState(() => new Date().toISOString().slice(0, 10))
   const [persona, setPersona] = useState('')
+  const [fRevision, setFRevision] = useState('')
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [enTerreno, setEnTerreno] = useState([])
@@ -700,34 +790,38 @@ function Supervision() {
     setMarcas(data || [])
   }
 
-  const puedeValidar = ROLES_VALIDAR.includes((usuario?.rol || '').toUpperCase())
-
-  async function validar(j) {
-    // .select() devuelve las filas realmente actualizadas. Sin esto, un
-    // UPDATE bloqueado por permisos responde "éxito" con cero filas.
-    const { data, error: e } = await supabase.from('jornadas')
-      .update({ validada_por: usuario?.email, validada_en: new Date().toISOString() })
-      .eq('id', j.id)
-      .select('id')
-    if (e) { setError(e.message); return }
-    if (!data || data.length === 0) {
-      setError('No se pudo validar: tu perfil no tiene permiso para validar jornadas.')
-      return
+  // Tras revisar: recargar la lista y refrescar la jornada abierta
+  async function despuesDeRevisar() {
+    await cargar()
+    if (detalle) {
+      const { data } = await supabase.from('v_jornadas').select('*').eq('id', detalle.id).maybeSingle()
+      if (data) setDetalle(data)
     }
-    cargar(); if (detalle?.id === j.id) setDetalle({ ...detalle, validada_por: usuario?.email })
   }
 
-  const lista = persona ? jornadas.filter(j => j.persona === persona) : jornadas
+  const rolActual = (usuario?.rol || '').toUpperCase()
+  const misAcciones = j => accionesPara(rolActual, j, usuario?.email).filter(a => a !== 'comentar')
+
+  const lista = jornadas.filter(j =>
+    (!persona || j.persona === persona) &&
+    (!fRevision
+      || (fRevision === 'mias' ? misAcciones(j).length > 0 : j.estado_revision === fRevision)))
   const personas = [...new Set(jornadas.map(j => j.persona))].sort()
   const totTrab = lista.reduce((s, j) => s + Number(j.horas_trabajo || 0), 0)
   const totViaje = lista.reduce((s, j) => s + Number(j.horas_viaje || 0), 0)
+  const totHhee = lista.filter(j => j.estado_revision !== 'rechazada')
+                       .reduce((s, j) => s + Number(j.horas_hhee || 0), 0)
+  const porRevisarMias = jornadas.filter(j => misAcciones(j).length > 0).length
 
   function exportar() {
-    const cab = ['Persona', 'Fecha', 'OT', 'Horas trabajo', 'Horas viaje', 'Km aprox', 'Estado', 'Validada por']
+    const cab = ['Persona', 'Fecha', 'OT', 'Horas trabajo', 'Horas viaje', 'HHEE', 'Supera tope',
+                 'Km aprox', 'Revisión', 'Revisó supervisor', 'Revisó administración', 'Último comentario']
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`
     const csv = '﻿' + [cab.join(';')].concat(lista.map(j =>
-      [j.persona, j.fecha, j.ot_numero, j.horas_trabajo, j.horas_viaje,
-       j.km_estimados, j.estado, j.validada_por].map(esc).join(';'))).join('\n')
+      [j.persona, j.fecha, j.ot_numero, j.horas_trabajo, j.horas_viaje, j.horas_hhee,
+       j.excede_tope ? 'Sí' : 'No', j.km_estimados,
+       ESTADO_REV[j.estado_revision]?.label || j.estado_revision,
+       j.revisado_sup_por, j.revisado_adm_por, j.ultimo_comentario].map(esc).join(';'))).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     a.download = `jornadas_${desde}_${hasta}.csv`; a.click()
@@ -745,17 +839,35 @@ function Supervision() {
             <option value="">Todas</option>
             {personas.map(p => <option key={p} value={p}>{p}</option>)}
           </select></div>
+        <div><label style={S.lbl}>Revisión</label>
+          <select value={fRevision} onChange={e => setFRevision(e.target.value)} style={S.input}>
+            <option value="">Todas</option>
+            {ROLES_REVISA_SUP.includes(rolActual) &&
+              <option value="mias">Por revisar por mí</option>}
+            {Object.entries(ESTADO_REV).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select></div>
         <button onClick={exportar} style={S.btnChico} disabled={!lista.length}>⬇ CSV</button>
       </div>
 
       {error && <div style={{ ...S.alerta, background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B' }}>⚠ {error}</div>}
 
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', marginBottom: 14 }}>
+      {/* Aviso de trabajo pendiente para quien revisa */}
+      {porRevisarMias > 0 && fRevision !== 'mias' && (
+        <div style={{ ...S.alerta, background: '#FFFBEB', border: '1px solid #FCD34D', color: '#92400E',
+                      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>Tienes <b>{porRevisarMias}</b> jornada(s) esperando tu revisión.</span>
+          <button onClick={() => setFRevision('mias')} style={S.btnChico}>Ver solo esas</button>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginBottom: 14 }}>
         <Kpi etq="Jornadas" val={lista.length} />
         <Kpi etq="Horas de trabajo" val={totTrab.toFixed(1) + ' h'} color="#159A6B" />
         <Kpi etq="Horas de viaje" val={totViaje.toFixed(1) + ' h'} color="#2B5280" />
-        <Kpi etq="Sin validar" val={lista.filter(j => !j.validada_por).length}
-             color={lista.some(j => !j.validada_por) ? '#E08A1E' : '#64748B'} />
+        <Kpi etq="Horas extra" val={totHhee.toFixed(1) + ' h'} color="#C0392B" />
+        {ROLES_REVISA_SUP.includes(rolActual) &&
+          <Kpi etq="Por revisar por ti" val={porRevisarMias}
+               color={porRevisarMias > 0 ? '#E08A1E' : '#64748B'} />}
       </div>
 
       {enTerreno.length > 0 && (
@@ -855,33 +967,45 @@ function Supervision() {
                   <th style={S.th}>Persona</th><th style={S.th}>Fecha</th><th style={S.th}>OT</th>
                   <th style={{ ...S.th, textAlign: 'right' }}>Trabajo</th>
                   <th style={{ ...S.th, textAlign: 'right' }}>Viaje</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Km</th>
-                  <th style={S.th}>Ubicación</th><th style={S.th}>Validada</th><th style={S.th}></th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>HHEE</th>
+                  <th style={S.th}>Ubicación</th><th style={S.th}>Revisión</th><th style={S.th}></th>
                 </tr></thead>
                 <tbody>
-                  {lista.map(j => (
-                    <tr key={j.id}>
-                      <td style={S.td}>{j.persona}</td>
-                      <td style={S.td}>{fmtFecha(j.fecha)}</td>
-                      <td style={S.td}>{j.ot_numero || '—'}</td>
-                      <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{j.horas_trabajo} h</td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>{j.horas_viaje} h</td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>{j.km_estimados ?? '—'}</td>
-                      <td style={S.td}>
-                        {j.marcas_sin_ubicacion > 0
-                          ? <span style={S.pillPend}>{j.marcas_sin_ubicacion} sin GPS</span>
-                          : <span style={S.pillOk}>completa</span>}
-                        {j.marcas_diferidas > 0 &&
-                          <span style={{ ...S.pillPend, marginLeft: 4 }}>{j.marcas_diferidas} diferida(s)</span>}
-                      </td>
-                      <td style={S.td}>{j.validada_por ? '✓ ' + j.validada_por.split('@')[0] : '—'}</td>
-                      <td style={S.td}>
-                        <button onClick={() => abrir(j)} style={S.btnChico}>Ver</button>
-                        {puedeValidar && !j.validada_por && j.estado === 'cerrada' &&
-                          <button onClick={() => validar(j)} style={{ ...S.btnChico, marginLeft: 5 }}>Validar</button>}
-                      </td>
-                    </tr>
-                  ))}
+                  {lista.map(j => {
+                    const pendienteMio = misAcciones(j).length > 0
+                    return (
+                      <tr key={j.id} style={pendienteMio ? { background: '#FFFBEB' } : undefined}>
+                        <td style={S.td}>{j.persona}</td>
+                        <td style={S.td}>{fmtFecha(j.fecha)}</td>
+                        <td style={S.td}>{j.ot_numero || '—'}</td>
+                        <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{j.horas_trabajo} h</td>
+                        <td style={{ ...S.td, textAlign: 'right' }}>{j.horas_viaje} h</td>
+                        <td style={{ ...S.td, textAlign: 'right' }}>
+                          <HorasExtra horas={j.horas_hhee} excede={j.excede_tope} />
+                        </td>
+                        <td style={S.td}>
+                          {j.marcas_sin_ubicacion > 0
+                            ? <span style={S.pillPend}>{j.marcas_sin_ubicacion} sin GPS</span>
+                            : <span style={S.pillOk}>completa</span>}
+                          {j.marcas_diferidas > 0 &&
+                            <span style={{ ...S.pillPend, marginLeft: 4 }}>{j.marcas_diferidas} diferida(s)</span>}
+                        </td>
+                        <td style={S.td}>
+                          {j.estado === 'abierta'
+                            ? <span style={S.pillPend}>en curso</span>
+                            : <PillRev estado={j.estado_revision} />}
+                        </td>
+                        <td style={S.td}>
+                          <button onClick={() => abrir(j)}
+                            style={pendienteMio
+                              ? { ...S.btnChico, background: '#1E4D7B', color: '#fff', border: 'none' }
+                              : S.btnChico}>
+                            {pendienteMio ? 'Revisar' : 'Ver'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -889,12 +1013,12 @@ function Supervision() {
       </div>
 
       <div style={S.tarjeta}>
-        <h3 style={S.h3}>Resumen semanal y HHEE estimadas</h3>
+        <h3 style={S.h3}>Resumen semanal de horas extra</h3>
         <div style={{ fontSize: 11.5, color: '#92400E', background: '#FFFBEB',
                       border: '1px solid #FCD34D', borderRadius: 8, padding: '9px 13px', marginBottom: 12 }}>
-          Las HHEE que se muestran son una <b>estimación de gestión</b> sobre la jornada ordinaria
-          configurada. Las horas extraordinarias efectivas dependen del contrato, del turno y de que
-          estén pactadas por escrito. Esto orienta la revisión; no reemplaza el cálculo de remuneraciones.
+          Horas extra = trabajo por sobre las <b>8 horas diarias</b>; el viaje no se considera.
+          Solo las <b>aprobadas</b> por administración van a remuneraciones. Esto apoya la gestión y no
+          reemplaza el registro oficial de asistencia.
         </div>
         {semanas.length === 0 ? <div style={S.vacio}>Sin datos</div> : (
           <div style={{ overflowX: 'auto' }}>
@@ -904,8 +1028,9 @@ function Supervision() {
                 <th style={{ ...S.th, textAlign: 'right' }}>Días</th>
                 <th style={{ ...S.th, textAlign: 'right' }}>Trabajo</th>
                 <th style={{ ...S.th, textAlign: 'right' }}>Viaje</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>HHEE est.</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>Sin validar</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>HHEE aprobadas</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>HHEE en revisión</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Días sobre tope</th>
               </tr></thead>
               <tbody>
                 {semanas.filter(s => !persona || s.persona === persona).map((s, i) => (
@@ -915,11 +1040,16 @@ function Supervision() {
                     <td style={{ ...S.td, textAlign: 'right' }}>{s.dias}</td>
                     <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{s.horas_trabajo} h</td>
                     <td style={{ ...S.td, textAlign: 'right' }}>{s.horas_viaje} h</td>
+                    <td style={{ ...S.td, textAlign: 'right', fontWeight: 800,
+                                 color: Number(s.hhee_aprobadas) > 0 ? '#036C4B' : '#94A3B8' }}>
+                      {s.hhee_aprobadas} h</td>
                     <td style={{ ...S.td, textAlign: 'right',
-                                 color: Number(s.hhee_estimadas) > 0 ? '#C0392B' : '#64748B',
-                                 fontWeight: Number(s.hhee_estimadas) > 0 ? 800 : 400 }}>
-                      {s.hhee_estimadas} h</td>
-                    <td style={{ ...S.td, textAlign: 'right' }}>{s.sin_validar}</td>
+                                 color: Number(s.hhee_por_revisar) > 0 ? '#B45309' : '#94A3B8' }}>
+                      {s.hhee_por_revisar} h</td>
+                    <td style={{ ...S.td, textAlign: 'right',
+                                 color: Number(s.dias_sobre_tope) > 0 ? '#C0392B' : '#94A3B8',
+                                 fontWeight: Number(s.dias_sobre_tope) > 0 ? 800 : 400 }}>
+                      {s.dias_sobre_tope}</td>
                   </tr>
                 ))}
               </tbody>
@@ -947,6 +1077,10 @@ function Supervision() {
                   <BotonRecorrido marcas={marcas} />
                   {marcas.map(m => <FilaMarca key={m.id} m={m} />)}
                 </>}
+            {detalle.estado === 'cerrada' && (
+              <PanelRevision jornada={detalle} rol={usuario?.rol}
+                emailPropio={usuario?.email} onHecho={despuesDeRevisar} />
+            )}
           </div>
         </div>
       )}
@@ -1087,6 +1221,126 @@ function MapaMarcas({ marcas }) {
         Los números siguen el orden del recorrido. El círculo alrededor de un punto es el
         margen de error del GPS en ese momento.
       </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL DE REVISIÓN — historial de comentarios y acciones
+// Al trabajador le muestra el historial (por qué se aprobó, observó o
+// rechazó). A supervisión y administración, además, los botones que
+// les corresponden según el estado.
+// ═══════════════════════════════════════════════════════════════
+function PanelRevision({ jornada, rol, emailPropio, onHecho }) {
+  const [historial, setHistorial] = useState([])
+  const [comentario, setComentario] = useState('')
+  const [enviando, setEnviando] = useState('')
+  const [err, setErr] = useState('')
+  const acciones = accionesPara(rol, jornada, emailPropio)
+
+  const cargarHist = useCallback(async () => {
+    const { data } = await supabase.from('jornada_revisiones')
+      .select('*').eq('jornada_id', jornada.id).order('created_at')
+    setHistorial(data || [])
+  }, [jornada.id])
+  useEffect(() => { cargarHist() }, [cargarHist])
+
+  async function actuar(accion) {
+    setErr('')
+    const exigeComentario = ['rechazar', 'observar', 'comentar'].includes(accion)
+    if (exigeComentario && comentario.trim().length < 5) {
+      setErr(accion === 'comentar'
+        ? 'Escribe el comentario (mínimo 5 caracteres).'
+        : `Para ${accion === 'rechazar' ? 'rechazar' : 'observar'} hay que explicar el motivo (mínimo 5 caracteres).`)
+      return
+    }
+    setEnviando(accion)
+    const { error } = await supabase.rpc('fn_jornada_revisar', {
+      p_jornada: jornada.id, p_accion: accion, p_comentario: comentario.trim() || null,
+    })
+    setEnviando('')
+    if (error) { setErr(error.message); return }
+    setComentario('')
+    await cargarHist()
+    onHecho && onHecho()
+  }
+
+  const BOTON = {
+    aprobar:  { txt: '✓ Aprobar',  bg: '#159A6B' },
+    observar: { txt: '↩ Observar', bg: '#E08A1E' },
+    rechazar: { txt: '✕ Rechazar', bg: '#C0392B' },
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 14, paddingTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+        <h4 style={{ margin: 0, fontSize: 13.5, color: '#0E2A45' }}>Revisión de horas extra</h4>
+        <PillRev estado={jornada.estado_revision} />
+        <span style={{ fontSize: 12.5, color: '#475569' }}>
+          HHEE del día: <HorasExtra horas={jornada.horas_hhee} excede={jornada.excede_tope} />
+        </span>
+      </div>
+
+      {jornada.excede_tope && (
+        <div style={{ fontSize: 12, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA',
+                      borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
+          ⚠ Supera el tope legal de 2 horas extra diarias (art. 31 del Código del Trabajo).
+          Si se trabajaron, se deben igual; conviene revisar por qué ocurrió.
+        </div>
+      )}
+
+      {/* Historial */}
+      {historial.length === 0
+        ? <div style={{ fontSize: 12.5, color: '#94A3B8', marginBottom: 10 }}>Sin revisiones todavía.</div>
+        : (
+          <div style={{ marginBottom: 12 }}>
+            {historial.map(h => (
+              <div key={h.id} style={{ fontSize: 12.5, padding: '7px 0', borderBottom: '1px solid #F1F5F9' }}>
+                <b style={{ color: '#0E2A45' }}>{(h.revisor_email || '').split('@')[0]}</b>
+                <span style={{ color: '#64748B' }}> ({h.revisor_rol}) {ACCION_LBL[h.accion] || h.accion}</span>
+                {h.accion !== 'comentar' && <> → <PillRev estado={h.estado_nuevo} /></>}
+                <span style={{ color: '#94A3B8', marginLeft: 6, fontSize: 11.5 }}>
+                  {new Date(h.created_at).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}
+                </span>
+                {h.comentario && (
+                  <div style={{ color: '#334155', marginTop: 3, paddingLeft: 10,
+                                borderLeft: '2px solid #CBD5E1' }}>{h.comentario}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+      {/* Acciones */}
+      {acciones.length > 0 && (
+        <div>
+          <textarea value={comentario} onChange={e => { setComentario(e.target.value); setErr('') }}
+            rows={2} placeholder="Comentario (obligatorio para observar o rechazar)"
+            style={{ ...S.input, width: '100%', boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
+          {err && <div style={{ fontSize: 12, color: '#991B1B', marginBottom: 8 }}>⚠ {err}</div>}
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {acciones.filter(a => a !== 'comentar').map(a => (
+              <button key={a} onClick={() => actuar(a)} disabled={!!enviando}
+                style={{ border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 12.5,
+                         fontWeight: 700, color: '#fff', background: BOTON[a].bg,
+                         cursor: enviando ? 'default' : 'pointer', opacity: enviando && enviando !== a ? .5 : 1,
+                         fontFamily: 'inherit' }}>
+                {enviando === a ? 'Guardando…' : BOTON[a].txt}
+              </button>
+            ))}
+            <button onClick={() => actuar('comentar')} disabled={!!enviando} style={S.btnChico}>
+              💬 Solo comentar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {acciones.length === 0 && (jornada.email || '').toLowerCase() === (emailPropio || '').toLowerCase()
+        && ROLES_REVISA_SUP.includes((rol || '').toUpperCase()) && (
+        <div style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic' }}>
+          Es tu propia jornada: la revisa otra persona.
+        </div>
+      )}
     </div>
   )
 }
