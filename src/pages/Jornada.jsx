@@ -98,6 +98,23 @@ function MiJornada({ usuario }) {
   const [enLinea, setEnLinea]   = useState(navigator.onLine)
   const tic = useRef(null)
   const [, forzar] = useState(0)
+  const [permiso, setPermiso] = useState('consultando')
+
+  // Estado del GPS antes de marcar. Sin esto, alguien puede hacer una
+  // jornada completa sin coordenadas y enterarse recién al cerrarla.
+  useEffect(() => {
+    if (!navigator.geolocation) { setPermiso('no-soportado'); return }
+    if (!navigator.permissions?.query) { setPermiso('desconocido'); return }
+    let vivo = true
+    navigator.permissions.query({ name: 'geolocation' })
+      .then(p => {
+        if (!vivo) return
+        setPermiso(p.state)                       // granted | prompt | denied
+        p.onchange = () => setPermiso(p.state)
+      })
+      .catch(() => vivo && setPermiso('desconocido'))
+    return () => { vivo = false }
+  }, [])
 
   // Reloj: el tiempo transcurrido tiene que avanzar a la vista
   useEffect(() => {
@@ -263,6 +280,22 @@ function MiJornada({ usuario }) {
                       display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span>{pendientes.length} marca(s) esperando enviarse.</span>
           <button onClick={sincronizar} style={S.btnChico} disabled={!enLinea}>Reintentar ahora</button>
+        </div>
+      )}
+      {(permiso === 'denied' || permiso === 'no-soportado') && (
+        <div style={{ ...S.alerta, background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B' }}>
+          <b>{permiso === 'denied'
+            ? 'La ubicación está bloqueada en este navegador.'
+            : 'Este dispositivo no entrega ubicación.'}</b><br />
+          Puedes marcar igual, pero las marcas quedarán <b>sin ubicación</b> y no aparecerán en el mapa.
+          {permiso === 'denied' && ' Para habilitarla: candado 🔒 en la barra de direcciones → Ubicación → Permitir, y recarga.'}
+          {permiso === 'no-soportado' && ' Si estás en un computador de escritorio, usa el teléfono para marcar en terreno.'}
+        </div>
+      )}
+      {permiso === 'prompt' && (
+        <div style={{ ...S.alerta, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1E3A5F' }}>
+          Al marcar por primera vez el navegador te va a pedir permiso de ubicación. Acéptalo,
+          o las marcas quedarán sin punto en el mapa.
         </div>
       )}
       {error && <div style={{ ...S.alerta, background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B' }}>⚠ {error}</div>}
@@ -769,7 +802,21 @@ function MapaMarcas({ marcas }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marcas])
 
-  if (!puntos.length) return null
+  // Antes esto devolvía null y el mapa simplemente no aparecía: imposible
+  // distinguir "está roto" de "no hay coordenadas". Ahora lo dice.
+  if (!puntos.length) {
+    return (
+      <div style={{ fontSize: 12.5, color: '#92400E', background: '#FFFBEB',
+                    border: '1px solid #FCD34D', borderRadius: 10,
+                    padding: '12px 15px', marginBottom: 12, lineHeight: 1.6 }}>
+        <b>No hay mapa porque ninguna marca tiene ubicación.</b><br />
+        Las {marcas.length} marca(s) se registraron sin coordenadas. Suele deberse a que
+        se marcó desde un computador de escritorio —que no tiene GPS— o a que el navegador
+        no tiene permiso de ubicación. En el teléfono, revisa que el sitio tenga la ubicación
+        permitida y vuelve a marcar.
+      </div>
+    )
+  }
   if (fallo) {
     return (
       <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB',
