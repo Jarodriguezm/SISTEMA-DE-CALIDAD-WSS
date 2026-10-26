@@ -219,7 +219,8 @@ function MiJornada({ usuario }) {
 
     // Permiso denegado: reintentar no sirve de nada
     if (r.codigo === 1) {
-      return { pos: null, motivo: 'el permiso de ubicación está denegado para este sitio' }
+      return { pos: null, denegado: true,
+               motivo: 'el permiso de ubicación está denegado para este sitio' }
     }
 
     // 2) Respaldo por red. Sin conexión no hay red que consultar, así
@@ -238,7 +239,11 @@ function MiJornada({ usuario }) {
   async function marcar(tipo) {
     setError(''); setAviso(''); setEnviando(tipo)
     try {
-      const { pos, motivo } = await ubicar()
+      const { pos, motivo, denegado } = await ubicar()
+      // El estado consultado al cargar puede decir "pendiente" y aun así
+      // terminar en denegado. Si eso pasa, se muestra el banner con las
+      // instrucciones en vez de dejar al trabajador sin saber qué hacer.
+      if (denegado) setPermiso('denied')
       const args = {
         p_tipo: tipo,
         p_lat: pos?.lat ?? null,
@@ -321,7 +326,15 @@ function MiJornada({ usuario }) {
             ? 'La ubicación está bloqueada en este navegador.'
             : 'Este dispositivo no entrega ubicación.'}</b><br />
           Puedes marcar igual, pero las marcas quedarán <b>sin ubicación</b> y no aparecerán en el mapa.
-          {permiso === 'denied' && ' Para habilitarla: candado 🔒 en la barra de direcciones → Ubicación → Permitir, y recarga.'}
+          {permiso === 'denied' && (
+            <>
+              <br /><b>Para habilitarla:</b> toca el ícono a la izquierda de la dirección del sitio
+              (🔒 o ⓘ) → Ubicación → Permitir, y recarga la página.
+              <br />Si ya dice "Permitir" y sigue fallando, la ubicación está apagada en el equipo:
+              en el teléfono, actívala en Ajustes → Ubicación; en Windows, en Configuración →
+              Privacidad y seguridad → Ubicación.
+            </>
+          )}
           {permiso === 'no-soportado' && ' Si estás en un computador de escritorio, usa el teléfono para marcar en terreno.'}
         </div>
       )}
