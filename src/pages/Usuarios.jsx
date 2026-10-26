@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION', 'AUDITOR', 'APR', 'SECRETARIA']
+const ROLES = ['ADMIN', 'SUPERVISOR', 'COMERCIAL', 'INSPECTOR', 'FACTURACION', 'AUDITOR', 'APR', 'SECRETARIA', 'RRHH']
 const SEDES = ['SCL', 'ANF', 'CCP']
 
 const BADGE_ROL = {
@@ -91,12 +91,18 @@ export default function Usuarios() {
     }
     try {
       setGuardandoNuevo(true)
+      // La API exige la sesión de quien crea el usuario y verifica que
+      // sea administración. Sin el token, responde 401.
+      const { data: ses } = await supabase.auth.getSession()
+      const token = ses?.session?.access_token
+      if (!token) throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.')
       const resp = await fetch('/api/crear-usuario', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(nuevoU),
       })
-      const data = await resp.json()
+      let data = {}
+      try { data = await resp.json() } catch { /* respuesta sin cuerpo */ }
       if (!resp.ok) throw new Error(data.error || 'Error al crear usuario')
       setMensajeExito(`✅ Usuario ${nuevoU.nombre} creado correctamente`)
       setCreando(false)
