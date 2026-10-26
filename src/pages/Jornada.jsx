@@ -181,33 +181,64 @@ function MiJornada({ usuario }) {
   // acelera la primera lectura, así que en faena sin señal puede tardar
   // bastante más en fijar posición. Por eso el plazo es mayor cuando no
   // hay conexión: conviene esperar 35 segundos antes que perder el punto.
-  function ubicar() {
-    const sinRed = !navigator.onLine
+  //
+  // DOS INTENTOS. Primero GPS de alta precisión. Si no responde a tiempo
+  // o no está disponible, un segundo intento con ubicación por red —wifi
+  // y antenas—, más rápida aunque menos precisa. La primera versión solo
+  // intentaba una vez con 15 s y se rendía: en computadores, la ubicación
+  // por wifi puede tardar justo en ese rango, y se perdía el punto.
+  //
+  // Además devuelve el MOTIVO del fallo, para que el aviso diga qué pasó
+  // en vez de un genérico "revisa los permisos".
+  function pedirPosicion(opciones) {
     return new Promise(resolve => {
-      if (!navigator.geolocation) return resolve(null)
-      let resuelto = false
-      const listo = p => {
-        if (resuelto) return
-        resuelto = true
-        resolve({
+      navigator.geolocation.getCurrentPosition(
+        p => resolve({ ok: true, pos: {
           lat: +p.coords.latitude.toFixed(6),
           lng: +p.coords.longitude.toFixed(6),
           precision: Math.round(p.coords.accuracy),
-        })
-      }
-      const falla = () => { if (!resuelto) { resuelto = true; resolve(null) } }
-      navigator.geolocation.getCurrentPosition(listo, falla, {
-        enableHighAccuracy: true,
-        timeout: sinRed ? 35000 : 15000,
-        maximumAge: sinRed ? 120000 : 30000,   // sin red, sirve una lectura reciente
-      })
+        } }),
+        e => resolve({ ok: false, codigo: e.code }),
+        opciones)
     })
+  }
+
+  async function ubicar() {
+    if (!navigator.geolocation) {
+      return { pos: null, motivo: 'este navegador no entrega ubicación' }
+    }
+    const sinRed = !navigator.onLine
+
+    // 1) GPS de alta precisión
+    let r = await pedirPosicion({
+      enableHighAccuracy: true,
+      timeout: sinRed ? 35000 : 20000,
+      maximumAge: sinRed ? 120000 : 30000,   // sin red, sirve una lectura reciente
+    })
+    if (r.ok) return { pos: r.pos }
+
+    // Permiso denegado: reintentar no sirve de nada
+    if (r.codigo === 1) {
+      return { pos: null, motivo: 'el permiso de ubicación está denegado para este sitio' }
+    }
+
+    // 2) Respaldo por red. Sin conexión no hay red que consultar, así
+    //    que solo se intenta si hay señal.
+    if (!sinRed) {
+      r = await pedirPosicion({ enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 })
+      if (r.ok) return { pos: r.pos }
+    }
+
+    return { pos: null, motivo:
+      r.codigo === 3 ? 'se agotó el tiempo esperando la posición'
+      : r.codigo === 1 ? 'el permiso de ubicación está denegado para este sitio'
+      : 'el dispositivo no pudo determinar su posición' }
   }
 
   async function marcar(tipo) {
     setError(''); setAviso(''); setEnviando(tipo)
     try {
-      const pos = await ubicar()
+      const { pos, motivo } = await ubicar()
       const args = {
         p_tipo: tipo,
         p_lat: pos?.lat ?? null,
@@ -222,14 +253,16 @@ function MiJornada({ usuario }) {
         guardarCola(cola); setPendientes(cola)
         setAviso(pos
           ? `Sin señal: marca guardada con su hora y ubicación reales (${pos.lat}, ${pos.lng}, ±${pos.precision} m). Se enviará sola al recuperar conexión.`
-          : 'Sin señal: marca guardada con su hora real, pero el GPS no alcanzó a fijar posición. Se enviará al recuperar conexión.')
+          : `Sin señal: marca guardada con su hora real, pero sin ubicación (${motivo}). Se enviará al recuperar conexión.`)
         return
       }
       const { error: e } = await supabase.rpc('fn_jornada_marcar', args)
       if (e) throw e
       setReferencia('')
       await cargar()
-      setAviso(pos ? 'Marca registrada' : 'Marca registrada, pero sin ubicación: revisa los permisos de GPS.')
+      setAviso(pos
+        ? `Marca registrada · ubicación ±${pos.precision} m`
+        : `Marca registrada, pero sin ubicación: ${motivo}.`)
     } catch (e) {
       setError(e.message || 'No se pudo registrar la marca')
     } finally { setEnviando('') }
@@ -358,7 +391,7 @@ function MiJornada({ usuario }) {
                 }}>
                 <div style={{ fontSize: 20, marginBottom: 5 }}>{p.icono}</div>
                 <div style={{ fontWeight: 800, fontSize: 14 }}>
-                  {enviando === p.tipo ? 'Registrando…' : p.label}
+                  {enviando === p.tipo ? '📡 Obteniendo ubicación…' : p.label}
                 </div>
                 <div style={{ fontSize: 11.5, marginTop: 3, opacity: .9 }}>
                   {hecho ? `Marcado a las ${fmtHora(m?.momento)}` : p.ayuda}
