@@ -3,7 +3,7 @@
 // Sidebar colapsable + header + contenido
 // Iconos: SVG inline (sin emojis)
 // ============================================================
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
 import CharlaDiaria from '../CharlaDiaria'
@@ -173,7 +173,23 @@ export default function Layout({ children }) {
   const { usuario, logout, esAdmin, esSupervisor, esInspector } = useAuth()
   const navigate   = useNavigate()
   const location   = useLocation()
-  const [abierto, setAbierto]           = useState(true)
+  // ── Teléfono ──────────────────────────────────────────────────────────
+  // En escritorio el menú es una columna fija que empuja el contenido.
+  // En el teléfono eso dejaba ~160 px de ancho útil: ahora es un menú
+  // deslizable que se abre sobre el contenido y se cierra al navegar.
+  const MOVIL = '(max-width: 768px)'
+  const [esMovil, setEsMovil] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(MOVIL).matches)
+  const [abierto, setAbierto]           = useState(() =>
+    !(typeof window !== 'undefined' && window.matchMedia(MOVIL).matches))
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOVIL)
+    const cambio = e => { setEsMovil(e.matches); setAbierto(!e.matches) }
+    mq.addEventListener ? mq.addEventListener('change', cambio) : mq.addListener(cambio)
+    return () => mq.removeEventListener
+      ? mq.removeEventListener('change', cambio) : mq.removeListener(cambio)
+  }, [])
   const [cargandoLogout, setCargando]   = useState(false)
   const [mostrarClave, setMostrarClave] = useState(false)
   const [nuevaClave, setNuevaClave]     = useState('')
@@ -205,6 +221,12 @@ export default function Layout({ children }) {
     setCargando(true)
     await logout()
     navigate('/login')
+  }
+
+  // Navegar y, en el teléfono, cerrar el menú para ver la página
+  function ir(ruta) {
+    navigate(ruta)
+    if (esMovil) setAbierto(false)
   }
 
   function activo(ruta) {
@@ -280,8 +302,21 @@ export default function Layout({ children }) {
         </div>
       )}
 
+      {/* ── Fondo del menú en el teléfono: tocarlo cierra el menú ─────── */}
+      {esMovil && abierto && (
+        <div onClick={() => setAbierto(false)} aria-hidden="true"
+          style={{ position:'fixed', top:0, left:0, right:0, bottom:0,
+                   background:'rgba(8,18,32,.5)', zIndex:40 }} />
+      )}
+
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside style={{ ...S.sidebar, width: abierto ? 232 : 56, minWidth: abierto ? 232 : 56 }}>
+      <aside style={esMovil
+        ? { ...S.sidebar, position:'fixed', left:0, top:0, height:'100vh',
+            width: 270, minWidth: 270, zIndex: 50,
+            transform: abierto ? 'translateX(0)' : 'translateX(-100%)',
+            transition: 'transform .22s ease',
+            boxShadow: abierto ? '4px 0 24px rgba(0,0,0,.35)' : 'none' }
+        : { ...S.sidebar, width: abierto ? 232 : 56, minWidth: abierto ? 232 : 56 }}>
 
         {/* Logo + toggle */}
         <div style={S.sidebarTop}>
@@ -342,7 +377,7 @@ export default function Layout({ children }) {
                 label={item.label}
                 active={activo(item.ruta)}
                 expanded={abierto}
-                onClick={() => navigate(item.ruta)}
+                onClick={() => ir(item.ruta)}
               />
             )
           })}
@@ -363,7 +398,7 @@ export default function Layout({ children }) {
                     label={item.label}
                     active={activo(item.ruta)}
                     expanded={abierto}
-                    onClick={() => navigate(item.ruta)}
+                    onClick={() => ir(item.ruta)}
                   />
                 )
               })}
@@ -396,22 +431,35 @@ export default function Layout({ children }) {
       {/* ── Área principal ───────────────────────────────────────────── */}
       <div style={S.main}>
         {/* Header */}
-        <header style={S.header} role="banner">
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <span style={S.headerTitle}>WSS · División Inspección Industrial</span>
-            <span style={S.envBadge}>PRODUCTION</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-            {usuario && (
-              <span style={{ fontSize:13, color:'rgba(255,255,255,.8)', fontWeight:500 }}>
-                {usuario.nombre || usuario.email}
-              </span>
+        <header style={{ ...S.header, padding: esMovil ? '0 12px' : S.header.padding }} role="banner">
+          <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+            {esMovil && (
+              <button onClick={() => setAbierto(true)} aria-label="Abrir menú"
+                style={{ background:'rgba(255,255,255,.12)', border:'none', color:'#fff',
+                         width:38, height:38, borderRadius:9, display:'grid', placeItems:'center',
+                         cursor:'pointer', flexShrink:0 }}>
+                <Icon.Menu />
+              </button>
             )}
+            <span style={{ ...S.headerTitle, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              {esMovil ? 'WSS · Inspección' : 'WSS · División Inspección Industrial'}
+            </span>
+            {!esMovil && <span style={S.envBadge}>PRODUCTION</span>}
           </div>
+          {/* En el teléfono el nombre ya está dentro del menú */}
+          {!esMovil && (
+            <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+              {usuario && (
+                <span style={{ fontSize:13, color:'rgba(255,255,255,.8)', fontWeight:500 }}>
+                  {usuario.nombre || usuario.email}
+                </span>
+              )}
+            </div>
+          )}
         </header>
 
         {/* Contenido de la página */}
-        <main style={S.content} role="main">
+        <main style={{ ...S.content, padding: esMovil ? '14px 12px 80px' : S.content.padding }} role="main">
           {children}
         </main>
       </div>
