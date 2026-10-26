@@ -91,6 +91,10 @@ function MiJornada({ usuario }) {
   const [otNumero, setOtNumero] = useState('')
   const [referencia, setReferencia] = useState('')
   const [pendientes, setPendientes] = useState(() => leerCola())
+  // Revisar una jornada ya cerrada: al cerrarla desaparecen las marcas
+  // del panel de arriba, y el trabajador tiene que poder volver a verlas.
+  const [detalle, setDetalle]       = useState(null)
+  const [marcasDet, setMarcasDet]   = useState([])
   const [enLinea, setEnLinea]   = useState(navigator.onLine)
   const tic = useRef(null)
   const [, forzar] = useState(0)
@@ -212,6 +216,13 @@ function MiJornada({ usuario }) {
     } catch (e) {
       setError(e.message || 'No se pudo registrar la marca')
     } finally { setEnviando('') }
+  }
+
+  async function abrirDetalle(j) {
+    setDetalle(j)
+    const { data } = await supabase.from('marcas_jornada')
+      .select('*').eq('jornada_id', j.id).order('momento')
+    setMarcasDet(data || [])
   }
 
   async function cerrarSinRegreso() {
@@ -352,7 +363,7 @@ function MiJornada({ usuario }) {
                   <th style={S.th}>Fecha</th><th style={S.th}>OT</th>
                   <th style={{ ...S.th, textAlign: 'right' }}>Trabajo</th>
                   <th style={{ ...S.th, textAlign: 'right' }}>Viaje</th>
-                  <th style={S.th}>Estado</th><th style={S.th}>Validada</th>
+                  <th style={S.th}>Estado</th><th style={S.th}>Validada</th><th style={S.th}>Ubicaciones</th>
                 </tr></thead>
                 <tbody>
                   {historial.map(j => (
@@ -365,6 +376,11 @@ function MiJornada({ usuario }) {
                         <span style={j.estado === 'cerrada' ? S.pillOk : S.pillPend}>{j.estado}</span>
                       </td>
                       <td style={S.td}>{j.validada_por ? '✓' : '—'}</td>
+                      <td style={S.td}>
+                        <button onClick={() => abrirDetalle(j)} style={S.btnChico}>
+                          📍 Ver marcas
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -372,6 +388,33 @@ function MiJornada({ usuario }) {
             </div>
           )}
       </div>
+
+      {detalle && (
+        <div style={S.fondo} onClick={() => setDetalle(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#0E2A45' }}>
+                  Jornada del {fmtFecha(detalle.fecha)}
+                </h3>
+                <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 3 }}>
+                  {detalle.ot_numero ? `OT ${detalle.ot_numero} · ` : ''}
+                  Trabajo {detalle.horas_trabajo} h · Viaje {detalle.horas_viaje} h
+                  {detalle.km_estimados ? ` · ~${detalle.km_estimados} km` : ''}
+                </div>
+              </div>
+              <button onClick={() => setDetalle(null)} style={S.btnChico}>✕</button>
+            </div>
+            {marcasDet.length === 0
+              ? <div style={S.vacio}>Esta jornada no tiene marcas registradas</div>
+              : <>
+                  <BotonRecorrido marcas={marcasDet} />
+                  {marcasDet.map(m => <FilaMarca key={m.id} m={m} />)}
+                </>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -392,6 +435,7 @@ function Supervision() {
   const [persona, setPersona] = useState('')
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [enTerreno, setEnTerreno] = useState([])
 
   const cargar = useCallback(async () => {
     try {
@@ -404,6 +448,18 @@ function Supervision() {
       const { data: sem } = await supabase.from('v_hhee_semana')
         .select('*').order('semana', { ascending: false }).limit(60)
       setSemanas(sem || [])
+
+      // Quién tiene jornada abierta ahora, con su última marca.
+      // No es seguimiento en vivo: es dónde marcó por última vez.
+      const { data: abiertas } = await supabase.from('v_jornadas')
+        .select('*').eq('estado', 'abierta').order('fecha', { ascending: false })
+      const conMarca = await Promise.all((abiertas || []).map(async j => {
+        const { data: ult } = await supabase.from('marcas_jornada')
+          .select('*').eq('jornada_id', j.id)
+          .order('momento', { ascending: false }).limit(1)
+        return { ...j, ultima: ult?.[0] || null }
+      }))
+      setEnTerreno(conMarca)
     } catch (e) { setError(e.message) } finally { setCargando(false) }
   }, [desde, hasta])
 
@@ -464,6 +520,44 @@ function Supervision() {
         <Kpi etq="Sin validar" val={lista.filter(j => !j.validada_por).length}
              color={lista.some(j => !j.validada_por) ? '#E08A1E' : '#64748B'} />
       </div>
+
+      {enTerreno.length > 0 && (
+        <div style={{ ...S.tarjeta, borderLeft: '3.5px solid #159A6B' }}>
+          <h3 style={S.h3}>
+            En terreno ahora <span style={{ fontWeight: 400, color: '#94A3B8', fontSize: 11.5 }}>
+              — jornadas abiertas, con su última marca</span>
+          </h3>
+          <div style={{ display: 'grid', gap: 10,
+                        gridTemplateColumns: 'repeat(auto-fit,minmax(265px,1fr))' }}>
+            {enTerreno.map(j => {
+              const p = PASOS.find(x => x.tipo === j.ultima?.tipo)
+              const mins = j.ultima ? (Date.now() - new Date(j.ultima.momento)) / 60000 : 0
+              return (
+                <div key={j.id} style={{ border: '1px solid #DDE5EE', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontWeight: 800, fontSize: 13.5, color: '#0E2A45' }}>{j.persona}</div>
+                  <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
+                    {p ? `${p.icono} ${p.label}` : 'Sin marcas'}
+                    {j.ultima && <> · {fmtHora(j.ultima.momento)} · hace {hhmm(mins)}</>}
+                  </div>
+                  {j.ot_numero && (
+                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>OT {j.ot_numero}</div>
+                  )}
+                  <div style={{ marginTop: 7 }}>
+                    {j.ultima?.lat != null
+                      ? <a href={`https://www.google.com/maps?q=${j.ultima.lat},${j.ultima.lng}`}
+                           target="_blank" rel="noopener noreferrer"
+                           style={{ color: '#1E4D7B', fontWeight: 700, fontSize: 12 }}>
+                          📍 Dónde marcó por última vez
+                        </a>
+                      : <span style={{ fontSize: 11.5, color: '#B45309' }}>Última marca sin ubicación</span>}
+                    <button onClick={() => abrir(j)} style={{ ...S.btnChico, marginLeft: 8 }}>Detalle</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={S.tarjeta}>
         <h3 style={S.h3}>Jornadas</h3>
@@ -563,7 +657,10 @@ function Supervision() {
               <button onClick={() => setDetalle(null)} style={S.btnChico}>✕</button>
             </div>
             {marcas.length === 0 ? <div style={S.vacio}>Sin marcas</div>
-              : marcas.map(m => <FilaMarca key={m.id} m={m} />)}
+              : <>
+                  <BotonRecorrido marcas={marcas} />
+                  {marcas.map(m => <FilaMarca key={m.id} m={m} />)}
+                </>}
           </div>
         </div>
       )}
@@ -572,6 +669,41 @@ function Supervision() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Recorrido completo en un solo mapa: salida, trabajo y regreso.
+// Google Maps acepta una ruta con puntos intermedios por URL, así que
+// el supervisor ve de una vez de dónde salió, dónde trabajó y dónde
+// cerró, sin abrir cuatro pestañas.
+function enlaceRecorrido(marcas) {
+  const pts = marcas.filter(m => m.lat != null).map(m => `${m.lat},${m.lng}`)
+  if (pts.length < 2) return null
+  return 'https://www.google.com/maps/dir/' + pts.join('/')
+}
+
+function BotonRecorrido({ marcas }) {
+  const url = enlaceRecorrido(marcas)
+  const conUbic = marcas.filter(m => m.lat != null).length
+  if (!url) {
+    return (
+      <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB',
+                    border: '1px solid #FCD34D', borderRadius: 8,
+                    padding: '9px 12px', marginBottom: 12 }}>
+        No hay suficientes marcas con ubicación para dibujar el recorrido
+        ({conUbic} de {marcas.length}).
+      </div>
+    )
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+       style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                background: '#1E4D7B', color: '#fff', borderRadius: 8,
+                padding: '9px 14px', fontSize: 12.5, fontWeight: 700,
+                textDecoration: 'none', marginBottom: 12 }}>
+      🗺 Ver recorrido completo en el mapa
+      <span style={{ fontWeight: 400, opacity: .85 }}>({conUbic} puntos)</span>
+    </a>
+  )
+}
+
 function FilaMarca({ m }) {
   const p = PASOS.find(x => x.tipo === m.tipo)
   const mapa = m.lat != null
