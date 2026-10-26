@@ -70,7 +70,9 @@ export default function Jornada() {
   const [vista, setVista] = useState('mia')
 
   return (
-    <div style={{ padding: '20px 24px 60px', maxWidth: 1280, margin: '0 auto' }}>
+    // Sin relleno lateral propio: el contenedor del portal ya lo pone, y
+    // sumar los dos le quitaba casi 50 px de ancho al teléfono.
+    <div style={{ padding: '4px 0 40px', maxWidth: 1280, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 22, color: '#0E2A45' }}>Jornada y horas</h1>
         <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4 }}>
