@@ -708,13 +708,16 @@ function Supervision() {
 // ═══════════════════════════════════════════════════════════════
 // MAPA — Leaflet con OpenStreetMap
 //
-// Se carga desde CDN en vez de instalarlo como dependencia: así no
-// hay que tocar package.json, que es donde ya nos falló la compilación
-// antes por quedar desincronizado con el lock.
+// Leaflet se sirve DESDE EL PROPIO PORTAL (public/vendor/leaflet), no
+// desde un CDN. La política de seguridad del sitio (vercel.json) solo
+// permite scripts de 'self': cargarlo desde cdnjs quedaba bloqueado en
+// silencio. Abrir la política a un CDN externo habría debilitado la
+// protección —cdnjs sirve cualquier librería—, así que se aloja aquí.
+// Tampoco se instaló por npm, para no tocar package.json y su lock.
 //
-// Si el CDN o los mosaicos están bloqueados por la red de la faena, el
-// mapa simplemente no aparece y quedan los enlaces a Google Maps. Nunca
-// debe impedir ver las coordenadas.
+// Si los mosaicos de OpenStreetMap están bloqueados por la red de la
+// faena, el mapa queda gris pero los enlaces a Google Maps siguen ahí.
+// Nunca debe impedir ver las coordenadas.
 // ═══════════════════════════════════════════════════════════════
 let leafletPromesa = null
 function cargarLeaflet() {
@@ -723,10 +726,10 @@ function cargarLeaflet() {
   leafletPromesa = new Promise((resolve, reject) => {
     const css = document.createElement('link')
     css.rel = 'stylesheet'
-    css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'
+    css.href = '/vendor/leaflet/leaflet.css'
     document.head.appendChild(css)
     const js = document.createElement('script')
-    js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
+    js.src = '/vendor/leaflet/leaflet.js'
     js.onload = () => resolve(window.L)
     js.onerror = () => reject(new Error('No se pudo cargar el mapa'))
     document.head.appendChild(js)
@@ -749,7 +752,9 @@ function MapaMarcas({ marcas }) {
 
       const m = L.map(caja.current, { scrollWheelZoom: false })
       mapa.current = m
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Sin subdominios a/b/c: es lo que OpenStreetMap recomienda hoy, y
+      // deja un solo host autorizado en la política de seguridad.
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap',
       }).addTo(m)
