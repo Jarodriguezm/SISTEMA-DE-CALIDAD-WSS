@@ -12,6 +12,7 @@ import Asignaciones from './pages/Asignaciones'
 import Actas from './pages/Actas'
 import ReservaInformes from './pages/ReservaInformes'
 import Calendario from './pages/Calendario'
+import Jornada from './pages/Jornada'
 import Clientes from './pages/Clientes'
 import Procedimientos from './pages/Procedimientos'
 import Acreditaciones from './pages/Acreditaciones'
@@ -91,6 +92,7 @@ function AppRoutes() {
 
       <Route path="/usuarios" element={<RutaPrivada><Usuarios /></RutaPrivada>} />
       <Route path="/calendario" element={<RutaPrivada><Calendario /></RutaPrivada>} />
+      <Route path="/jornada" element={<RutaPrivada><Jornada /></RutaPrivada>} />
       <Route path="/clientes" element={<RutaPrivada><Clientes /></RutaPrivada>} />
       <Route path="/procedimientos" element={<RutaPrivada><Procedimientos /></RutaPrivada>} />
       <Route path="/acreditaciones" element={<RutaPrivada><Acreditaciones /></RutaPrivada>} />
