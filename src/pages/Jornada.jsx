@@ -35,6 +35,28 @@ const PASOS = [
 ]
 
 const COLA = 'wss_marcas_pendientes'
+
+// Qué hacer según el motivo del fallo. Concreto, para que el inspector
+// lo resuelva en terreno sin tener que llamar a nadie.
+function consejoGps(error) {
+  switch (error) {
+    case 'denegado':
+      return 'Toca el ícono a la izquierda de la dirección del sitio (🔒 o ⓘ) → Ubicación → Permitir, y recarga la página.'
+    case 'tiempo':
+      return 'Sal a cielo abierto o acércate a una ventana y reintenta: dentro de naves, galpones o subterráneos el GPS no llega.'
+    case 'no_disponible':
+      return 'Revisa que la ubicación del teléfono esté activada (Ajustes → Ubicación) y reintenta.'
+    case 'sin_soporte':
+      return 'Este equipo no tiene GPS. Marca desde el teléfono de la empresa.'
+    default:
+      return ''
+  }
+}
+
+const ETQ_ERROR = {
+  denegado: 'Permiso denegado', tiempo: 'GPS sin respuesta',
+  no_disponible: 'Ubicación apagada', sin_soporte: 'Equipo sin GPS',
+}
 const hhmm = min => `${Math.floor(min / 60)}h ${String(Math.round(min % 60)).padStart(2, '0')}m`
 const fmtHora = iso => iso ? new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'
 const fmtFecha = f => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-CL') : '—'
@@ -95,6 +117,10 @@ function MiJornada({ usuario }) {
   // del panel de arriba, y el trabajador tiene que poder volver a verlas.
   const [detalle, setDetalle]       = useState(null)
   const [marcasDet, setMarcasDet]   = useState([])
+  // Marca sin ubicación: diálogo que exige motivo
+  const [sinGps, setSinGps]         = useState(null)   // { tipo, motivo, error }
+  const [justificacion, setJustif]  = useState('')
+  const [verificacion, setVerif]    = useState(null)   // resultado de "Verificar GPS"
   const [enLinea, setEnLinea]   = useState(navigator.onLine)
   const tic = useRef(null)
   const [, forzar] = useState(0)
@@ -205,7 +231,7 @@ function MiJornada({ usuario }) {
 
   async function ubicar() {
     if (!navigator.geolocation) {
-      return { pos: null, motivo: 'este navegador no entrega ubicación' }
+      return { pos: null, error: 'sin_soporte', motivo: 'este dispositivo no entrega ubicación' }
     }
     const sinRed = !navigator.onLine
 
@@ -219,7 +245,7 @@ function MiJornada({ usuario }) {
 
     // Permiso denegado: reintentar no sirve de nada
     if (r.codigo === 1) {
-      return { pos: null, denegado: true,
+      return { pos: null, error: 'denegado',
                motivo: 'el permiso de ubicación está denegado para este sitio' }
     }
 
@@ -230,47 +256,92 @@ function MiJornada({ usuario }) {
       if (r.ok) return { pos: r.pos }
     }
 
-    return { pos: null, motivo:
-      r.codigo === 3 ? 'se agotó el tiempo esperando la posición'
-      : r.codigo === 1 ? 'el permiso de ubicación está denegado para este sitio'
-      : 'el dispositivo no pudo determinar su posición' }
+    if (r.codigo === 1) return { pos: null, error: 'denegado',
+      motivo: 'el permiso de ubicación está denegado para este sitio' }
+    if (r.codigo === 3) return { pos: null, error: 'tiempo',
+      motivo: 'se agotó el tiempo esperando la posición' }
+    return { pos: null, error: 'no_disponible',
+      motivo: 'el dispositivo no pudo determinar su posición' }
   }
 
+  // ── Marcar ────────────────────────────────────────────────────
+  // La ubicación es obligatoria. Si no se obtiene, NO se envía la marca:
+  // se abre un diálogo que explica por qué falló, permite reintentar, y
+  // solo deja marcar sin ubicación escribiendo un motivo. La base aplica
+  // la misma regla, así que no se puede saltar desde fuera de la pantalla.
   async function marcar(tipo) {
     setError(''); setAviso(''); setEnviando(tipo)
     try {
-      const { pos, motivo, denegado } = await ubicar()
-      // El estado consultado al cargar puede decir "pendiente" y aun así
-      // terminar en denegado. Si eso pasa, se muestra el banner con las
-      // instrucciones en vez de dejar al trabajador sin saber qué hacer.
-      if (denegado) setPermiso('denied')
-      const args = {
-        p_tipo: tipo,
-        p_lat: pos?.lat ?? null,
-        p_lng: pos?.lng ?? null,
-        p_precision: pos?.precision ?? null,
-        p_ot_numero: otNumero.trim() || null,
-        p_referencia: referencia.trim() || null,
-        p_momento: new Date().toISOString(),
-      }
-      if (!navigator.onLine) {
-        const cola = [...leerCola(), args]
-        guardarCola(cola); setPendientes(cola)
-        setAviso(pos
-          ? `Sin señal: marca guardada con su hora y ubicación reales (${pos.lat}, ${pos.lng}, ±${pos.precision} m). Se enviará sola al recuperar conexión.`
-          : `Sin señal: marca guardada con su hora real, pero sin ubicación (${motivo}). Se enviará al recuperar conexión.`)
+      const r = await ubicar()
+      if (r.error === 'denegado') setPermiso('denied')
+      if (!r.pos) {
+        setSinGps({ tipo, motivo: r.motivo, error: r.error })
+        setJustif('')
         return
       }
-      const { error: e } = await supabase.rpc('fn_jornada_marcar', args)
-      if (e) throw e
-      setReferencia('')
-      await cargar()
-      setAviso(pos
-        ? `Marca registrada · ubicación ±${pos.precision} m`
-        : `Marca registrada, pero sin ubicación: ${motivo}.`)
+      await enviarMarca(tipo, r.pos, null, null)
     } catch (e) {
       setError(e.message || 'No se pudo registrar la marca')
     } finally { setEnviando('') }
+  }
+
+  async function enviarMarca(tipo, pos, motivoSinGps, errorGps) {
+    const args = {
+      p_tipo: tipo,
+      p_lat: pos?.lat ?? null,
+      p_lng: pos?.lng ?? null,
+      p_precision: pos?.precision ?? null,
+      p_ot_numero: otNumero.trim() || null,
+      p_referencia: referencia.trim() || null,
+      p_momento: new Date().toISOString(),
+      p_motivo_sin_gps: motivoSinGps || null,
+      p_error_gps: errorGps || null,
+    }
+    if (!navigator.onLine) {
+      const cola = [...leerCola(), args]
+      guardarCola(cola); setPendientes(cola)
+      setAviso(pos
+        ? `Sin señal: marca guardada con su hora y ubicación reales (${pos.lat}, ${pos.lng}, ±${pos.precision} m). Se enviará sola al recuperar conexión.`
+        : 'Sin señal: marca guardada con su hora real y el motivo indicado. Se enviará al recuperar conexión.')
+      return
+    }
+    const { error: e } = await supabase.rpc('fn_jornada_marcar', args)
+    if (e) throw e
+    setReferencia('')
+    await cargar()
+    setAviso(pos
+      ? `Marca registrada · ubicación ±${pos.precision} m`
+      : 'Marca registrada sin ubicación, con el motivo indicado. Tu supervisor la verá señalada.')
+  }
+
+  async function marcarSinUbicacion() {
+    if (justificacion.trim().length < 10) return
+    const { tipo, error: err } = sinGps
+    setEnviando(tipo)
+    try {
+      await enviarMarca(tipo, null, justificacion.trim(), err)
+      setSinGps(null)
+    } catch (e) {
+      setError(e.message || 'No se pudo registrar la marca')
+      setSinGps(null)
+    } finally { setEnviando('') }
+  }
+
+  async function reintentarUbicacion() {
+    const tipo = sinGps.tipo
+    setSinGps(null)
+    await marcar(tipo)
+  }
+
+  // Prueba de GPS sin marcar nada: para que el inspector compruebe al
+  // empezar el día que su teléfono está entregando ubicación.
+  async function verificarGps() {
+    setVerif({ estado: 'probando' })
+    const r = await ubicar()
+    if (r.error === 'denegado') setPermiso('denied')
+    setVerif(r.pos
+      ? { estado: 'ok', pos: r.pos }
+      : { estado: 'falla', motivo: r.motivo, error: r.error })
   }
 
   async function abrirDetalle(j) {
@@ -385,6 +456,26 @@ function MiJornada({ usuario }) {
           </div>
         )}
 
+        {/* ── Verificar GPS antes de marcar ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                      marginBottom: 14, padding: '10px 12px', background: '#F8FAFC',
+                      border: '1px solid #E2E8F0', borderRadius: 10 }}>
+          <button onClick={verificarGps} disabled={verificacion?.estado === 'probando'}
+            style={S.btnChico}>
+            {verificacion?.estado === 'probando' ? '📡 Probando…' : '📡 Verificar GPS'}
+          </button>
+          <span style={{ fontSize: 12.5, color:
+            verificacion?.estado === 'ok' ? '#036C4B'
+            : verificacion?.estado === 'falla' ? '#991B1B' : '#64748B' }}>
+            {!verificacion && 'Compruébalo al empezar el día, antes de salir a terreno.'}
+            {verificacion?.estado === 'probando' && 'Buscando señal de ubicación…'}
+            {verificacion?.estado === 'ok' &&
+              `✓ GPS funcionando · precisión ±${verificacion.pos.precision} m`}
+            {verificacion?.estado === 'falla' &&
+              <>✗ Sin ubicación: {verificacion.motivo}. {consejoGps(verificacion.error)}</>}
+          </span>
+        </div>
+
         {/* ── Los cuatro botones ── */}
         <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(215px,1fr))' }}>
           {PASOS.map(p => {
@@ -469,6 +560,48 @@ function MiJornada({ usuario }) {
           )}
       </div>
 
+      {/* ── Sin ubicación: reintentar o justificar ── */}
+      {sinGps && (
+        <div style={S.fondo}>
+          <div style={{ ...S.modal, width: 'min(520px,100%)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#991B1B' }}>
+              📡 No se pudo obtener tu ubicación
+            </h3>
+            <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, marginBottom: 12 }}>
+              Motivo: <b>{sinGps.motivo}</b>.<br />
+              {consejoGps(sinGps.error)}
+            </div>
+
+            <button onClick={reintentarUbicacion} disabled={!!enviando}
+              style={{ ...S.btnChico, background: '#1E4D7B', color: '#fff',
+                       border: 'none', padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>
+              🔄 Reintentar ubicación
+            </button>
+
+            <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 14 }}>
+              <label style={S.lbl}>Si no es posible, marca indicando el motivo *</label>
+              <textarea value={justificacion} onChange={e => setJustif(e.target.value)} rows={3}
+                placeholder="Ej: trabajando dentro de nave industrial, el GPS no toma señal"
+                style={{ ...S.input, width: '100%', resize: 'vertical', boxSizing: 'border-box' }} />
+              <div style={{ fontSize: 11.5, color: '#64748B', margin: '4px 0 12px' }}>
+                Mínimo 10 caracteres. Tu supervisor verá la marca señalada con este motivo.
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button onClick={() => setSinGps(null)} style={S.btnChico}>Cancelar</button>
+                <button onClick={marcarSinUbicacion}
+                  disabled={justificacion.trim().length < 10 || !!enviando}
+                  style={{ ...S.btnChico,
+                           background: justificacion.trim().length >= 10 ? '#E08A1E' : '#F1F5F9',
+                           color: justificacion.trim().length >= 10 ? '#fff' : '#94A3B8',
+                           border: 'none' }}>
+                  {enviando ? 'Registrando…' : 'Marcar sin ubicación'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detalle && (
         <div style={S.fondo} onClick={() => setDetalle(null)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
@@ -517,6 +650,7 @@ function Supervision() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [enTerreno, setEnTerreno] = useState([])
+  const [estadoGps, setEstadoGps] = useState([])
 
   const cargar = useCallback(async () => {
     try {
@@ -541,6 +675,11 @@ function Supervision() {
         return { ...j, ultima: ult?.[0] || null }
       }))
       setEnTerreno(conMarca)
+
+      // Estado del GPS por inspector: quién no está entregando ubicación
+      const { data: gps } = await supabase.from('v_estado_gps')
+        .select('*').order('pct_gps', { ascending: true })
+      setEstadoGps(gps || [])
     } catch (e) { setError(e.message) } finally { setCargando(false) }
   }, [desde, hasta])
 
@@ -636,6 +775,54 @@ function Supervision() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {estadoGps.length > 0 && (
+        <div style={S.tarjeta}>
+          <h3 style={S.h3}>
+            Estado del GPS por inspector <span style={{ fontWeight: 400, color: '#94A3B8', fontSize: 11.5 }}>
+              — últimos 14 días, los con problemas primero</span>
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.tabla}>
+              <thead><tr>
+                <th style={S.th}>Persona</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Marcas</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Con GPS</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Precisión media</th>
+                <th style={S.th}>Último problema</th>
+                <th style={S.th}>Motivo declarado</th>
+              </tr></thead>
+              <tbody>
+                {estadoGps.map(g => {
+                  const pct = Number(g.pct_gps ?? 0)
+                  const color = pct >= 95 ? '#036C4B' : pct >= 80 ? '#B45309' : '#C0392B'
+                  return (
+                    <tr key={g.email}>
+                      <td style={S.td}>{g.persona}</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>{g.marcas}</td>
+                      <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color }}>{pct}%</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>
+                        {g.precision_media_m != null ? `±${g.precision_media_m} m` : '—'}</td>
+                      <td style={S.td}>
+                        {g.ultimo_error
+                          ? <span style={S.pillPend} title={consejoGps(g.ultimo_error)}>
+                              {ETQ_ERROR[g.ultimo_error] || g.ultimo_error}</span>
+                          : g.sin_gps > 0 ? <span style={S.pillPend}>sin dato</span>
+                          : <span style={S.pillOk}>ninguno</span>}
+                      </td>
+                      <td style={{ ...S.td, fontSize: 12, color: '#475569', maxWidth: 260 }}>
+                        {g.ultimo_motivo || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 8, fontStyle: 'italic' }}>
+            Pasa el cursor sobre el problema para ver cómo corregirlo en el teléfono del inspector.
           </div>
         </div>
       )}
@@ -949,7 +1136,10 @@ function FilaMarca({ m }) {
                 <a href={mapa} target="_blank" rel="noopener noreferrer"
                    style={{ color: '#1E4D7B', fontWeight: 600 }}>Ver ubicación exacta</a>
               </>
-            : <span style={{ color: '#B45309' }}>Sin ubicación registrada</span>}
+            : <span style={{ color: '#B45309' }}>
+                Sin ubicación{m.error_gps ? ` (${ETQ_ERROR[m.error_gps] || m.error_gps})` : ''}
+                {m.motivo_sin_ubicacion && <> · motivo: <i>{m.motivo_sin_ubicacion}</i></>}
+              </span>}
         </div>
       </div>
     </div>
