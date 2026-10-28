@@ -57,6 +57,13 @@ export default function ReservaInformes() {
   const [resumen,      setResumen]      = useState({})
   const [mensajeExito, setMensajeExito] = useState('')
 
+  // ── corrección y anulación controladas ──────────────────────
+  // Deben coincidir con fn_numero_informe_corregir / _anular en la base.
+  const rolUsuario    = (usuario?.rol || '').toUpperCase()
+  const esAdminRol    = ['ADMIN', 'ADMINISTRADOR'].includes(rolUsuario)
+  const puedeCorregir = esAdminRol || rolUsuario === 'SUPERVISOR'
+  const [corrigiendo, setCorrigiendo] = useState(null)   // { registro, modo }
+
   // ── estado para "reservar desde OT" ─────────────────────────
   const [mostrarFormOT,  setMostrarFormOT]  = useState(false)
   const [otDesdeOT,      setOtDesdeOT]      = useState('')
@@ -1118,6 +1125,25 @@ export default function ReservaInformes() {
                                   📝 Crear Informe
                                 </button>
                               )}
+                              {puedeCorregir && r.estado !== 'Anulado' && (
+                                <button onClick={() => setCorrigiendo({ registro: r, modo: 'corregir' })}
+                                  title="Corregir un dato mal cargado (área, producto, fechas…)"
+                                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #FCD34D',
+                                           background: '#FFFBEB', color: '#92400E', cursor: 'pointer',
+                                           fontSize: 11, fontWeight: 700 }}>
+                                  ✏️ Corregir
+                                </button>
+                              )}
+                              {puedeCorregir && r.estado !== 'Anulado'
+                                && (r.estado !== 'Emitido' || esAdminRol) && (
+                                <button onClick={() => setCorrigiendo({ registro: r, modo: 'anular' })}
+                                  title="Anular el número. No se borra: queda registrado como anulado."
+                                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #FECACA',
+                                           background: '#FEF2F2', color: '#991B1B', cursor: 'pointer',
+                                           fontSize: 11, fontWeight: 700 }}>
+                                  Anular
+                                </button>
+                              )}
                               {!esAuditor() && r.estado !== 'Anulado' && (
                                 <button
                                   onClick={() => generarRevisionNum(r)}
@@ -1150,6 +1176,208 @@ export default function ReservaInformes() {
             </div>
           )
       )}
+
+      {corrigiendo && (
+        <ModalCorreccionNumero
+          registro={corrigiendo.registro}
+          modo={corrigiendo.modo}
+          onCerrar={() => setCorrigiendo(null)}
+          onHecho={msg => {
+            setCorrigiendo(null)
+            setMensajeExito(msg)
+            setTimeout(() => setMensajeExito(''), 6000)
+            cargar()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Corregir o anular un número de informe
+// Pasa por funciones de la base que validan rol, campos y motivo, y
+// dejan historial. El correlativo, la serie, la OT y la sede no se
+// tocan: si están mal, se anula y se reserva de nuevo.
+// ═══════════════════════════════════════════════════════════════
+const CAMPOS_CORREGIBLES = [
+  { k: 'area',                  label: 'Área',                tipo: 'area' },
+  { k: 'producto',              label: 'Producto / elemento', tipo: 'texto' },
+  { k: 'sello',                 label: 'Sello',               tipo: 'texto' },
+  { k: 'acta_asociada',         label: 'Acta asociada',       tipo: 'texto' },
+  { k: 'fecha_inspeccion',      label: 'Fecha de inspección', tipo: 'fecha' },
+  { k: 'fecha_entrega_informe', label: 'Fecha de entrega',    tipo: 'fecha' },
+  { k: 'inspector',             label: 'Inspector',           tipo: 'texto' },
+  { k: 'observacion',           label: 'Observación',         tipo: 'largo' },
+]
+
+function valorInicial(r, c) {
+  const v = r[c.k]
+  if (v == null) return ''
+  return c.tipo === 'fecha' ? String(v).slice(0, 10) : String(v)
+}
+
+function ModalCorreccionNumero({ registro, modo, onCerrar, onHecho }) {
+  const codigo = registro.codigo_informe || `${registro.serie}-${registro.numero_correlativo}`
+  const [valores, setValores] = useState(() =>
+    Object.fromEntries(CAMPOS_CORREGIBLES.map(c => [c.k, valorInicial(registro, c)])))
+  const [motivo, setMotivo]       = useState('')
+  const [historial, setHistorial] = useState([])
+  const [guardando, setGuardando] = useState(false)
+  const [err, setErr]             = useState('')
+
+  useEffect(() => {
+    supabase.from('numeros_informe_correcciones')
+      .select('*').eq('numero_id', String(registro.id)).order('created_at', { ascending: false })
+      .then(({ data }) => setHistorial(data || []))
+  }, [registro.id])
+
+  const cambios = Object.fromEntries(
+    CAMPOS_CORREGIBLES
+      .filter(c => (valores[c.k] || '').trim() !== valorInicial(registro, c).trim())
+      .map(c => [c.k, (valores[c.k] || '').trim()]))
+  const nCambios = Object.keys(cambios).length
+
+  async function guardar() {
+    setErr('')
+    if (motivo.trim().length < 10) {
+      setErr('Indica el motivo (mínimo 10 caracteres). Queda registrado.'); return
+    }
+    if (modo === 'corregir' && nCambios === 0) {
+      setErr('No has cambiado ningún dato.'); return
+    }
+    setGuardando(true)
+    const { error } = modo === 'anular'
+      ? await supabase.rpc('fn_numero_informe_anular', { p_id: String(registro.id), p_motivo: motivo.trim() })
+      : await supabase.rpc('fn_numero_informe_corregir', {
+          p_id: String(registro.id), p_cambios: cambios, p_motivo: motivo.trim() })
+    setGuardando(false)
+    if (error) { setErr(mensajeError(error)); return }
+    onHecho(modo === 'anular'
+      ? `✅ ${codigo} anulado. El número queda registrado como anulado, no se reutiliza.`
+      : `✅ ${codigo} corregido (${nCambios} dato${nCambios > 1 ? 's' : ''}). Queda en el historial.`)
+  }
+
+  const inp = { width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #CBD5E1',
+                borderRadius: 7, fontSize: 13, fontFamily: 'inherit' }
+  const lbl = { display: 'block', fontSize: 11, fontWeight: 700, color: '#475569',
+                textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(8,18,32,.55)',
+                  display: 'grid', placeItems: 'center', zIndex: 9000, padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: 'min(620px,100%)',
+                    maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 24px 70px rgba(0,0,0,.35)' }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .8,
+                      color: modo === 'anular' ? '#991B1B' : '#92400E' }}>
+          {modo === 'anular' ? 'ANULAR NÚMERO DE INFORME' : 'CORREGIR DATOS DEL NÚMERO'}
+        </div>
+        <h3 style={{ margin: '4px 0 2px', fontSize: 20, color: '#0E2A45', fontFamily: 'monospace' }}>{codigo}</h3>
+        <div style={{ fontSize: 12.5, color: '#64748B', marginBottom: 14 }}>
+          OT {registro.ot_numero || '—'} · {registro.sede || '—'} · estado {registro.estado || 'Reservado'}
+        </div>
+
+        {modo === 'anular' ? (
+          <div style={{ fontSize: 12.5, background: '#FEF2F2', border: '1px solid #FECACA', color: '#7F1D1D',
+                        borderRadius: 9, padding: '10px 13px', marginBottom: 14, lineHeight: 1.6 }}>
+            El número <b>no se borra</b>: queda registrado como anulado y no se vuelve a asignar.
+            {registro.estado === 'Emitido' && <><br /><b>Este informe ya fue emitido.</b> Si el cliente lo recibió,
+              avísale que queda sin efecto.</>}
+          </div>
+        ) : (
+          <>
+            {registro.estado === 'Emitido' && (
+              <div style={{ fontSize: 12.5, background: '#FFFBEB', border: '1px solid #FCD34D', color: '#92400E',
+                            borderRadius: 9, padding: '10px 13px', marginBottom: 14, lineHeight: 1.6 }}>
+                <b>Este informe ya fue emitido.</b> Esta corrección cambia los datos del sistema, pero
+                <b> no el PDF que recibió el cliente</b>. Si el error también está en el documento entregado,
+                usa <b>+REV</b> para emitir una revisión.
+              </div>
+            )}
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))',
+                          marginBottom: 14 }}>
+              {CAMPOS_CORREGIBLES.map(c => {
+                const cambiado = c.k in cambios
+                const estilo = { ...inp, ...(cambiado ? { borderColor: '#F59E0B', background: '#FFFBEB' } : {}) }
+                return (
+                  <div key={c.k} style={c.tipo === 'largo' ? { gridColumn: '1 / -1' } : undefined}>
+                    <label style={lbl}>{c.label}{cambiado && <span style={{ color: '#D97706' }}> · modificado</span>}</label>
+                    {c.tipo === 'area' ? (
+                      <select value={valores[c.k]} style={estilo}
+                        onChange={e => setValores(v => ({ ...v, [c.k]: e.target.value }))}>
+                        <option value="">—</option>
+                        {Object.entries(AREA_CONFIG).map(([k, cfg]) => (
+                          <option key={k} value={k}>{k} · {cfg.label}</option>
+                        ))}
+                      </select>
+                    ) : c.tipo === 'largo' ? (
+                      <textarea rows={2} value={valores[c.k]} style={{ ...estilo, resize: 'vertical' }}
+                        onChange={e => setValores(v => ({ ...v, [c.k]: e.target.value }))} />
+                    ) : (
+                      <input type={c.tipo === 'fecha' ? 'date' : 'text'} value={valores[c.k]} style={estilo}
+                        onChange={e => setValores(v => ({ ...v, [c.k]: e.target.value }))} />
+                    )}
+                    {cambiado && (
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                        antes: {valorInicial(registro, c) || '(vacío)'}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        <label style={lbl}>Motivo *</label>
+        <textarea rows={2} value={motivo} onChange={e => { setMotivo(e.target.value); setErr('') }}
+          placeholder={modo === 'anular'
+            ? 'Ej: número reservado por error en una OT equivocada'
+            : 'Ej: el inspector cargó Verificación, corresponde END según la OT'}
+          style={{ ...inp, resize: 'vertical', marginBottom: 6 }} />
+        <div style={{ fontSize: 11.5, color: '#64748B', marginBottom: 12 }}>
+          Mínimo 10 caracteres. Se guarda con tu nombre, la fecha y los valores anteriores.
+        </div>
+
+        {err && <div style={{ fontSize: 12.5, color: '#991B1B', background: '#FEF2F2', borderRadius: 8,
+                              padding: '8px 12px', marginBottom: 12 }}>⚠ {err}</div>}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost" onClick={onCerrar} disabled={guardando}>Cancelar</button>
+          <button onClick={guardar} disabled={guardando}
+            style={{ border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700,
+                     color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                     background: modo === 'anular' ? '#C0392B' : '#1E4D7B' }}>
+            {guardando ? 'Guardando…'
+              : modo === 'anular' ? 'Anular número'
+              : `Guardar corrección${nCambios ? ` (${nCambios})` : ''}`}
+          </button>
+        </div>
+
+        {historial.length > 0 && (
+          <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 16, paddingTop: 12 }}>
+            <div style={{ ...lbl, marginBottom: 8 }}>Historial de este número</div>
+            {historial.map(h => (
+              <div key={h.id} style={{ fontSize: 12, padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+                <b>{(h.email || '').split('@')[0]}</b>
+                <span style={{ color: '#64748B' }}>
+                  {h.accion === 'anular' ? ' anuló el número' : ` corrigió ${h.campo}: `}
+                </span>
+                {h.accion === 'corregir' && <>
+                  <span style={{ textDecoration: 'line-through', color: '#94A3B8' }}>{h.valor_anterior || '(vacío)'}</span>
+                  {' → '}<b>{h.valor_nuevo || '(vacío)'}</b>
+                </>}
+                <span style={{ color: '#94A3B8', marginLeft: 6 }}>
+                  {new Date(h.created_at).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}
+                </span>
+                <div style={{ color: '#475569', paddingLeft: 10, borderLeft: '2px solid #CBD5E1', marginTop: 2 }}>
+                  {h.motivo}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
