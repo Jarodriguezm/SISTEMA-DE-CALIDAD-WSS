@@ -235,12 +235,15 @@ function FormReserva({ ot, onReservada, onCancel }) {
   )
 }
 
-function VisorInforme({ informe, onEliminar }) {
+// Un correlativo de informe NUNCA se borra: se anula y queda el rastro.
+// Antes aquí había un botón "Eliminar" visible para cualquier usuario.
+// La base no tenía permiso de borrado, así que no borraba nada, pero
+// tampoco avisaba: la pantalla simplemente recargaba igual.
+function VisorInforme({ informe, onAnular, puedeAnular }) {
   const areaLabels = { END: 'END', IZL: 'Izaje y Levante', TRZ: 'Trazabilidad', VER: 'Verificación' }
   const serieBg = { ESI: '#DBEAFE', EAI: '#FEF9C3', IVS: '#D1FAE5', IVA: '#FCE7F3' }
   const serieColor = { ESI: '#1E40AF', EAI: '#854D0E', IVS: '#065F46', IVA: '#9D174D' }
   const navigate = useNavigate()
-  const puedeEliminar = true
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, marginBottom: 6 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -272,12 +275,12 @@ function VisorInforme({ informe, onEliminar }) {
         <div style={{ fontSize: 10, color: '#CBD5E1', whiteSpace: 'nowrap' }}>
           {informe.created_at && new Date(informe.created_at).toLocaleDateString('es-CL')}
         </div>
-        {puedeEliminar && onEliminar && (
+        {puedeAnular && onAnular && informe.estado !== 'Anulado' && (
           <button
-            onClick={() => onEliminar(informe.id, informe.codigo_informe)}
+            onClick={() => onAnular(informe)}
             style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid #EF4444', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600 }}
-            title="Eliminar número reservado">
-            🗑️ Eliminar
+            title="Anular el número. No se borra: queda registrado como anulado y no se reutiliza.">
+            Anular
           </button>
         )}
       </div>
@@ -682,6 +685,11 @@ function SeccionCargaInforme({ ot }) {
 
 export default function TabInformes({ ot, onInformeCreado }) {
   const navigate = useNavigate()
+  const { usuario } = useAuth()
+  // Deben coincidir con fn_numero_informe_anular en la base
+  const rolUsuario  = (usuario?.rol || '').toUpperCase()
+  const esAdminRol  = ['ADMIN', 'ADMINISTRADOR'].includes(rolUsuario)
+  const puedeAnular = esAdminRol || rolUsuario === 'SUPERVISOR'
   const [pantalla, setPantalla] = useState('lista')
   const [informes, setInformes] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -709,10 +717,24 @@ export default function TabInformes({ ot, onInformeCreado }) {
     onInformeCreado && onInformeCreado()
   }
 
-  async function eliminarInforme(id, codigo) {
-    if (!window.confirm(`¿Eliminar ${codigo}? Esta acción no se puede deshacer.`)) return
-    const { error } = await supabase.from('numeros_informe').delete().eq('id', id)
-    if (error) { alert('Error al eliminar: ' + error.message); return }
+  async function anularInforme(inf) {
+    const codigo = inf.codigo_informe
+    if (inf.estado === 'Emitido' && !esAdminRol) {
+      alert(`${codigo} ya fue emitido: solo administración puede anularlo.`)
+      return
+    }
+    const motivo = window.prompt(
+      `Anular ${codigo}\n\nEl número no se borra: queda registrado como anulado y no se vuelve a asignar.\n\n` +
+      `Motivo (mínimo 10 caracteres):`)
+    if (motivo === null) return
+    if (motivo.trim().length < 10) {
+      alert('El motivo debe tener al menos 10 caracteres. No se anuló.')
+      return
+    }
+    const { error } = await supabase.rpc('fn_numero_informe_anular', {
+      p_id: String(inf.id), p_motivo: motivo.trim(),
+    })
+    if (error) { alert('No se pudo anular: ' + error.message); return }
     cargarInformes()
   }
 
@@ -787,7 +809,8 @@ export default function TabInformes({ ot, onInformeCreado }) {
       ) : (
         <div>
           {informesFiltrados.map(inf => (
-            <VisorInforme key={inf.id} informe={inf} onEliminar={eliminarInforme} />
+            <VisorInforme key={inf.id} informe={inf} onAnular={anularInforme}
+              puedeAnular={puedeAnular && (inf.estado !== 'Emitido' || esAdminRol)} />
           ))}
         </div>
       )}
